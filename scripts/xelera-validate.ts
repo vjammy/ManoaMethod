@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  assessEvidenceFilesForApproval,
   getArg,
   getPhaseSlug,
   parseExitGateResult,
@@ -85,6 +86,9 @@ export function runValidate() {
 
   // Required root files
   const requiredRootFiles = [
+    'README.md',
+    'QUICKSTART.md',
+    'TROUBLESHOOTING.md',
     'START_HERE.md',
     '00_PROJECT_CONTEXT.md',
     '01_CONTEXT_RULES.md',
@@ -199,10 +203,9 @@ export function runValidate() {
           if (reportEvidence.length === 0) {
             issues.push(`Verification report for ${slug} claims pass + proceed but does not list any evidence files under ## evidence files.`);
           }
-          for (const ef of reportEvidence) {
-            if (!fs.existsSync(path.join(packageRoot, ef))) {
-              issues.push(`Verification report for ${slug} lists evidence file that does not exist on disk: ${ef}`);
-            }
+          const evidenceAssessment = assessEvidenceFilesForApproval(packageRoot, reportEvidence);
+          for (const evidenceIssue of evidenceAssessment.issues) {
+            issues.push(`Verification report for ${slug}: ${evidenceIssue}`);
           }
           for (const ef of evidence.evidenceFiles) {
             if (!fs.existsSync(path.join(packageRoot, ef))) {

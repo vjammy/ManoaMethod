@@ -98,6 +98,9 @@ async function main() {
   const workflowSteps = buildWorkflowSteps(sample, bundle);
 
   assert(bundle.phases.length >= 10, `Expected at least 10 phases, received ${bundle.phases.length}`);
+  assert(bundle.files.some((file) => file.path === 'README.md'), 'Missing package README.md');
+  assert(bundle.files.some((file) => file.path === 'QUICKSTART.md'), 'Missing package QUICKSTART.md');
+  assert(bundle.files.some((file) => file.path === 'TROUBLESHOOTING.md'), 'Missing package TROUBLESHOOTING.md');
   assert(bundle.files.some((file) => file.path === 'START_HERE.md'), 'Missing START_HERE.md');
   assert(bundle.files.some((file) => file.path === 'PROJECT_BRIEF.md'), 'Missing PROJECT_BRIEF.md');
   assert(bundle.files.some((file) => file.path === 'SCORECARD.md'), 'Missing SCORECARD.md');
@@ -148,7 +151,7 @@ async function main() {
   assert(/## What this package is/.test(startHere), 'START_HERE.md missing package explanation.');
   assert(/## Commands to know/.test(startHere), 'START_HERE.md missing command guidance.');
   assert(/Entry gate:/.test(startHere) && /Exit gate:/.test(startHere), 'START_HERE.md missing gate definitions.');
-  assert(/## Package lifecycle status/.test(guide), 'Final guide did not include package lifecycle status.');
+  assert(/## Package status/.test(guide), 'Final guide did not include package status.');
   assert(/## Assumptions and open questions/.test(guide), 'Final guide did not include assumptions and open questions.');
   assert(
     /Which entities, interfaces, integrations, or file boundaries must be explicit before coding begins\?/i.test(guide),
@@ -200,18 +203,35 @@ async function main() {
   assert(familyBundle.files.some((file) => file.path === 'phases/phase-01/PHASE_BRIEF.md'), 'Family sample package missing phase brief');
   assert(familyBundle.files.some((file) => file.path === 'phases/phase-01/VERIFICATION_REPORT.md'), 'Family sample package missing verification report');
   const familyProjectBrief = getFile(familyBundle, 'PROJECT_BRIEF.md');
+  const familyRootReadme = getFile(familyBundle, 'README.md');
+  const familyQuickstart = getFile(familyBundle, 'QUICKSTART.md');
+  const familyTroubleshooting = getFile(familyBundle, 'TROUBLESHOOTING.md');
   const familyStartHere = getFile(familyBundle, 'START_HERE.md');
   const familyCodexStart = getFile(familyBundle, 'CODEX_START_HERE.md');
   const familyPhaseBrief = getFile(familyBundle, 'phases/phase-01/PHASE_BRIEF.md');
   const familyVerifyPrompt = getFile(familyBundle, 'phases/phase-01/VERIFY_PROMPT.md');
   const familyVerificationReport = getFile(familyBundle, 'phases/phase-01/VERIFICATION_REPORT.md');
   assert(/Family Task Board/i.test(familyProjectBrief), 'Family sample brief should reference Family Task Board.');
+  assert(/\[START_HERE\.md\]\(START_HERE\.md\)/.test(familyRootReadme), 'Family sample README should link to START_HERE.md.');
+  assert(/\[QUICKSTART\.md\]\(QUICKSTART\.md\)/.test(familyRootReadme), 'Family sample README should link to QUICKSTART.md.');
+  assert(/\[TROUBLESHOOTING\.md\]\(TROUBLESHOOTING\.md\)/.test(familyRootReadme), 'Family sample README should link to TROUBLESHOOTING.md.');
+  assert(/xelera-method-workspace/.test(familyQuickstart), 'Family sample QUICKSTART should use the actual export root folder name.');
+  assert(!/PATH_TO_THIS_PACKAGE/.test(familyQuickstart), 'Family sample QUICKSTART should not use PATH_TO_THIS_PACKAGE.');
+  assert(/blocked/i.test(familyTroubleshooting) && /validate/i.test(familyTroubleshooting), 'Family sample TROUBLESHOOTING should explain blocked and validate failures.');
   assert(/kid|child|parent/i.test(familyProjectBrief), 'Family sample brief should reference the family roles.');
   assert(/Open these files first/i.test(familyStartHere), 'Family sample START_HERE should tell beginners what to open first.');
+  assert(/QUICKSTART\.md/.test(familyStartHere), 'Family sample START_HERE should point beginners to QUICKSTART.md.');
+  assert(!/PATH_TO_THIS_PACKAGE/.test(familyStartHere), 'Family sample START_HERE should not use PATH_TO_THIS_PACKAGE.');
   assert(/What to paste into Codex/i.test(familyCodexStart), 'Family sample CODEX_START_HERE should clearly say what to paste into Codex.');
   assert(/## What you should do now/i.test(familyPhaseBrief), 'Family sample PHASE_BRIEF should include a clear next action.');
+  assert(/## Out of scope for this phase/i.test(familyPhaseBrief), 'Family sample PHASE_BRIEF should include an out-of-scope section.');
   assert(/## What evidence means/i.test(familyVerifyPrompt), 'Family sample VERIFY_PROMPT should explain what evidence means.');
   assert(/## result: pending/.test(familyVerificationReport) && /## recommendation: pending/.test(familyVerificationReport), 'Family sample VERIFICATION_REPORT should keep required parser headers.');
+  const familyGeneratedText = familyBundle.files.map((file) => file.content).join('\n');
+  assert(!/Generated from current input/i.test(familyGeneratedText), 'Family sample package should not use "Generated from current input".');
+  assert(!/Needs user confirmation/i.test(familyGeneratedText), 'Family sample package should not use "Needs user confirmation".');
+  assert(/Based on your answers so far/i.test(familyGeneratedText), 'Family sample package should use beginner-friendly "Based on your answers so far" wording.');
+  assert(/Please review and confirm/i.test(familyGeneratedText), 'Family sample package should use beginner-friendly "Please review and confirm" wording.');
 
   for (const phase of bundle.phases) {
     const requiredPhasePacketFiles = [
@@ -272,6 +292,12 @@ async function main() {
     assert(/## warnings/.test(verificationReport), `VERIFICATION_REPORT.md missing warnings for ${phase.slug}`);
     assert(/## defects found/.test(verificationReport), `VERIFICATION_REPORT.md missing defects found for ${phase.slug}`);
     assert(/## follow-up actions/.test(verificationReport), `VERIFICATION_REPORT.md missing follow-up actions for ${phase.slug}`);
+    const phaseBrief = getFile(bundle, `phases/${phase.slug}/PHASE_BRIEF.md`);
+    assert(/## Out of scope for this phase/.test(phaseBrief), `PHASE_BRIEF.md missing out-of-scope section for ${phase.slug}`);
+    const exitGate = getFile(bundle, `phases/${phase.slug}/EXIT_GATE.md`);
+    assert(/Existing functionality and previously completed phase outputs still work/i.test(exitGate), `EXIT_GATE.md missing regression check for ${phase.slug}`);
+    const quickExitGate = getFile(bundle, `gates/gate-${String(phase.index).padStart(2, '0')}-exit.md`);
+    assert(/Existing functionality and previously completed phase outputs still work/i.test(quickExitGate), `Quick exit gate missing regression check for ${phase.slug}`);
     assert(/## final decision/.test(verificationReport), `VERIFICATION_REPORT.md missing final decision for ${phase.slug}`);
     assert(/Selected result: pending/.test(verificationReport), `VERIFICATION_REPORT.md missing backward-compatible Selected result for ${phase.slug}`);
     assert(/Selected recommendation: pending/.test(verificationReport), `VERIFICATION_REPORT.md missing backward-compatible Selected recommendation for ${phase.slug}`);
@@ -327,7 +353,7 @@ async function main() {
   );
   const genericGuide = getFile(genericBundle, 'STEP_BY_STEP_BUILD_GUIDE.md');
   assert(
-    /critical planning answer is still missing|Needs user confirmation/i.test(genericGuide),
+    /critical planning answer is still missing|Please review and confirm/i.test(genericGuide),
     'Missing critical answers did not appear in the final guide.'
   );
 
@@ -520,6 +546,14 @@ async function main() {
       .replace(/Selected recommendation: .+/, `Selected recommendation: ${recommendation}`);
   }
 
+  function replaceEvidenceSection(content: string, bulletLines: string[]) {
+    const bullets = bulletLines.join('\n');
+    return content.replace(
+      /## evidence files[\s\S]*?## warnings/i,
+      `## evidence files\nEvidence means the files or notes that prove the phase was checked. List the evidence files you actually reviewed before selecting \`pass + proceed\`.\n\n${bullets}\n\nRules:\n- Replace \`pending\` with real evidence file paths.\n- Do not select \`pass + proceed\` until the listed files exist and support the decision.\n\n## warnings`
+    );
+  }
+
   // Test: next-phase with blocked evidence should fail
   const blockedReportPath = path.join(testPkgDir, 'phases', 'phase-01', 'VERIFICATION_REPORT.md');
   const blockedReport = updateReport(fs.readFileSync(blockedReportPath, 'utf8'), 'fail', 'blocked');
@@ -702,15 +736,12 @@ async function main() {
       assert((e as Error).message === 'process.exit:1', 'validate should exit with code 1 when only pending evidence is listed');
     }
 
-    // Test: validate rejects comment-only or instructional evidence entries
+    // Test: validate rejects report sections that still contain only comments or placeholders
     const commentOnlyEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
     const cliResultCommentOnly = await createArtifactPackage({ input: sample, outDir: commentOnlyEvidencePkg, zip: false });
     const commentOnlyReportPath = path.join(cliResultCommentOnly.rootDir, 'phases', 'phase-01', 'VERIFICATION_REPORT.md');
     let commentOnlyReport = updateReport(fs.readFileSync(commentOnlyReportPath, 'utf8'), 'pass', 'proceed');
-    commentOnlyReport = commentOnlyReport.replace(
-      /## evidence files[\s\S]*?## warnings/i,
-      '## evidence files\nList the evidence files you actually reviewed before selecting `pass + proceed`.\n\n- <!-- reviewed later -->\n- pending\n\nRules:\n- Replace `pending` with real evidence file paths.\n- Do not select `pass + proceed` until the listed files exist and support the decision.\n\n## warnings'
-    );
+    commentOnlyReport = replaceEvidenceSection(commentOnlyReport, ['- <!-- reviewed later -->', '- pending']);
     fs.writeFileSync(commentOnlyReportPath, commentOnlyReport);
 
     process.argv = ['node', 'xelera-validate.ts', `--package=${cliResultCommentOnly.rootDir}`];
@@ -719,6 +750,44 @@ async function main() {
       assert(false, 'validate should reject comment-only evidence entries');
     } catch (e) {
       assert((e as Error).message === 'process.exit:1', 'validate should exit with code 1 when evidence entries are only comments or placeholders');
+    }
+
+    // Test: validate rejects scaffold-only evidence files with template content
+    const scaffoldOnlyEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+    const cliResultScaffoldOnly = await createArtifactPackage({ input: sample, outDir: scaffoldOnlyEvidencePkg, zip: false });
+    const scaffoldOnlyReportPath = path.join(cliResultScaffoldOnly.rootDir, 'phases', 'phase-01', 'VERIFICATION_REPORT.md');
+    let scaffoldOnlyReport = updateReport(fs.readFileSync(scaffoldOnlyReportPath, 'utf8'), 'pass', 'proceed');
+    scaffoldOnlyReport = replaceEvidenceSection(scaffoldOnlyReport, [
+      '- phases/phase-01/EVIDENCE_CHECKLIST.md',
+      '- phases/phase-01/HANDOFF_SUMMARY.md'
+    ]);
+    fs.writeFileSync(scaffoldOnlyReportPath, scaffoldOnlyReport);
+
+    process.argv = ['node', 'xelera-validate.ts', `--package=${cliResultScaffoldOnly.rootDir}`];
+    try {
+      runValidate();
+      assert(false, 'validate should reject scaffold-only evidence files that still contain template content');
+    } catch (e) {
+      assert((e as Error).message === 'process.exit:1', 'validate should exit with code 1 for scaffold-only evidence');
+    }
+
+    // Test: validate rejects listed evidence files that contain only comments
+    const commentFileEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+    const cliResultCommentFile = await createArtifactPackage({ input: sample, outDir: commentFileEvidencePkg, zip: false });
+    const commentFilePath = path.join(cliResultCommentFile.rootDir, 'notes', 'comment-only.md');
+    fs.mkdirSync(path.dirname(commentFilePath), { recursive: true });
+    fs.writeFileSync(commentFilePath, '<!-- comment only -->\n## Placeholder\n- [ ] not done\n', 'utf8');
+    const commentFileReportPath = path.join(cliResultCommentFile.rootDir, 'phases', 'phase-01', 'VERIFICATION_REPORT.md');
+    let commentFileReport = updateReport(fs.readFileSync(commentFileReportPath, 'utf8'), 'pass', 'proceed');
+    commentFileReport = replaceEvidenceSection(commentFileReport, ['- notes/comment-only.md']);
+    fs.writeFileSync(commentFileReportPath, commentFileReport);
+
+    process.argv = ['node', 'xelera-validate.ts', `--package=${cliResultCommentFile.rootDir}`];
+    try {
+      runValidate();
+      assert(false, 'validate should reject evidence files that contain only comments or template text');
+    } catch (e) {
+      assert((e as Error).message === 'process.exit:1', 'validate should exit with code 1 for comment-only evidence files');
     }
 
     // Test: validate catches malformed state
@@ -758,6 +827,56 @@ async function main() {
     assert(
       (e as Error).message.includes('does not list any evidence files'),
       `next-phase error should mention missing report evidence files, got: ${(e as Error).message}`
+    );
+  }
+
+  // Test: next-phase rejects scaffold-only evidence files with template content
+  const scaffoldOnlyAdvancePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+  const cliResultScaffoldOnlyAdvance = await createArtifactPackage({ input: sample, outDir: scaffoldOnlyAdvancePkg, zip: false });
+  const scaffoldOnlyAdvanceStatePath = path.join(cliResultScaffoldOnlyAdvance.rootDir, 'repo', 'xelera-state.json');
+  const scaffoldOnlyAdvanceState = JSON.parse(fs.readFileSync(scaffoldOnlyAdvanceStatePath, 'utf8'));
+  scaffoldOnlyAdvanceState.blockedPhases = [];
+  fs.writeFileSync(scaffoldOnlyAdvanceStatePath, JSON.stringify(scaffoldOnlyAdvanceState, null, 2));
+  const scaffoldOnlyAdvanceReportPath = path.join(cliResultScaffoldOnlyAdvance.rootDir, 'phases', 'phase-01', 'VERIFICATION_REPORT.md');
+  let scaffoldOnlyAdvanceReport = updateReport(fs.readFileSync(scaffoldOnlyAdvanceReportPath, 'utf8'), 'pass', 'proceed');
+  scaffoldOnlyAdvanceReport = replaceEvidenceSection(scaffoldOnlyAdvanceReport, [
+    '- phases/phase-01/EVIDENCE_CHECKLIST.md',
+    '- phases/phase-01/HANDOFF_SUMMARY.md'
+  ]);
+  fs.writeFileSync(scaffoldOnlyAdvanceReportPath, scaffoldOnlyAdvanceReport);
+  try {
+    process.argv = ['node', 'xelera-next-phase.ts', `--package=${cliResultScaffoldOnlyAdvance.rootDir}`, '--evidence=phases/phase-01/VERIFICATION_REPORT.md'];
+    runNextPhase();
+    assert(false, 'next-phase should reject scaffold-only evidence files that still contain template content');
+  } catch (e) {
+    assert(
+      (e as Error).message.includes('EVIDENCE_CHECKLIST.md') || (e as Error).message.includes('HANDOFF_SUMMARY.md'),
+      `next-phase should name scaffold evidence files that need more content, got: ${(e as Error).message}`
+    );
+  }
+
+  // Test: next-phase rejects listed evidence files that contain only comments
+  const commentFileAdvancePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+  const cliResultCommentFileAdvance = await createArtifactPackage({ input: sample, outDir: commentFileAdvancePkg, zip: false });
+  const commentFileAdvanceStatePath = path.join(cliResultCommentFileAdvance.rootDir, 'repo', 'xelera-state.json');
+  const commentFileAdvanceState = JSON.parse(fs.readFileSync(commentFileAdvanceStatePath, 'utf8'));
+  commentFileAdvanceState.blockedPhases = [];
+  fs.writeFileSync(commentFileAdvanceStatePath, JSON.stringify(commentFileAdvanceState, null, 2));
+  const commentOnlyAdvanceFilePath = path.join(cliResultCommentFileAdvance.rootDir, 'notes', 'comment-only.md');
+  fs.mkdirSync(path.dirname(commentOnlyAdvanceFilePath), { recursive: true });
+  fs.writeFileSync(commentOnlyAdvanceFilePath, '<!-- comment only -->\n## Placeholder\n- [ ] not done\n', 'utf8');
+  const commentFileAdvanceReportPath = path.join(cliResultCommentFileAdvance.rootDir, 'phases', 'phase-01', 'VERIFICATION_REPORT.md');
+  let commentFileAdvanceReport = updateReport(fs.readFileSync(commentFileAdvanceReportPath, 'utf8'), 'pass', 'proceed');
+  commentFileAdvanceReport = replaceEvidenceSection(commentFileAdvanceReport, ['- notes/comment-only.md']);
+  fs.writeFileSync(commentFileAdvanceReportPath, commentFileAdvanceReport);
+  try {
+    process.argv = ['node', 'xelera-next-phase.ts', `--package=${cliResultCommentFileAdvance.rootDir}`, '--evidence=phases/phase-01/VERIFICATION_REPORT.md'];
+    runNextPhase();
+    assert(false, 'next-phase should reject evidence files that contain only comments or template text');
+  } catch (e) {
+    assert(
+      (e as Error).message.includes('notes/comment-only.md'),
+      `next-phase should name the bad evidence file, got: ${(e as Error).message}`
     );
   }
 

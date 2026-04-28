@@ -2,6 +2,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+  assessEvidenceFilesForApproval,
   fileExists,
   getArg,
   getPhaseSlug,
@@ -92,11 +93,9 @@ export function runNextPhase() {
     if (reportEvidenceFiles.length === 0) {
       throw new Error('Cannot advance phase because the verification report does not list any evidence files. Add at least one file under ## evidence files.');
     }
-    for (const evidenceFile of reportEvidenceFiles) {
-      const absoluteEvidenceFile = path.join(packageRoot, evidenceFile);
-      if (!fileExists(absoluteEvidenceFile)) {
-        throw new Error(`Cannot advance phase because listed evidence file does not exist: ${evidenceFile}`);
-      }
+    const evidenceAssessment = assessEvidenceFilesForApproval(packageRoot, reportEvidenceFiles);
+    if (evidenceAssessment.issues.length > 0) {
+      throw new Error(`Cannot advance phase because the listed evidence is not strong enough: ${evidenceAssessment.issues.join(' ')}`);
     }
 
     verificationReportPath = path.relative(packageRoot, absoluteEvidencePath).replace(/\\/g, '/');

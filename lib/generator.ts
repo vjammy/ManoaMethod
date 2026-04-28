@@ -193,16 +193,16 @@ function buildContext(input: ProjectInput): ProjectContext {
 
   const inferredAssumptions: string[] = [];
   if (!integrations.length) {
-    inferredAssumptions.push('Inferred assumption: the first release does not depend on external integrations beyond local artifact generation.');
+    inferredAssumptions.push('Inferred assumption: the first release does not depend on external integrations beyond local file generation.');
   }
   if (!nonGoals.length) {
-    inferredAssumptions.push('Needs user confirmation: non-goals are not yet explicit, so scope drift risk remains high.');
+    inferredAssumptions.push('Please review and confirm: non-goals are not yet explicit, so scope drift risk remains high.');
   }
   if (profile.key.endsWith('technical') && !answers['data-boundaries']) {
-    inferredAssumptions.push('Needs user confirmation: the data and interface boundaries are still being inferred from the brief rather than from an explicit answer.');
+    inferredAssumptions.push('Please review and confirm: the data and interface boundaries are still being inferred from the brief rather than from an explicit answer.');
   }
   if (profile.key.startsWith('advanced') && profile.key.endsWith('business') && !answers.monetization) {
-    inferredAssumptions.push('Needs user confirmation: the business value and operating model are inferred rather than explicitly justified.');
+    inferredAssumptions.push('Please review and confirm: the business value and operating model are inferred rather than explicitly justified.');
   }
 
   return {
@@ -527,7 +527,7 @@ function buildCritique(input: ProjectInput, questionnaire: QuestionnaireItem[], 
     critique.push({
       severity: 'critical',
       title: 'Product idea is still too abstract',
-      detail: `Needs user confirmation: the current idea statement is too thin to drive project-specific phases for ${input.productName}.`,
+      detail: `Please review and confirm: the current idea statement is too thin to drive project-specific phases for ${input.productName}.`,
       followUpQuestion: 'What exact change should this product create for the user between project start and successful completion?',
       signal: 'needs-user-confirmation'
     });
@@ -537,7 +537,7 @@ function buildCritique(input: ProjectInput, questionnaire: QuestionnaireItem[], 
     critique.push({
       severity: 'critical',
       title: 'Problem statement lacks consequence',
-      detail: `Needs user confirmation: the brief names the problem, but it does not clearly describe why ${context.primaryAudience} feels the pain strongly enough to justify this build.`,
+      detail: `Please review and confirm: the brief names the problem, but it does not clearly describe why ${context.primaryAudience} feels the pain strongly enough to justify this build.`,
       followUpQuestion: `What specifically breaks today for ${context.primaryAudience}, and what is the cost of leaving it unresolved?`,
       signal: 'needs-user-confirmation'
     });
@@ -547,7 +547,7 @@ function buildCritique(input: ProjectInput, questionnaire: QuestionnaireItem[], 
     critique.push({
       severity: 'important',
       title: 'Audience is not prioritized enough',
-      detail: `Generated from current input: the brief references ${context.primaryAudience}, but it does not clearly separate the primary audience from secondary reviewers or stakeholders.`,
+      detail: `Based on your answers so far: the brief references ${context.primaryAudience}, but it does not clearly separate the primary audience from secondary reviewers or stakeholders.`,
       followUpQuestion: 'Which audience matters first, and who else only needs to review or approve the handoff?',
       signal: 'generated-from-current-input'
     });
@@ -557,7 +557,7 @@ function buildCritique(input: ProjectInput, questionnaire: QuestionnaireItem[], 
     critique.push({
       severity: 'important',
       title: 'Scope-cut logic is weak',
-      detail: `Needs user confirmation: the current package does not yet show what gets removed if ${input.productName} has less time than expected.`,
+      detail: `Please review and confirm: the current package does not yet show what gets removed if ${input.productName} has less time than expected.`,
       followUpQuestion: 'If the schedule tightens, which capabilities stay in v1 and which are explicitly deferred?',
       signal: 'needs-user-confirmation'
     });
@@ -587,7 +587,7 @@ function buildCritique(input: ProjectInput, questionnaire: QuestionnaireItem[], 
     critique.push({
       severity: 'important',
       title: 'Observability gates are not explicit',
-      detail: `Needs user confirmation: advanced technical mode expects launch visibility, but the package does not yet say how ${input.productName} should be monitored or supported after release.`,
+      detail: `Please review and confirm: advanced technical mode expects launch visibility, but the package does not yet say how ${input.productName} should be monitored or supported after release.`,
       followUpQuestion: 'What observability or support signals should exist before the build is called handoff-ready?',
       signal: 'needs-user-confirmation'
     });
@@ -597,7 +597,7 @@ function buildCritique(input: ProjectInput, questionnaire: QuestionnaireItem[], 
     critique.push({
       severity: 'critical',
       title: `Scope contradiction: ${contradiction.topic}`,
-      detail: `Generated from current input: ${contradiction.message}`,
+      detail: `Based on your answers so far: ${contradiction.message}`,
       followUpQuestion: `Which version is correct for ${contradiction.topic}: required in v1 or explicitly out of scope?`,
       signal: 'generated-from-current-input'
     });
@@ -608,7 +608,7 @@ function buildCritique(input: ProjectInput, questionnaire: QuestionnaireItem[], 
       critique.push({
         severity: 'important',
         title: `Questionnaire answer missing: ${sentenceCase(question.id.replace(/-/g, ' '))}`,
-        detail: `Needs user confirmation: ${question.intent} is still missing, so later phases are being partially inferred.`,
+        detail: `Please review and confirm: ${question.intent} is still missing, so later phases are being partially inferred.`,
         followUpQuestion: question.prompt,
         signal: 'needs-user-confirmation'
       });
@@ -679,7 +679,7 @@ function buildPhaseBlueprints(input: ProjectInput, context: ProjectContext, crit
           {
             tag: 'data',
             name: `Data boundaries and integrations for ${context.primaryFeature}`,
-            rationale: `Define the data, artifacts, and interfaces that ${input.productName} must create, store, or exchange.`,
+            rationale: `Define the data, files, and interfaces that ${input.productName} must create, store, or exchange.`,
             primaryInputs: [input.dataAndIntegrations, context.answers['data-boundaries'] || '', input.constraints],
             confirmationPrompts: ['Which entities, inputs, outputs, or APIs must be explicit before coding?']
           },
@@ -842,14 +842,14 @@ function buildPhaseEntryCriteria(index: number, blueprint: PhaseBlueprint, input
     'Previous exit gate passed.',
     'Unresolved blockers documented.',
     'Scope changes recorded.',
-    `Generated from current input: the source material for "${blueprint.name}" is present in the package.`
+    `Based on the project information provided: the source material for "${blueprint.name}" is present in the package.`
   ];
 }
 
 function buildPhaseExitCriteria(blueprint: PhaseBlueprint, context: ProjectContext) {
   return [
-    `Generated from current input: the phase now reflects ${context.primaryFeature} and ${context.primaryAudience} rather than generic planning language.`,
-    `Needs user confirmation: any remaining uncertainty for "${blueprint.name}" is explicitly recorded before the phase closes.`,
+    `Based on your answers so far: the phase now reflects ${context.primaryFeature} and ${context.primaryAudience} rather than generic planning language.`,
+    `Please review and confirm: any remaining uncertainty for "${blueprint.name}" is explicitly recorded before the phase closes.`,
     `Inferred assumption: no hidden assumptions remain unlabelled around ${context.outputAnchor}.`,
     `${context.profile.gateStrength}`
   ];
@@ -867,20 +867,22 @@ function buildPhaseContent(
       blueprint.primaryInputs
         .map((item) => item.trim())
         .filter(Boolean)
-        .map((item) => `Generated from current input: ${truncateText(item, 18)}`)
+        .map((item) => `Based on your answers so far: ${truncateText(item, 18)}`)
     )
   ).slice(0, 4);
 
   const needsConfirmation = Array.from(
     new Set(
-      blueprint.confirmationPrompts.map((item) => `Needs user confirmation: ${item}`)
+      blueprint.confirmationPrompts.map((item) => `Please review and confirm: ${item}`)
     )
   );
 
   const inferredAssumptions = Array.from(
     new Set(
       context.inferredAssumptions.concat(
-        critique.slice(0, 2).map((item) => `${item.signal === 'inferred-assumption' ? 'Inferred assumption' : 'Needs user confirmation'}: ${item.followUpQuestion}`)
+        critique
+          .slice(0, 2)
+          .map((item) => `${item.signal === 'inferred-assumption' ? 'Inferred assumption' : 'Please review and confirm'}: ${item.followUpQuestion}`)
       )
     )
   ).slice(0, 4);
@@ -898,13 +900,13 @@ function buildPhaseContent(
   const entryCriteria = buildPhaseEntryCriteria(index, blueprint, input, context);
   const exitCriteria = buildPhaseExitCriteria(blueprint, context);
   const riskFocus = [
-    `Generated from current input: ${truncateText(input.risks, 18)}`,
-    `Generated from current input: ${truncateText(context.riskAnchor, 18)}`
+    `Based on your answers so far: ${truncateText(input.risks, 18)}`,
+    `Based on your answers so far: ${truncateText(context.riskAnchor, 18)}`
   ];
   const nextActions = [
     `Confirm the open questions for "${blueprint.name}" before treating the output as settled.`,
     `Update the package so ${context.primaryAudience} and ${context.primaryFeature} are referenced directly in this phase.`,
-    `Record whether the current output is generated from current input, still needs user confirmation, or relies on inferred assumptions.`
+    `Record what is already supported by the project information, what still needs confirmation, and what is still an inferred assumption.`
   ];
 
   return {
@@ -929,13 +931,13 @@ function buildPhaseContent(
       'Do not hardcode final AI prompts. Instead, ask the coding AI to draft implementation or review prompts from this phase output.'
     ],
     businessAcceptanceCriteria: [
-      `Generated from current input: a stakeholder can explain how "${blueprint.name}" supports ${input.productName} for ${context.primaryAudience}.`,
-      `Needs user confirmation: the business outcome still lines up with ${truncateText(input.successMetrics, 16)}.`,
-      `Generated from current input: the phase protects the stated non-goals and constraints instead of expanding scope.`
+      `Based on your answers so far: a stakeholder can explain how "${blueprint.name}" supports ${input.productName} for ${context.primaryAudience}.`,
+      `Please review and confirm: the business outcome still lines up with ${truncateText(input.successMetrics, 16)}.`,
+      `Based on your answers so far: the phase protects the stated non-goals and constraints instead of expanding scope.`
     ],
     technicalAcceptanceCriteria: [
-      `Generated from current input: the implementation implications connect back to ${context.primaryFeature} and ${context.secondaryFeature}.`,
-      `Needs user confirmation: the package is explicit enough about ${context.profile.technicalFocus}.`,
+      `Based on your answers so far: the implementation implications connect back to ${context.primaryFeature} and ${context.secondaryFeature}.`,
+      `Please review and confirm: the package is explicit enough about ${context.profile.technicalFocus}.`,
       `Inferred assumption: any unresolved technical boundary is labelled rather than presented as settled fact.`
     ],
     testingRequirements: [
@@ -960,7 +962,7 @@ function buildPhasePlan(input: ProjectInput, context: ProjectContext, critique: 
 function renderQuestionnaireMarkdown(questionnaire: QuestionnaireItem[], input: ProjectInput) {
   return questionnaire
     .map((item, index) => {
-      const answer = input.questionnaireAnswers[item.id] || 'Needs user confirmation: no answer provided yet.';
+      const answer = input.questionnaireAnswers[item.id] || 'Please review and confirm: no answer provided yet.';
       return `## ${index + 1}. ${item.prompt}
 
 Intent: ${item.intent}
@@ -977,7 +979,7 @@ ${answer}
 
 function renderCritiqueMarkdown(critique: CritiqueItem[]) {
   if (!critique.length) {
-    return '- Generated from current input: no major critique items are open right now.\n- Needs user confirmation: keep validating assumptions as the package changes.';
+    return '- Based on your answers so far: no major critique items are open right now.\n- Please review and confirm: keep validating assumptions as the package changes.';
   }
 
   return critique
@@ -1018,7 +1020,7 @@ function renderScorecardMarkdown(bundle: ProjectBundle) {
 
   return `# SCORECARD
 
-## Package lifecycle status
+## Package status
 ${bundle.lifecycleStatus}
 
 | Category | Score |
@@ -1057,11 +1059,11 @@ ${phase.goal}
 ## Focus summary
 ${phase.focusSummary}
 
-## Generated from current input
-${listToBullets(phase.generatedFromInput, 'Generated from current input: no direct source signals were captured.')}
+## Based on the project information provided
+${listToBullets(phase.generatedFromInput, 'Based on your answers so far: no direct source signals were captured.')}
 
-## Needs user confirmation
-${listToBullets(phase.needsConfirmation, 'Needs user confirmation: no explicit confirmation items were captured.')}
+## Please review and confirm
+${listToBullets(phase.needsConfirmation, 'Please review and confirm: no explicit confirmation items were captured.')}
 
 ## Inferred assumptions
 ${listToBullets(phase.inferredAssumptions, 'Inferred assumption: no explicit assumptions were recorded.')}
@@ -1069,11 +1071,11 @@ ${listToBullets(phase.inferredAssumptions, 'Inferred assumption: no explicit ass
 ## Assumptions and open questions
 ${listToBullets(
   phase.inferredAssumptions.concat(phase.needsConfirmation),
-  'Needs user confirmation: no open assumptions or questions were recorded.'
+  'Please review and confirm: no open assumptions or questions were recorded.'
 )}
 
 ## Risk focus
-${listToBullets(phase.riskFocus, 'Generated from current input: no phase-specific risk focus was captured.')}
+${listToBullets(phase.riskFocus, 'Based on your answers so far: no phase-specific risk focus was captured.')}
 
 ## Entry criteria
 ${phase.entryCriteria.map((item) => `- ${item}`).join('\n')}
@@ -1094,7 +1096,7 @@ ${phase.testingRequirements.map((item) => `- ${item}`).join('\n')}
 ${phase.exitCriteria.map((item) => `- ${item}`).join('\n')}
 
 ## Next actions
-${listToBullets(phase.nextActions, 'Needs user confirmation: no next actions were generated.')}
+${listToBullets(phase.nextActions, 'Please review and confirm: no next actions were generated.')}
 
 ## AI implementation prompt placeholder
 ${phase.implementationPromptPlaceholder}
@@ -1231,8 +1233,21 @@ function buildPhaseBrief(
   phase: PhasePlan,
   input: ProjectInput,
   context: ProjectContext,
-  assumptionsAndQuestions: { assumptions: string[]; openQuestions: string[] }
+  assumptionsAndQuestions: { assumptions: string[]; openQuestions: string[] },
+  nextPhase?: PhasePlan
 ) {
+  const outOfScope = [
+    nextPhase
+      ? `Do not start "${nextPhase.name}" in this phase. Finish and verify ${phase.name} first.`
+      : 'Do not reopen earlier phases unless verification found a blocker that must be fixed before final handoff.',
+    context.nonGoals.length
+      ? `Project non-goals still stay out of scope here: ${context.nonGoals.slice(0, 3).join(', ')}.`
+      : `Do not add unrelated later-phase work outside the goal for ${phase.name}.`,
+    context.niceToHaves.length
+      ? `Defer optional ideas like ${context.niceToHaves.slice(0, 2).join(' and ')} unless this phase explicitly asks you to plan them.`
+      : `If new ideas appear during this phase, record them for later instead of building them now.`
+  ];
+
   return `# PHASE_BRIEF
 
 ## What this file is for
@@ -1291,6 +1306,9 @@ ${phase.index > 1 ? `- phases/phase-${String(phase.index - 1).padStart(2, '0')}/
 - The exit gate can be reviewed with real evidence.
 - The next builder could understand what happened without hidden chat context.
 
+## Out of scope for this phase
+${outOfScope.map((item) => `- ${item}`).join('\n')}
+
 ## Project-specific anchors
 - Product: ${input.productName}
 - Audience: ${context.primaryAudience}
@@ -1303,7 +1321,7 @@ ${phase.index > 1 ? `- phases/phase-${String(phase.index - 1).padStart(2, '0')}/
 ${listToBullets(assumptionsAndQuestions.assumptions.slice(0, 5), 'Inferred assumption: none recorded.')}
 
 ### Open questions
-${listToBullets(phase.needsConfirmation.concat(assumptionsAndQuestions.openQuestions.slice(0, 4)), 'Needs user confirmation: no open questions recorded.')}
+${listToBullets(phase.needsConfirmation.concat(assumptionsAndQuestions.openQuestions.slice(0, 4)), 'Please review and confirm: no open questions recorded.')}
 `;
 }
 
@@ -1343,6 +1361,7 @@ ${phase.name}
 
 ## This phase is ready only when
 ${phase.exitCriteria.map((item) => `- ${item}`).join('\n')}
+- Existing functionality and previously completed phase outputs still work, or any regression is documented as a blocker.
 
 ## Evidence to gather before closing the phase
 Evidence means the files or notes that prove the phase was checked. Use real file paths when you fill out VERIFICATION_REPORT.md.
@@ -1469,10 +1488,10 @@ Evidence means the files or notes that prove you checked the phase. Good evidenc
 ## Local-first constraint checks
 - [ ] No external service dependencies were added without explicit justification
 - [ ] No auth, payments, database, or cloud backend requirements were introduced
-- [ ] All artifacts remain local and markdown-based
+- [ ] All files remain local and markdown-based
 
 ## Markdown-first constraint checks
-- [ ] All handoff artifacts are readable markdown
+- [ ] All handoff files are readable markdown
 - [ ] No binary or proprietary formats are required for review
 - [ ] State and evidence are recorded in markdown or JSON, not hidden in chat history
 
@@ -1591,7 +1610,7 @@ Evidence means the files or notes that prove the phase was checked. Real evidenc
 - [ ] Phase-specific tests from TEST_PLAN.md
 - [ ] Lint or typecheck if applicable
 - [ ] Smoke test or regression check
-- [ ] Build verification if build artifacts exist
+- [ ] Build verification if build files exist
 
 ## Files expected to change
 - [ ] phases/${phase.slug}/HANDOFF_SUMMARY.md
@@ -1703,18 +1722,21 @@ Open ${promptFile} and paste its prompt into ${agentName}. Then give ${agentName
 
 function buildPackageStartHere(bundle: ProjectBundle, input: ProjectInput) {
   const firstPhase = bundle.phases[0];
+  const packageFolder = `./${bundle.exportRoot}`;
   return `# START_HERE
 
 ## What this package is
 This is a local, markdown-first Xelera Method workspace. It is meant to help you plan, verify, hand off, and resume work without depending on hidden chat history.
 
 ## Open these files first
-1. 00_PROJECT_CONTEXT.md
-2. 01_CONTEXT_RULES.md
-3. 00_APPROVAL_GATE.md
-4. PROJECT_BRIEF.md
-5. PHASE_PLAN.md
-6. CODEX_START_HERE.md, CLAUDE_START_HERE.md, or OPENCODE_START_HERE.md
+1. README.md
+2. QUICKSTART.md
+3. 00_PROJECT_CONTEXT.md
+4. 01_CONTEXT_RULES.md
+5. 00_APPROVAL_GATE.md
+6. PROJECT_BRIEF.md
+7. PHASE_PLAN.md
+8. CODEX_START_HERE.md, CLAUDE_START_HERE.md, or OPENCODE_START_HERE.md
 
 ## Current phase
 Phase ${String(firstPhase?.index || 1).padStart(2, '0')} - ${firstPhase?.name || 'Initial phase'}
@@ -1746,18 +1768,124 @@ ${
 5. Run next-phase only after the report says pass + proceed and the package is no longer blocked.
 
 ## What you should do next
-Open the current phase folder and the matching agent start file. If the package is blocked, fix the blocker before trying to advance.
+Open QUICKSTART.md for the exact commands, then open the current phase folder and the matching agent start file. If the package is blocked, fix the blocker before trying to advance.
 
 ## Commands to know
-- Check status: npm run status -- --package=PATH_TO_THIS_PACKAGE
-- Validate package files: npm run validate -- --package=PATH_TO_THIS_PACKAGE
-- Advance after verification: npm run next-phase -- --package=PATH_TO_THIS_PACKAGE --evidence=phases/${firstPhase?.slug || 'phase-01'}/VERIFICATION_REPORT.md
+- From the folder that contains this workspace:
+  - Check status: npm run status -- --package=${packageFolder}
+  - Validate package files: npm run validate -- --package=${packageFolder}
+  - Advance after verification: npm run next-phase -- --package=${packageFolder} --evidence=${packageFolder}/phases/${firstPhase?.slug || 'phase-01'}/VERIFICATION_REPORT.md
+- If you are already inside this workspace folder:
+  - Check status: npm run status -- --package=.
+  - Validate package files: npm run validate -- --package=.
+  - Advance after verification: npm run next-phase -- --package=. --evidence=phases/${firstPhase?.slug || 'phase-01'}/VERIFICATION_REPORT.md
 
-If you created this package with npm run create-project, reuse the package path printed in that command output.
+QUICKSTART.md includes the same commands in one place.
 
 ## Resume and handoff
-- Yes, you can resume later. repo/xelera-state.json records the current phase and evidence state.
+- Yes, you can resume later. repo/xelera-state.json records the current phase and evidence details.
 - Yes, you can hand off between Codex, Claude Code, and OpenCode. Use the same markdown files as the source of truth and start with the matching *_START_HERE.md file.
+`;
+}
+
+function buildRootReadme(bundle: ProjectBundle, input: ProjectInput) {
+  return `# ${input.productName}
+
+## What this package is
+This is a local Xelera Method workspace. It is a markdown package that helps you plan the work, check each phase, record evidence, and hand the project between Codex, Claude Code, and OpenCode without relying on hidden chat history.
+
+## Open these files first
+- [START_HERE.md](START_HERE.md)
+- [QUICKSTART.md](QUICKSTART.md)
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md)
+
+## Main planning files
+- [PROJECT_BRIEF.md](PROJECT_BRIEF.md)
+- [PHASE_PLAN.md](PHASE_PLAN.md)
+- [00_APPROVAL_GATE.md](00_APPROVAL_GATE.md)
+
+## Agent start files
+- [CODEX_START_HERE.md](CODEX_START_HERE.md)
+- [CLAUDE_START_HERE.md](CLAUDE_START_HERE.md)
+- [OPENCODE_START_HERE.md](OPENCODE_START_HERE.md)
+
+## Current package status
+${bundle.lifecycleStatus}
+
+## What you should do next
+1. Read START_HERE.md for the big picture.
+2. Open QUICKSTART.md for the exact commands.
+3. Open the current phase files before asking an agent to do any work.
+`;
+}
+
+function buildPackageQuickstart(bundle: ProjectBundle, input: ProjectInput) {
+  const firstPhase = bundle.phases[0];
+  const packageFolder = `./${bundle.exportRoot}`;
+
+  return `# QUICKSTART
+
+## What this file is for
+Use this file when you want the shortest path from package creation to phase work.
+
+## If you are in the folder that contains this workspace
+- Check status: \`npm run status -- --package=${packageFolder}\`
+- Validate the package: \`npm run validate -- --package=${packageFolder}\`
+- Advance after verification: \`npm run next-phase -- --package=${packageFolder} --evidence=${packageFolder}/phases/${firstPhase?.slug || 'phase-01'}/VERIFICATION_REPORT.md\`
+
+## If you are already inside this workspace folder
+- Check status: \`npm run status -- --package=.\`
+- Validate the package: \`npm run validate -- --package=.\`
+- Advance after verification: \`npm run next-phase -- --package=. --evidence=phases/${firstPhase?.slug || 'phase-01'}/VERIFICATION_REPORT.md\`
+
+## Open these files first
+1. README.md
+2. START_HERE.md
+3. PROJECT_BRIEF.md
+4. PHASE_PLAN.md
+5. CODEX_START_HERE.md, CLAUDE_START_HERE.md, or OPENCODE_START_HERE.md
+
+## What you should do next
+1. Read the current phase brief.
+2. Give the matching phase files to your coding agent.
+3. Stop and fill out verification before trying to advance.
+`;
+}
+
+function buildPackageTroubleshooting() {
+  return `# TROUBLESHOOTING
+
+## What this file is for
+Use this file when status, validate, or next-phase gives you a result you do not understand.
+
+## Common status words
+- pending: the review is not finished yet.
+- pass: the phase review says the work met the checks.
+- fail: the phase review says something important is still wrong.
+- proceed: the reviewer says the phase can move forward.
+- revise: the phase mostly works, but you should fix issues before moving on.
+- blocked: the package or phase still has an issue that must be resolved before advancement.
+
+## What "blocked" means
+Blocked does not mean the package is useless. It means you should stop trying to advance, review the blocker, and fix or document it first.
+
+## If validate fails
+- Read the exact file name in the error message.
+- Fix the missing file, malformed report value, or weak evidence it names.
+- Run validate again after saving the file.
+
+## If next-phase refuses to advance
+- Check VERIFICATION_REPORT.md.
+- Make sure result is \`pass\`.
+- Make sure recommendation is \`proceed\`.
+- Make sure ## evidence files lists real files with meaningful content.
+- Make sure status no longer says the package is blocked.
+
+## If evidence is the problem
+- Evidence means the files or notes that prove the phase was really checked.
+- Default template files with empty checklists or placeholder text do not count yet.
+- Comment-only files do not count.
+- Add real notes, test output, changed file references, or completed handoff details before selecting \`pass + proceed\`.
 `;
 }
 
@@ -1801,7 +1929,7 @@ You are starting work on ${input.productName} using the Xelera Method package.
 
 Treat the provided markdown files as the full source of truth. Do not rely on hidden chat context. Work only on the current phase, confirm the gate before coding, and stop if the package says the phase is blocked.
 
-Current lifecycle status: ${bundle.lifecycleStatus}
+Current package status: ${bundle.lifecycleStatus}
 Current phase: ${firstPhase.name}
 Primary audience: ${context.primaryAudience}
 Primary feature: ${context.primaryFeature}
@@ -1842,7 +1970,7 @@ This is a local, markdown-first planning and gating package for AI-assisted buil
 - Primary audience: ${context.primaryAudience}
 - Problem statement: ${input.problemStatement}
 - Desired output: ${input.desiredOutput}
-- Must-have scope: ${context.mustHaves.join(', ') || 'Needs user confirmation'}
+- Must-have scope: ${context.mustHaves.join(', ') || 'Please review and confirm'}
 
 ## Current blockers
 ${listToBullets(bundle.blockingWarnings.map((warning) => formatWarningLine(warning)), 'No blocker warnings recorded.')}
@@ -1994,6 +2122,9 @@ function createGeneratedFiles(bundle: ProjectBundle, input: ProjectInput, contex
             : 'Review the brief, close the open questions, and then work the package in phase order.';
   const xeleraState = buildXeleraState(bundle);
 
+  add('README.md', buildRootReadme(bundle, input));
+  add('QUICKSTART.md', buildPackageQuickstart(bundle, input));
+  add('TROUBLESHOOTING.md', buildPackageTroubleshooting());
   add('START_HERE.md', buildPackageStartHere(bundle, input));
   add('00_PROJECT_CONTEXT.md', buildRootContext(input, bundle, context));
   add('01_CONTEXT_RULES.md', buildContextRules());
@@ -2015,7 +2146,7 @@ function createGeneratedFiles(bundle: ProjectBundle, input: ProjectInput, contex
 ## Product
 ${input.productName}
 
-## Package lifecycle status
+## Package status
 ${bundle.lifecycleStatus}
 
 ${statusSummary}
@@ -2031,20 +2162,20 @@ ${bundle.profile.label}
 - Gate strength: ${bundle.profile.gateStrength}
 - Handoff detail: ${bundle.profile.handoffDetail}
 
-## Generated from current input
+## Based on the project information provided
 - Product idea: ${input.productIdea}
 - Audience: ${input.targetAudience}
 - Problem: ${input.problemStatement}
 - Desired output: ${input.desiredOutput}
-- Must-have scope: ${context.mustHaves.join(', ') || 'Needs user confirmation'}
+- Must-have scope: ${context.mustHaves.join(', ') || 'Please review and confirm'}
 
-## Needs user confirmation
+## Please review and confirm
 ${listToBullets(
   bundle.critique
     .filter((item) => item.signal === 'needs-user-confirmation')
     .slice(0, 5)
     .map((item) => item.followUpQuestion),
-  'Needs user confirmation: no open confirmation questions are recorded.'
+  'Please review and confirm: no open confirmation questions are recorded.'
 )}
 
 ## Inferred assumptions
@@ -2055,7 +2186,7 @@ ${listToBullets(context.inferredAssumptions, 'Inferred assumption: none recorded
 ${listToBullets(assumptionsAndQuestions.assumptions, 'Inferred assumption: none recorded.')}
 
 ### Open questions
-${listToBullets(assumptionsAndQuestions.openQuestions, 'Needs user confirmation: no open questions recorded.')}
+${listToBullets(assumptionsAndQuestions.openQuestions, 'Please review and confirm: no open questions recorded.')}
 
 ## Warning summary
 ### Blocking issues
@@ -2065,10 +2196,10 @@ ${listToBullets(blockingWarningLines, 'No blocker warnings recorded.')}
 ${listToBullets(nonBlockingWarningLines, 'No non-blocking warnings recorded.')}
 
 ## Constraints
-${listToBullets(context.constraints, 'Needs user confirmation: constraints are not yet explicit.')}
+${listToBullets(context.constraints, 'Please review and confirm: constraints are not yet explicit.')}
 
 ## Risks currently shaping the plan
-${listToBullets(context.risks, 'Needs user confirmation: risk list is still empty.')}
+${listToBullets(context.risks, 'Please review and confirm: risk list is still empty.')}
 `
   );
 
@@ -2076,7 +2207,7 @@ ${listToBullets(context.risks, 'Needs user confirmation: risk list is still empt
     'PHASE_PLAN.md',
     `# PHASE_PLAN
 
-## Package lifecycle status
+## Package status
 ${bundle.lifecycleStatus}
 
 ${statusSummary}
@@ -2087,8 +2218,8 @@ ${renderPhasePlanMarkdown(bundle.phases)}
 
 ## Risks and open questions affecting sequencing
 ${listToBullets(
-  assumptionsAndQuestions.openQuestions.slice(0, 6).concat(context.risks.slice(0, 3).map((item) => `Generated from current input: ${item}`)),
-  'Needs user confirmation: no sequencing questions recorded.'
+  assumptionsAndQuestions.openQuestions.slice(0, 6).concat(context.risks.slice(0, 3).map((item) => `Based on your answers so far: ${item}`)),
+  'Please review and confirm: no sequencing questions recorded.'
 )}
 `
   );
@@ -2099,7 +2230,7 @@ ${listToBullets(
     '00_APPROVAL_GATE.md',
     `# 00_APPROVAL_GATE
 
-## Package lifecycle status
+## Package status
 ${bundle.lifecycleStatus}
 
 ${statusSummary}
@@ -2115,10 +2246,10 @@ ${listToBullets(nonBlockingWarningLines, 'No non-blocking warnings recorded.')}
 ${listToBullets(assumptionsAndQuestions.assumptions, 'Inferred assumption: none recorded.')}
 
 ### Open questions
-${listToBullets(assumptionsAndQuestions.openQuestions, 'Needs user confirmation: no open questions recorded.')}
+${listToBullets(assumptionsAndQuestions.openQuestions, 'Please review and confirm: no open questions recorded.')}
 
 ## Human approval checklist
-- Confirm the package lifecycle status still matches the actual planning state.
+- Confirm the package status still matches the actual planning state.
 - Confirm blocker warnings are resolved or intentionally escalated outside this package.
 - Confirm non-blocking warnings, assumptions, and open questions are visible to reviewers.
 - Confirm the phase plan, gates, and scorecard reflect the actual brief and questionnaire answers.
@@ -2140,7 +2271,7 @@ ${listToBullets(assumptionsAndQuestions.openQuestions, 'Needs user confirmation:
 ## Build objective
 ${input.desiredOutput}
 
-## Package lifecycle status
+## Package status
 ${bundle.lifecycleStatus}
 
 ${statusSummary}
@@ -2148,16 +2279,16 @@ ${statusSummary}
 ## Current mode
 ${bundle.profile.label}
 
-## Generated from current input
+## Based on the project information provided
 - Primary audience: ${context.primaryAudience}
 - Primary feature focus: ${context.primaryFeature}
 - Workflow anchor: ${context.workflowAnchor}
 - Acceptance anchor: ${context.acceptanceAnchor}
 
-## Needs user confirmation
+## Please review and confirm
 ${listToBullets(
   Array.from(new Set(bundle.critique.map((item) => item.followUpQuestion))).slice(0, 5),
-  'Needs user confirmation: no open follow-up questions are recorded.'
+  'Please review and confirm: no open follow-up questions are recorded.'
 )}
 
 ## Inferred assumptions
@@ -2168,12 +2299,12 @@ ${listToBullets(context.inferredAssumptions, 'Inferred assumption: none recorded
 ${listToBullets(assumptionsAndQuestions.assumptions, 'Inferred assumption: none recorded.')}
 
 ### Open questions
-${listToBullets(assumptionsAndQuestions.openQuestions, 'Needs user confirmation: no open questions recorded.')}
+${listToBullets(assumptionsAndQuestions.openQuestions, 'Please review and confirm: no open questions recorded.')}
 
 ## Unresolved warnings
 ${listToBullets(bundle.unresolvedWarnings.map((warning) => `[${warning.severity}] ${warning.title}: ${warning.message}`), 'No unresolved warnings recorded.')}
 
-## Lifecycle meaning
+## Status meaning
 - Draft: export is allowed for planning review, but the package still needs more work before formal approval review.
 - Blocked: export is allowed for diagnosis and review, but blocker warnings prevent a build-ready package.
 - ReviewReady: the package is complete enough for human approval review, but it is not yet approved for build.
@@ -2192,7 +2323,7 @@ ${listToBullets(bundle.unresolvedWarnings.map((warning) => `[${warning.severity}
 - Use markdown files in this package as the source of truth.
 - Do not rely on chat history.
 - Do not skip entry or exit gates.
-- Do not hardcode final AI prompts in artifacts. Ask the coding AI to draft prompts when needed.
+- Do not hardcode final AI prompts in package files. Ask the coding AI to draft prompts when needed.
 - Keep the MVP inside the stated must-have scope, non-goals, and constraints.
 
 ## Current readiness
@@ -2207,7 +2338,7 @@ Review the open confirmation items, then start phase 1 with the current brief an
     'STEP_BY_STEP_BUILD_GUIDE.md',
     `# STEP_BY_STEP_BUILD_GUIDE
 
-## Package lifecycle status
+## Package status
 ${bundle.lifecycleStatus}
 
 ${statusSummary}
@@ -2216,12 +2347,12 @@ ${statusSummary}
 ${modeGuideIntro}
 
 1. Read PROJECT_BRIEF.md and restate ${input.productName} in your own words.
-2. Review QUESTIONNAIRE.md and PLAN_CRITIQUE.md so you know which parts are generated, which still need confirmation, and which are inferred assumptions.
+2. Review QUESTIONNAIRE.md and PLAN_CRITIQUE.md so you know which parts are based on the current project information, which still need confirmation, and which are inferred assumptions.
 3. Confirm the SCORECARD.md blockers list is empty or explicitly accepted.
 4. Work phase-by-phase in the order listed in PHASE_PLAN.md.
 5. For phase 1, verify the brief, profile, audience, constraints, and desired output are present before moving on.
 6. For phase 2 and later, require the previous phase handoff, previous exit gate, blocker log, and scope-change log before starting.
-7. During each phase, keep the artifacts tied to ${context.primaryAudience}, ${context.primaryFeature}, and ${context.outputAnchor}.
+7. During each phase, keep the files tied to ${context.primaryAudience}, ${context.primaryFeature}, and ${context.outputAnchor}.
 8. When you need a coding prompt or review prompt, ask your coding AI to draft one from the current phase goal, constraints, and acceptance criteria.
 9. Before final handoff, revisit SCORECARD.md and confirm that the package still matches the actual scope and unresolved risks.
 10. Hand the package to Codex, Claude, Cursor, or a human development team as the implementation source of truth.
@@ -2231,12 +2362,12 @@ ${modeGuideIntro}
 ${listToBullets(assumptionsAndQuestions.assumptions, 'Inferred assumption: none recorded.')}
 
 ### Open questions
-${listToBullets(assumptionsAndQuestions.openQuestions, 'Needs user confirmation: no open questions recorded.')}
+${listToBullets(assumptionsAndQuestions.openQuestions, 'Please review and confirm: no open questions recorded.')}
 
 ## Unresolved warnings
 ${listToBullets(bundle.unresolvedWarnings.map((warning) => `[${warning.severity}] ${warning.title}: ${warning.message}`), 'No unresolved warnings recorded.')}
 
-## Lifecycle meaning
+## Status meaning
 - Draft: export is allowed for planning review, but the package is not yet ready for human build approval.
 - Blocked: export is allowed for diagnosis and review, but blocker warnings prevent a build-ready package.
 - ReviewReady: the package is complete enough for human approval review, but it is not yet approved for build.
@@ -2268,7 +2399,7 @@ ${renderCritiqueMarkdown(bundle.critique)}
 
 Generated by Xelera Method.
 
-## Package lifecycle status
+## Package status
 ${bundle.lifecycleStatus}
 
 ${statusSummary}
@@ -2276,17 +2407,17 @@ ${statusSummary}
 ## What this repo package is for
 This directory is a local, markdown-first planning and handoff package for AI-assisted builds in Codex, Claude Code, and OpenCode. Its purpose is to help another builder implement ${input.productName} without depending on hidden chat context.
 
-## Generated from current input
-${listToBullets(context.mustHaves.map((item) => `Generated from current input: ${item}`), 'Generated from current input: must-have features were not listed.')}
+## Based on the project information provided
+${listToBullets(context.mustHaves.map((item) => `Based on your answers so far: ${item}`), 'Based on your answers so far: must-have features were not listed.')}
 
-## Needs user confirmation
-${listToBullets(bundle.critique.map((item) => item.followUpQuestion).slice(0, 4), 'Needs user confirmation: no open questions are listed.')}
+## Please review and confirm
+${listToBullets(bundle.critique.map((item) => item.followUpQuestion).slice(0, 4), 'Please review and confirm: no open questions are listed.')}
 
 ## Non-goals
-${listToBullets(context.nonGoals.map((item) => `Generated from current input: ${item}`), 'Needs user confirmation: non-goals are not yet explicit.')}
+${listToBullets(context.nonGoals.map((item) => `Based on your answers so far: ${item}`), 'Please review and confirm: non-goals are not yet explicit.')}
 
 ## Data and integrations
-${listToBullets(context.integrations.map((item) => `Generated from current input: ${item}`), 'Inferred assumption: the first release is mostly local and markdown-first.')}
+${listToBullets(context.integrations.map((item) => `Based on your answers so far: ${item}`), 'Inferred assumption: the first release is mostly local and markdown-first.')}
 
 ## Unresolved warnings
 ${listToBullets(bundle.unresolvedWarnings.map((warning) => `[${warning.severity}] ${warning.title}: ${warning.message}`), 'No unresolved warnings recorded.')}
@@ -2342,7 +2473,7 @@ ${listToBullets(bundle.unresolvedWarnings.map((warning) => `[${warning.severity}
     const gateNumber = String(phase.index).padStart(2, '0');
     const nextPhase = bundle.phases[phase.index];
     add(`phases/${phase.slug}/README.md`, renderPhaseMarkdown(phase));
-    add(`phases/${phase.slug}/PHASE_BRIEF.md`, buildPhaseBrief(phase, input, context, assumptionsAndQuestions));
+    add(`phases/${phase.slug}/PHASE_BRIEF.md`, buildPhaseBrief(phase, input, context, assumptionsAndQuestions, nextPhase));
     add(`phases/${phase.slug}/ENTRY_GATE.md`, buildPhaseEntryGate(phase));
     add(`phases/${phase.slug}/CODEX_BUILD_PROMPT.md`, buildAgentPrompt('Codex', phase, input, context));
     add(`phases/${phase.slug}/CLAUDE_BUILD_PROMPT.md`, buildAgentPrompt('Claude Code', phase, input, context));
@@ -2384,6 +2515,7 @@ ${phase.name}
 
 ## This phase is ready only when
 ${phase.exitCriteria.map((item) => `- ${item}`).join('\n')}
+- Existing functionality and previously completed phase outputs still work, or any regression is documented as a blocker.
 
 ## Required evidence
 ${phase.testingRequirements.map((item) => `- ${item}`).join('\n')}

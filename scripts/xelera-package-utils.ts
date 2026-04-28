@@ -119,3 +119,158 @@ export function parseVerificationEvidenceFiles(reportContent: string) {
     .filter((line) => !looksLikeInstructionalEvidenceText(line))
     .filter((line) => line.toLowerCase() !== 'pending');
 }
+
+const DEFAULT_SCAFFOLD_EVIDENCE_BASENAMES = new Set([
+  'VERIFICATION_REPORT.md',
+  'EVIDENCE_CHECKLIST.md',
+  'HANDOFF_SUMMARY.md',
+  'NEXT_PHASE_CONTEXT.md'
+]);
+
+type EvidenceAssessment = {
+  issues: string[];
+  meaningfulFiles: string[];
+  meaningfulNonScaffoldFiles: string[];
+};
+
+function isScaffoldEvidenceFile(evidencePath: string) {
+  return DEFAULT_SCAFFOLD_EVIDENCE_BASENAMES.has(path.basename(evidencePath));
+}
+
+function countJsonSignals(value: unknown): number {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return 0;
+    if (/^(pending|todo|tbd|none|n\/a)$/i.test(trimmed)) return 0;
+    return trimmed.length >= 8 ? 1 : 0;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') return 1;
+  if (Array.isArray(value)) return value.reduce((total, item) => total + countJsonSignals(item), 0);
+  if (typeof value === 'object') {
+    return Object.entries(value as Record<string, unknown>).reduce((total, [key, child]) => total + (key ? 1 : 0) + countJsonSignals(child), 0);
+  }
+  return 0;
+}
+
+function stripEvidenceBoilerplate(content: string) {
+  const withoutComments = content.replace(/<!--[\s\S]*?-->/g, '\n');
+  const filteredLines = withoutComments
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !/^#{1,6}\s+/.test(line))
+    .filter((line) => !/^```/.test(line))
+    .filter((line) => !/^[-*]\s+\[[ xX]?\]\s+/.test(line))
+    .filter((line) => !/^[-*]\s*$/.test(line))
+    .filter((line) => !/^[-*]\s+(pending|todo|tbd|none|n\/a)$/i.test(line))
+    .filter((line) => !/^selected\s+(result|recommendation):/i.test(line))
+    .filter((line) => !/^allowed:/i.test(line))
+    .filter((line) => !/^rules?:/i.test(line))
+    .filter((line) => !/^evidence means /i.test(line))
+    .filter((line) => !/^list the evidence files you actually reviewed/i.test(line))
+    .filter((line) => !/^replace `?pending`?/i.test(line))
+    .filter((line) => !/^do not select `?pass \+ proceed`?/i.test(line))
+    .filter((line) => !/^pending completion of all sections above/i.test(line))
+    .filter((line) => !/^(phase outcome|implementation files changed|tests run|exit gate status|remaining blockers or warnings|assumptions that still need confirmation|summary|warnings|defects found|follow-up actions|final decision|files reviewed|files changed|commands run|evidence files):\s*$/i.test(line));
+
+  return filteredLines.join(' ');
+}
+
+function hasMeaningfulEvidenceContent(filePath: string, content: string) {
+  const baseName = path.basename(filePath);
+  const extension = path.extname(filePath).toLowerCase();
+
+  if (baseName === 'EVIDENCE_CHECKLIST.md') {
+    return (content.match(/\[[xX]\]/g) || []).length >= 2;
+  }
+
+  if (baseName === 'HANDOFF_SUMMARY.md') {
+    const completedLines = content
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => /^-\s+[^:]+:\s+\S+/.test(line))
+      .filter((line) => !/:\s*$/.test(line));
+    return completedLines.length >= 2;
+  }
+
+  if (baseName === 'NEXT_PHASE_CONTEXT.md') {
+    const inheritSection = content.split(/## What the next phase should inherit/i)[1]?.split(/\n##\s+/)[0] || '';
+    const inheritBullets = inheritSection
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('- '))
+      .map((line) => line.slice(2).trim())
+      .filter(Boolean)
+      .filter((line) => !/no additional context was generated/i.test(line));
+    return inheritBullets.length >= 1 && inheritBullets.join(' ').length >= 40;
+  }
+
+  if (baseName === 'VERIFICATION_REPORT.md') {
+    const hasCompletedDecision = /##\s*result:\s*(pass|fail)/i.test(content) && /##\s*recommendation:\s*(proceed|revise|blocked)/i.test(content);
+    const usefulBullets = content
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('- '))
+      .map((line) => line.slice(2).trim())
+      .filter(Boolean)
+      .filter((line) => !/^(pending|-|pass|fail|proceed|revise|blocked)$/i.test(line))
+      .filter((line) => !looksLikeMarkdownComment(line))
+      .filter((line) => !looksLikeInstructionalEvidenceText(line));
+    return hasCompletedDecision && usefulBullets.length >= 2;
+  }
+
+  if (extension === '.json') {
+    try {
+      return countJsonSignals(JSON.parse(content)) >= 3;
+    } catch {
+      return false;
+    }
+  }
+
+  const stripped = stripEvidenceBoilerplate(content);
+  const tokens = stripped
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+
+  return stripped.length >= 40 && tokens.length >= 6;
+}
+
+export function assessEvidenceFilesForApproval(packageRoot: string, evidenceFiles: string[]): EvidenceAssessment {
+  const issues: string[] = [];
+  const meaningfulFiles: string[] = [];
+  const meaningfulNonScaffoldFiles: string[] = [];
+
+  for (const evidenceFile of evidenceFiles) {
+    const absoluteEvidencePath = path.join(packageRoot, evidenceFile);
+    if (!fileExists(absoluteEvidencePath)) {
+      issues.push(`Evidence file "${evidenceFile}" does not exist on disk. Add the file or update ## evidence files to list a real file path.`);
+      continue;
+    }
+
+    const content = readTextFile(absoluteEvidencePath);
+    if (!hasMeaningfulEvidenceContent(absoluteEvidencePath, content)) {
+      issues.push(
+        `Evidence file "${evidenceFile}" does not contain enough completed content yet. Add real notes, results, or proof instead of headings, comments, empty checklists, or template placeholders.`
+      );
+      continue;
+    }
+
+    meaningfulFiles.push(evidenceFile);
+    if (!isScaffoldEvidenceFile(evidenceFile)) {
+      meaningfulNonScaffoldFiles.push(evidenceFile);
+    }
+  }
+
+  if (meaningfulFiles.length === 0) {
+    issues.push('No listed evidence files contain meaningful completed content yet. Add real evidence before selecting pass + proceed.');
+  }
+
+  return {
+    issues,
+    meaningfulFiles,
+    meaningfulNonScaffoldFiles
+  };
+}
