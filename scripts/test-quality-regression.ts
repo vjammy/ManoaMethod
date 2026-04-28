@@ -38,6 +38,14 @@ function getFile(bundle: ReturnType<typeof generateProjectBundle>, pathName: str
   return bundle.files.find((file) => file.path === pathName)?.content || '';
 }
 
+function extractSectionHeadings(content: string) {
+  return Array.from(content.matchAll(/^##\s+(.+)$/gm)).map((match) => match[1].trim());
+}
+
+function extractBulletValues(content: string, prefix: string) {
+  return Array.from(content.matchAll(new RegExp(`- ${prefix}: (.+)`, 'g'))).map((match) => match[1].trim());
+}
+
 const USE_CASES = [
   {
     name: 'Family Task Board',
@@ -451,10 +459,12 @@ async function main() {
     const recursiveReport = getFile(bundle, 'recursive-test/RECURSIVE_TEST_REPORT.md');
     const productNorthStar = getFile(bundle, 'product-strategy/PRODUCT_NORTH_STAR.md');
     const mvpScope = getFile(bundle, 'product-strategy/MVP_SCOPE.md');
+    const functionalRequirements = getFile(bundle, 'requirements/FUNCTIONAL_REQUIREMENTS.md');
     const acceptanceCriteria = getFile(bundle, 'requirements/ACCEPTANCE_CRITERIA.md');
     const openQuestions = getFile(bundle, 'requirements/OPEN_QUESTIONS.md');
     const dataClassification = getFile(bundle, 'security-risk/DATA_CLASSIFICATION.md');
     const secretManagement = getFile(bundle, 'security-risk/SECRET_MANAGEMENT.md');
+    const externalServices = getFile(bundle, 'integrations/EXTERNAL_SERVICES.md');
     const environmentVariables = getFile(bundle, 'integrations/ENVIRONMENT_VARIABLES.md');
     const mockingStrategy = getFile(bundle, 'integrations/MOCKING_STRATEGY.md');
     const systemOverview = getFile(bundle, 'architecture/SYSTEM_OVERVIEW.md');
@@ -536,6 +546,112 @@ async function main() {
 
     // 6. No generic fake evidence acceptance
     // (This is covered by the validation engine in the main smoke test)
+
+    // 7. Requirements must use the structured actor/action/response/data/failure/outcome format
+    if (!/Actor:/i.test(functionalRequirements) || !/User action:/i.test(functionalRequirements) || !/System response:/i.test(functionalRequirements) || !/Stored data:/i.test(functionalRequirements) || !/Failure case:/i.test(functionalRequirements) || !/Testable outcome:/i.test(functionalRequirements)) {
+      console.error(`  FAIL: ${useCase.name} functional requirements did not use the structured requirement format.`);
+      failures++;
+    }
+    if (/cannot complete the core workflow without/i.test(functionalRequirements)) {
+      console.error(`  FAIL: ${useCase.name} still contains the generic "why it matters" fallback.`);
+      failures++;
+    }
+    if (/system stores the result correctly/i.test(functionalRequirements)) {
+      console.error(`  FAIL: ${useCase.name} still contains the generic requirement fallback behavior.`);
+      failures++;
+    }
+
+    // 8. Acceptance criteria must be concrete Given/When/Then plus negative case and verification
+    const givenCount = (acceptanceCriteria.match(/- Given:/g) || []).length;
+    const whenCount = (acceptanceCriteria.match(/- When:/g) || []).length;
+    const thenCount = (acceptanceCriteria.match(/- Then:/g) || []).length;
+    const negativeCount = (acceptanceCriteria.match(/- Negative case:/g) || []).length;
+    const verificationCount = (acceptanceCriteria.match(/- Verification method:/g) || []).length;
+    if (givenCount === 0 || whenCount === 0 || thenCount === 0 || negativeCount === 0 || verificationCount === 0) {
+      console.error(`  FAIL: ${useCase.name} acceptance criteria are missing Given/When/Then, negative case, or verification sections.`);
+      failures++;
+    }
+    if (/can use .* realistic data and see the expected result/i.test(acceptanceCriteria)) {
+      console.error(`  FAIL: ${useCase.name} still contains the generic acceptance fallback.`);
+      failures++;
+    }
+    const evidenceLines = extractBulletValues(acceptanceCriteria, 'Evidence required');
+    if (evidenceLines.length > 1 && new Set(evidenceLines).size !== evidenceLines.length) {
+      console.error(`  FAIL: ${useCase.name} acceptance criteria reuse identical evidence lines.`);
+      failures++;
+    }
+
+    // 9. Data model and classification must reject fake entities created from fields or integrations
+    const dataModelHeadings = extractSectionHeadings(dataModel);
+    const fakeEntityPatterns = [
+      /Due Dates/i,
+      /Reminder Preferences/i,
+      /Priority$/i,
+      /Task Status$/i,
+      /Completion States/i,
+      /Email Reminder Service/i,
+      /Optional Local File Links/i
+    ];
+    if (dataModelHeadings.some((heading) => fakeEntityPatterns.some((pattern) => pattern.test(heading)))) {
+      console.error(`  FAIL: ${useCase.name} data model still contains fake entities derived from fields or integrations.`);
+      failures++;
+    }
+    if (/##\s+Email Reminder Service/i.test(dataClassification)) {
+      console.error(`  FAIL: ${useCase.name} data classification treated an integration like a top-level data entity.`);
+      failures++;
+    }
+
+    // 10. Integrations must not be invented and architecture must stay product-specific
+    if (/## Payments provider/i.test(externalServices) && /(No payment|No billing|No checkout|No payment processing)/i.test(useCase.input.nonGoals)) {
+      console.error(`  FAIL: ${useCase.name} invented a payments integration that is explicitly out of scope.`);
+      failures++;
+    }
+    if (/## External API/i.test(externalServices) && !/api/i.test(useCase.input.dataAndIntegrations + useCase.input.mustHaveFeatures + useCase.input.constraints)) {
+      console.error(`  FAIL: ${useCase.name} invented a generic external API integration.`);
+      failures++;
+    }
+    if (/guided root docs|phase packets|support folders|the xelera workspace itself/i.test(systemOverview)) {
+      console.error(`  FAIL: ${useCase.name} architecture still describes the workspace instead of the product.`);
+      failures++;
+    }
+
+    // 11. Cross-file coherence checks for the 10 swarm use cases
+    const expectedEntitySignals: Record<string, RegExp[]> = {
+      fta: [/Household Task/i, /Family Member/i],
+      pfr: [/Emergency Contact/i, /Boundary Note/i],
+      sdr: [/Lead/i, /Handoff Packet/i],
+      lro: [/Pickup Order/i, /Menu Item/i],
+      bud: [/Expense Entry/i, /Budget Category/i],
+      cln: [/Appointment/i, /Provider Availability/i],
+      hoa: [/Maintenance Request/i, /Vendor Assignment/i],
+      scl: [/Club Membership/i, /Club Event/i],
+      vlt: [/Volunteer Profile/i, /Event Shift/i],
+      inv: [/Stock Item/i, /Stock Adjustment/i]
+    };
+    const expectedServiceSignals: Record<string, RegExp[]> = {
+      fta: [/Email Reminder Service/i],
+      pfr: [],
+      sdr: [],
+      lro: [],
+      bud: [],
+      cln: [/SMS Reminder Service/i],
+      hoa: [],
+      scl: [],
+      vlt: [],
+      inv: []
+    };
+    for (const pattern of expectedEntitySignals[useCase.key]) {
+      if (!pattern.test(dataModel) || !pattern.test(functionalRequirements) || !pattern.test(systemOverview)) {
+        console.error(`  FAIL: ${useCase.name} did not keep entity ${pattern} coherent across requirements, architecture, and data model.`);
+        failures++;
+      }
+    }
+    for (const pattern of expectedServiceSignals[useCase.key]) {
+      if (!pattern.test(externalServices)) {
+        console.error(`  FAIL: ${useCase.name} did not include the expected service ${pattern} where the workflow implies it.`);
+        failures++;
+      }
+    }
 
     const requiredModuleFiles = [
       'product-strategy/PRODUCT_STRATEGY_START_HERE.md',
