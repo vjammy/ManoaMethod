@@ -2,25 +2,32 @@
   "name": "xelera-method",
   "version": "1.0.0",
   "license": "MIT",
-  "description": "Markdown-first AI product planning, gating, scoring, and handoff app by xelera.ai",
+  "description": "A local, markdown-first planning and gating system for AI-assisted builds in Codex, Claude Code, and OpenCode",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "create-project": "node scripts/xelera-create-project.mjs"
+    "smoke": "tsx scripts/smoke-test.ts",
+    "create-project": "tsx scripts/xelera-create-project.ts",
+    "validate": "tsx scripts/xelera-validate.ts",
+    "next-phase": "tsx scripts/xelera-next-phase.ts",
+    "status": "tsx scripts/xelera-status.ts"
   },
   "dependencies": {
-    "next": "^14.2.5",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "jszip": "^3.10.1",
-    "typescript": "^5.4.5",
-    "tailwindcss": "^3.4.3",
-    "postcss": "^8.4.38",
-    "autoprefixer": "^10.4.19",
     "@types/node": "^20.12.12",
     "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0"
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.19",
+    "jszip": "^3.10.1",
+    "next": "^14.2.5",
+    "postcss": "^8.4.38",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "tailwindcss": "^3.4.3",
+    "typescript": "^5.4.5"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2"
   }
 }

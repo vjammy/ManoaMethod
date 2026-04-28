@@ -1,0 +1,25 @@
+{
+  // OpenCode configuration for Xelera Method
+  // Copy this folder into your project root and rename to .opencode
+  "agents": {
+    "planner": "agents/xelera-planner.md",
+    "gatekeeper": "agents/xelera-gatekeeper.md",
+    "builder": "agents/xelera-builder.md",
+    "reviewer": "agents/xelera-reviewer.md"
+  },
+  "commands": {
+    "xelera-plan": "commands/xelera-plan.md",
+    "xelera-validate": "commands/xelera-validate.md",
+    "xelera-phase": "commands/xelera-phase.md",
+    "xelera-verify": "commands/xelera-verify.md",
+    "xelera-handoff": "commands/xelera-handoff.md",
+    "xelera-next": "commands/xelera-next.md"
+  },
+  "resources": {
+    "xelera-method": "resources/XELERA_METHOD.md",
+    "context-management": "resources/CONTEXT_MANAGEMENT.md",
+    "gate-rules": "resources/GATE_RULES.md",
+    "phase-packet-template": "resources/PHASE_PACKET_TEMPLATE.md",
+    "verification-template": "resources/VERIFICATION_TEMPLATE.md"
+  }
+}

@@ -1,21 +1,23 @@
 import JSZip from 'jszip';
 import { NextResponse } from 'next/server';
-import { generateProjectFiles } from '@/lib/generator';
-import { slugify } from '@/lib/templates';
+import { generateProjectBundle } from '@/lib/generator';
 import type { ProjectInput } from '@/lib/types';
 
 export async function POST(request: Request) {
   const input = (await request.json()) as ProjectInput;
+  const bundle = generateProjectBundle(input);
   const zip = new JSZip();
-  const root = slugify(input.productName);
-  for (const file of generateProjectFiles(input)) {
-    zip.file(`${root}/${file.path}`, file.content);
+
+  for (const file of bundle.files) {
+    zip.file(`${bundle.exportRoot}/${file.path}`, file.content);
   }
-  const data = await zip.generateAsync({ type: 'uint8array' });
+
+  const data = await zip.generateAsync({ type: 'arraybuffer' });
+
   return new NextResponse(data, {
     headers: {
       'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="${root}-xelera-handoff.zip"`
+      'Content-Disposition': `attachment; filename="${bundle.exportRoot}-xelera-handoff.zip"`
     }
   });
 }

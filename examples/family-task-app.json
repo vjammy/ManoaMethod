@@ -1,0 +1,28 @@
+{
+  "productName": "Family Task Board",
+  "level": "intermediate",
+  "track": "technical",
+  "productIdea": "A mobile-friendly web app that helps families assign, track, and review household tasks with separate parent and child views, simple reminders, and clear completion status.",
+  "targetAudience": "Parent or household admin, second parent or co-parent, child or kid user, optional guardian or caregiver supporting the household.",
+  "problemStatement": "Families often manage chores through messy group chats, sticky notes, or verbal reminders, which causes missed tasks, unclear ownership, weak follow-through, and frustration for both parents and kids.",
+  "constraints": "Keep the first release as a mobile-friendly web app. Keep roles and permissions simple. Parents control child accounts. Kids should only see their own assigned or shared tasks. Plan email reminders carefully and allow mocking or deferring them by phase if needed. Privacy and safety matter because children are users.",
+  "desiredOutput": "A build-ready markdown workspace with phased planning, role boundaries, gates, verification files, handoff context, and enough implementation clarity for a family task management app.",
+  "mustHaveFeatures": "Family workspace setup, parent and co-parent roles, kid profiles, task creation, task assignment, due dates, priority, task status, parent dashboard, kid dashboard, parent approval of kid-completed tasks, mobile-friendly layout, basic reminder preferences, email reminder planning, verification and handoff workflow.",
+  "niceToHaveFeatures": "Recurring chores, simple reward tracking, calendar view, printable summaries, better reminder timing controls, optional caregiver views.",
+  "dataAndIntegrations": "Family accounts or workspaces, parent and kid profiles, household tasks, task assignments, due dates, reminder preferences, parent approval states, email reminder service or mocked reminder flow for early phases.",
+  "risks": "Parents may expect too much complexity in v1, children are privacy-sensitive users, roles and permissions could leak the wrong tasks, reminder behavior could create confusion, and mobile usability issues could make the app fail even if the backend logic works.",
+  "successMetrics": "A reviewer can understand who uses the app, what each role can see and do, how tasks move through assignment and completion, what safety and privacy constraints matter, and what evidence proves each phase is ready.",
+  "nonGoals": "No payment system, no social feed, no school integration, no complex gamification in v1, no native mobile app in v1, no location tracking, no chat system, no AI features in v1.",
+  "timeline": "Plan a realistic first release that proves the family workflow works before adding richer reminders, rewards, or more advanced household coordination features.",
+  "teamContext": "A business-oriented product owner uses Xelera Method to prepare the app plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
+  "questionnaireAnswers": {
+    "north-star": "The first release must prove that a family can create a shared household workspace, assign chores to parents or kids, review completion clearly, and understand what each person should do without relying on group chats or verbal reminders.",
+    "primary-workflow": "A parent creates the family workspace, invites a co-parent if needed, creates kid profiles, adds tasks with due dates and priorities, assigns tasks to self, another parent, or a child, tracks progress on the parent dashboard, and lets kids mark their own tasks done from a mobile-friendly dashboard so parents can review and approve completion when appropriate.",
+    "data-boundaries": "Important boundaries include family workspaces, parent accounts, kid profiles managed by parents, tasks, assignment rules, status changes, reminder preferences, and visibility rules so kids only see their own assigned or shared tasks while parents can see the whole household view.",
+    "deployment-guardrails": "The plan should protect role and visibility rules, keep child-facing flows mobile-friendly, avoid leaking private task information, and allow reminder delivery to be mocked or delayed if the app is not yet ready for live email integration.",
+    "test-proof": "Before a phase is considered ready, the reviewer should be able to confirm role permissions, task lifecycle behavior, parent and kid dashboard expectations, mobile layout assumptions, and privacy-sensitive edge cases through clear phase evidence and verification notes.",
+    "scope-cut": "Keep household setup, role boundaries, task assignment, task completion flow, parent review, dashboard clarity, reminder planning, and privacy guardrails in v1. Defer advanced gamification, school links, native mobile apps, social features, and anything that adds unnecessary complexity to the first family workflow.",
+    "acceptance": "A skeptical reviewer should be able to read the generated package and understand exactly who the users are, what each role can do, how a task moves from creation to completion, what safety constraints apply to kid users, and what proof is needed before each phase can advance.",
+    "operating-risks": "The biggest risks are weak role boundaries, privacy mistakes around child accounts, confusing reminder behavior, mobile usability gaps, and false confidence if the dashboards look planned but the verification evidence does not prove the flows actually make sense."
+  }
+}

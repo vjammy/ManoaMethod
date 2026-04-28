@@ -1,0 +1,26 @@
+{
+  "productName": "Xelera Method Workspace",
+  "level": "advanced",
+  "track": "technical",
+  "productIdea": "A local-first planning and handoff layer that helps a team take a rough idea and turn it into a build-ready markdown package with gates, scorecards, and step-by-step delivery guidance before implementation starts.",
+  "targetAudience": "Technical product owners, senior engineers, AI-assisted builders, and delivery teams receiving ambiguous product requests.",
+  "problemStatement": "Teams often start coding from half-formed ideas, which causes rework, shallow requirements, weak acceptance criteria, and poor handoffs between product, AI coding tools, and engineering teams.",
+  "constraints": "Keep the MVP local-first, markdown-first, and simple to run with npm install and npm run dev. Avoid auth, payments, and databases unless they become strictly necessary.",
+  "desiredOutput": "A plan package with a project brief, guided questionnaire, critique, phased gate files, readiness score, step-by-step build guide, and downloadable artifact zip.",
+  "mustHaveFeatures": "Profile-aware planning flow, guided questionnaire, critique engine, phase plan, gate entry and exit files, readiness scorecard, markdown package preview, zip export, CLI generation from JSON input.",
+  "niceToHaveFeatures": "Saved drafts, collaboration, template sharing, connector integrations, richer analytics.",
+  "dataAndIntegrations": "Project brief fields, questionnaire answers, generated markdown artifacts, zip download, local CLI input JSON, future GitHub integration.",
+  "risks": "Users may still provide shallow answers, overscope v1, skip gate discipline, or misread the score as approval to code blindly.",
+  "successMetrics": "A user can run the app locally, create a sample project, see the generated phases and gates, download a zip, and run the CLI to produce the same package from input JSON.",
+  "nonGoals": "No auth, no payments, no production database, no heavy visual polish, no direct prompt authoring.",
+  "timeline": "Ship a working local MVP first, then validate the workflow before deeper persistence or integrations.",
+  "teamContext": "One planner fills out the package and then hands it to another AI coding tool or engineering team.",
+  "questionnaireAnswers": {
+    "north-star": "The first release must prove that a vague request can become a build-ready package with enough clarity to guide implementation without more back-and-forth.",
+    "primary-workflow": "Start a project, choose a profile, provide the raw brief, answer the guided questions, review the critique, inspect phases and gates, then export the package.",
+    "failure-modes": "The workflow can fail if the brief is vague, the scope stays too broad, integrations are undefined, or the team skips exit gates.",
+    "scope-cut": "Keep the planning workflow, critique, phases, scorecard, export, and CLI. Defer persistence, collaboration, and external connectors.",
+    "acceptance": "A skeptical technical reviewer should be able to read the markdown package, understand what to build, and identify the gate conditions and testing expectations.",
+    "operating-risks": "Gate skipping, stale markdown artifacts, under-specified integrations, and false confidence from incomplete planning are the key operating risks."
+  }
+}
