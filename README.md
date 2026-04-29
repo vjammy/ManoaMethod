@@ -74,9 +74,11 @@ If you already have a requirements document and want an AI agent to build from i
 
 The short version is:
 
-- give the agent the requirements
+- give the agent the requirements, wherever they live
 - tell it to pull `https://github.com/vjammy/manoa-method`
+- tell it that it is expected to build the real solution
 - tell it to build in the repo root
+- require it to use Manoa Method to turn those requirements into a robust production-ready application
 - require it to follow the Manoa phase, gate, validation, and handoff workflow
 
 ## Audience-Specific Guides

@@ -2,11 +2,30 @@
 
 ## Purpose
 
-This guide explains how to use Manoa Method when you already have a requirements document and want a coding agent to build from it.
+This guide explains how to use Manoa Method when you already have requirements and want a coding agent to build the actual solution from them.
 
 This is the workflow behind prompts like:
 
-"Requirements attached. Pull repo https://github.com/vjammy/manoa-method and use the Manoa Method step-by-step instructions to build the repo in the root."
+"Requirements attached. Pull repo https://github.com/vjammy/manoa-method and use the Manoa Method workflow to build the production-ready application in the repo root."
+
+The important clarification is this:
+
+- the agent is not just reviewing the requirements
+- the agent is not just generating planning notes
+- the agent is building the real application
+
+Manoa Method is the workflow used to take the project from raw requirements to a robust production-ready end state.
+
+## Where The Requirements May Live
+
+The requirements may be provided in any of these places:
+
+- attached in the conversation
+- written directly in the prompt
+- stored in the repo root
+- stored in another folder in the repository
+
+The first job of the builder is to locate those requirements and treat them as the source input for the build.
 
 ## Recommended Operator Workflow
 
@@ -21,15 +40,16 @@ Bring one or more of the following:
 - constraints
 - acceptance criteria
 
-The clearer the input, the stronger the generated plan.
+The clearer the input, the stronger the build.
 
 ### 2. Give the agent the repo and the requirements
 
 The agent should:
 
 - pull `https://github.com/vjammy/manoa-method`
+- locate the requirements wherever they were provided
+- treat those requirements as the source of truth for the solution
 - read the repo guidance
-- treat the markdown workflow as the source of truth
 - build directly in the repo root
 
 ### 3. Require method compliance
@@ -51,28 +71,57 @@ The final output should state:
 - what is deferred
 - what the next action should be
 
+## The End State
+
+The intended end state is:
+
+- the requirements are implemented
+- the application is robust
+- the application is production-ready
+- the repo contains accurate phase, verification, and handoff records
+
+The method is not the end product. The production-ready application is the end product. The method is how the team gets there with discipline.
+
 ## Strong Default Prompt
 
 Use this when you are attaching requirements to Codex, Claude Code, or OpenCode:
 
 ```text
-Requirements attached.
+You are building the real solution, not just reviewing requirements or producing planning notes.
 
-Pull repo: https://github.com/vjammy/manoa-method
+The product requirements are either:
+- attached in this conversation
+- written directly in this prompt
+- or stored in the repo root or another folder in the repository
 
-Use the Manoa Method exactly as documented in the repository. Treat the repository’s markdown workflow as the source of truth. Do not rely on hidden chat context. Do not skip phase entry gates, exit gates, validation steps, or handoff updates.
+Your first job is to find and read those requirements.
 
-Build directly in the repo root, not in a separate build folder.
+Repository:
+https://github.com/vjammy/manoa-method
 
-Required workflow:
-1. Read the start files and current-status guidance first.
-2. Confirm the brief, scope, requirements, risks, and phase plan before implementation.
-3. Work one phase at a time.
-4. Keep changes inside the current phase scope.
-5. Run the required validation, test, regression, and gate checks before advancing.
-6. Record evidence, verification results, and handoff notes in the repo as you go.
-7. Do not mark any phase complete without real pass/proceed evidence.
-8. Finish with a final handoff summary that clearly states what was built, what passed, what remains deferred, and the next recommended action.
+Goal:
+Build a robust production-ready application in the repo root based on those requirements.
+
+Method:
+Use the Manoa Method workflow in this repository to get from requirements to the finished application. Use the method as the delivery system for the build, not as a separate documentation exercise.
+
+Instructions:
+1. Locate and read the requirements wherever they were provided.
+2. Treat those requirements as the source of truth for what must be built.
+3. Read the repo start files and current-status guidance first.
+4. Use the Manoa Method to clarify scope, plan phases, enforce gates, verify progress, and maintain handoff quality.
+5. Build the actual application directly in the repo root.
+6. Work phase by phase. Do not skip entry gates, exit gates, validation, testing, regression checks, or handoff updates.
+7. Keep the markdown workflow files updated as you go so project state stays explicit and reusable.
+8. Do not rely on hidden chat context. Put important decisions, blockers, scope changes, and verification results into the repo's documented workflow.
+9. Finish with a final handoff summary that clearly states what was built, what passed, what remains deferred, and the next recommended action.
+
+Definition of success:
+- the requirements are implemented
+- the application is production-ready
+- the build is validated and tested
+- the repo reflects real phase progress and evidence
+- the final handoff clearly states what was built, what passed, what remains deferred, and the next recommended action
 ```
 
 ## Shorter Business-Friendly Prompt
@@ -80,12 +129,24 @@ Required workflow:
 Use this when the operator wants something simpler:
 
 ```text
-Requirements attached.
+You are building the actual solution.
+
+The requirements are either attached here, written in this prompt, or stored somewhere in the repository.
 
 Pull repo: https://github.com/vjammy/manoa-method
 
-Use the Manoa Method step-by-step instructions in the repo to build this project in the repo root. Follow the phase workflow, do not skip gates, and keep the markdown files updated so the handoff is clear.
+Find the requirements first, then use the Manoa Method workflow in the repo to build a production-ready application in the repo root. Follow the phase workflow, do not skip gates, and keep the markdown files updated so the handoff is clear.
 ```
+
+## Why This Prompt Shape Works Better
+
+This wording is stronger because it makes five things explicit:
+
+1. the agent is expected to build the real product
+2. the agent must first locate the requirements
+3. the requirements may live in several places
+4. the desired outcome is a production-ready application
+5. Manoa Method is the workflow for reaching that end state
 
 ## What The Agent Should Read First
 
@@ -103,7 +164,9 @@ Inside the repo or generated workspace, the agent should start with:
 
 A good agent run:
 
+- identifies where the requirements actually live
 - restates the problem and scope clearly
+- explains that it is building the real application
 - names blockers early
 - follows the current phase
 - keeps evidence updated
@@ -114,7 +177,9 @@ A good agent run:
 
 A bad agent run:
 
-- starts coding immediately from the raw requirements
+- fails to identify where the real requirements live
+- treats the task like a documentation exercise only
+- starts coding without clarifying whether the requirements are in the prompt, attachments, root, or another folder
 - ignores the package structure
 - spreads changes across unrelated areas
 - claims completion without proof
