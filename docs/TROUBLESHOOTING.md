@@ -25,7 +25,7 @@ Then read the listed problems one by one. Common causes:
 - `VERIFICATION_REPORT.md` uses the wrong result value
 - `VERIFICATION_REPORT.md` uses the wrong recommendation value
 - a listed evidence file does not exist
-- `repo/xelera-state.json` is malformed
+- `repo/manoa-state.json` is malformed
 
 Fix the listed file, then run `validate` again.
 
@@ -111,7 +111,7 @@ If you need to preserve work, copy your changed phase notes out first, regenerat
 Open:
 
 1. `START_HERE.md`
-2. `repo/xelera-state.json`
+2. `repo/manoa-state.json`
 3. `phases/phase-XX/HANDOFF_SUMMARY.md`
 4. `phases/phase-XX/NEXT_PHASE_CONTEXT.md`
 
@@ -151,8 +151,8 @@ Do not list:
 
 Start with the plain-language docs:
 
-- [NOVICE_GUIDE.md](C:\AI\XeleraMethod\docs\NOVICE_GUIDE.md)
-- [GLOSSARY.md](C:\AI\XeleraMethod\docs\GLOSSARY.md)
+- [NOVICE_GUIDE.md](C:\AI\ManoaMethod\docs\NOVICE_GUIDE.md)
+- [GLOSSARY.md](C:\AI\ManoaMethod\docs\GLOSSARY.md)
 
 Then ask your coding agent to explain one file at a time in plain English.
 

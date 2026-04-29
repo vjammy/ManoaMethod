@@ -1,3 +1,3 @@
-# /xelera-critique
+# /manoa-critique
 
-Use the Xelera Method markdown files as the source of truth.
+Use the Manoa Method markdown files as the source of truth.

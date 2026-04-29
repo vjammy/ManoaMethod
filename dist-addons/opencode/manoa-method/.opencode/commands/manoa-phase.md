@@ -1,4 +1,4 @@
-# /xelera-phase
+# /manoa-phase
 
 ## Purpose
 Load the current phase packet and prepare for implementation.
@@ -19,7 +19,7 @@ Load the current phase packet and prepare for implementation.
 - Current phase `OPENCODE_BUILD_PROMPT.md`
 - Previous phase `HANDOFF_SUMMARY.md`, when applicable
 - `repo/manifest.json`
-- `repo/xelera-state.json`
+- `repo/manoa-state.json`
 
 ## What to do
 1. Read the current phase packet files.

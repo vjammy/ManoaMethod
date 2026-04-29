@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { createArtifactPackage } from './xelera-create-project';
+import { createArtifactPackage } from './manoa-create-project';
 import { USE_CASES } from './test-quality-regression';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -12,7 +12,7 @@ const __dirname = path.dirname(__filename);
 const ROOT = path.resolve(__dirname, '..');
 const AUTORESEARCH_DIR = path.join(ROOT, 'autoresearch');
 const REPORTS_DIR = path.join(AUTORESEARCH_DIR, 'reports');
-const GENERATED_DIR = path.join(os.tmpdir(), 'xelera-autoresearch-generated');
+const GENERATED_DIR = path.join(os.tmpdir(), 'manoa-autoresearch-generated');
 const RESULTS_PATH = path.join(AUTORESEARCH_DIR, 'results.tsv');
 const TARGET_SCORE = 95;
 
@@ -278,7 +278,7 @@ async function main() {
       runCommand(
         `validate:${useCase.key}`,
         npxCommand(),
-        ['tsx', 'scripts/xelera-validate.ts', `--package=${created.rootDir}`],
+        ['tsx', 'scripts/manoa-validate.ts', `--package=${created.rootDir}`],
         ROOT
       )
     );
@@ -301,7 +301,7 @@ async function main() {
     packageRegressionResults.every((item) => item.passed);
 
   const reportPath = path.join(REPORTS_DIR, `${runId}.md`);
-  const report = `# Xelera Autoresearch Report
+  const report = `# Manoa Autoresearch Report
 
 - Timestamp: ${timestamp}
 - Run ID: ${runId}

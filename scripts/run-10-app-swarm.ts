@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { loadInput } from './xelera-create-project';
+import { loadInput } from './manoa-create-project';
 import { generateProjectBundle } from '../lib/generator';
 
 type AppDefinition = {
@@ -403,17 +403,17 @@ function renderAppPackage(app: AppDefinition, appDir: string) {
     name: `${app.id}-workspace-root`,
     private: true,
     scripts: {
-      validate: 'node ../../node_modules/tsx/dist/cli.mjs ../../scripts/xelera-validate.ts --package=.',
-      status: 'node ../../node_modules/tsx/dist/cli.mjs ../../scripts/xelera-status.ts --package=.',
+      validate: 'node ../../node_modules/tsx/dist/cli.mjs ../../scripts/manoa-validate.ts --package=.',
+      status: 'node ../../node_modules/tsx/dist/cli.mjs ../../scripts/manoa-status.ts --package=.',
       typecheck: 'npm --prefix app run typecheck',
       build: 'npm --prefix app run build',
       smoke: 'npm --prefix app run smoke',
       test: 'npm --prefix app run test',
       'test:quality-regression': 'npm --prefix app run test:quality-regression',
       regression: 'npm --prefix app run regression',
-      score: 'node ../../node_modules/tsx/dist/cli.mjs ../../scripts/xelera-score.ts --repo=. --package=.',
-      gates: 'node ../../node_modules/tsx/dist/cli.mjs ../../scripts/xelera-gates.ts --repo=. --package=.',
-      orchestrate: 'node ../../node_modules/tsx/dist/cli.mjs ../../scripts/xelera-orchestrate.ts --repo=. --package=. --target-score=90 --max-rounds=5'
+      score: 'node ../../node_modules/tsx/dist/cli.mjs ../../scripts/manoa-score.ts --repo=. --package=.',
+      gates: 'node ../../node_modules/tsx/dist/cli.mjs ../../scripts/manoa-gates.ts --repo=. --package=.',
+      orchestrate: 'node ../../node_modules/tsx/dist/cli.mjs ../../scripts/manoa-orchestrate.ts --repo=. --package=. --target-score=90 --max-rounds=5'
     }
   }));
   createdFiles.push('package.json');
@@ -428,12 +428,12 @@ function renderAppPackage(app: AppDefinition, appDir: string) {
       smoke: 'node scripts/smoke.mjs',
       test: 'node --test tests/*.test.mjs',
       'test:quality-regression': 'node scripts/quality-regression.mjs',
-      validate: 'node ../../../node_modules/tsx/dist/cli.mjs ../../../scripts/xelera-validate.ts --package=..',
-      status: 'node ../../../node_modules/tsx/dist/cli.mjs ../../../scripts/xelera-status.ts --package=..',
+      validate: 'node ../../../node_modules/tsx/dist/cli.mjs ../../../scripts/manoa-validate.ts --package=..',
+      status: 'node ../../../node_modules/tsx/dist/cli.mjs ../../../scripts/manoa-status.ts --package=..',
       regression: 'node scripts/regression.mjs',
-      score: 'node ../../../node_modules/tsx/dist/cli.mjs ../../../scripts/xelera-score.ts --repo=.. --package=..',
-      gates: 'node ../../../node_modules/tsx/dist/cli.mjs ../../../scripts/xelera-gates.ts --repo=.. --package=..',
-      orchestrate: 'node ../../../node_modules/tsx/dist/cli.mjs ../../../scripts/xelera-orchestrate.ts --repo=.. --package=.. --target-score=90 --max-rounds=5'
+      score: 'node ../../../node_modules/tsx/dist/cli.mjs ../../../scripts/manoa-score.ts --repo=.. --package=..',
+      gates: 'node ../../../node_modules/tsx/dist/cli.mjs ../../../scripts/manoa-gates.ts --repo=.. --package=..',
+      orchestrate: 'node ../../../node_modules/tsx/dist/cli.mjs ../../../scripts/manoa-orchestrate.ts --repo=.. --package=.. --target-score=90 --max-rounds=5'
     }
   }));
   createdFiles.push('app/package.json');
@@ -553,7 +553,7 @@ export function buildSummary(records: RecordItem[]) {
     `import { addRecord, advanceRecord, buildSummary, createInitialRecords, getConfig, type RecordItem } from './logic.js';
 
 const config = getConfig();
-const storageKey = \`xelera-\${config.code.toLowerCase()}-records\`;
+const storageKey = \`manoa-\${config.code.toLowerCase()}-records\`;
 
 function readRecords(): RecordItem[] {
   const raw = window.localStorage.getItem(storageKey);
@@ -920,10 +920,10 @@ test('addRecord validates and appends local-first records', () => {
     path.join(appDir, 'ORCHESTRATOR_GUIDE.md'),
     `# ORCHESTRATOR_GUIDE
 
-This ${input.productName} workspace uses the local Xelera Orchestrator to run package validation, app build checks, smoke tests, regression checks, gates, scoring, and recovery report generation.
+This ${input.productName} workspace uses the local Manoa Orchestrator to run package validation, app build checks, smoke tests, regression checks, gates, scoring, and recovery report generation.
 
 ## Commands
-- Run \`npm run validate\` inside [app/package.json](${path.join(appDir, 'app', 'package.json').replace(/\\/g, '/')}) to validate the generated Xelera package structure.
+- Run \`npm run validate\` inside [app/package.json](${path.join(appDir, 'app', 'package.json').replace(/\\/g, '/')}) to validate the generated Manoa package structure.
 - Run \`npm run build\`, \`npm run smoke\`, \`npm run test\`, and \`npm run test:quality-regression\` to verify the MVP and docs.
 - Run \`npm run orchestrate\`, \`npm run score\`, and \`npm run gates\` from the app package to produce the orchestrator reports under \`orchestrator/reports/\`.
 
@@ -1056,12 +1056,12 @@ function writeAppReports(app: AppDefinition, appDir: string, input: ReturnType<t
   const createdList = Array.from(new Set(createdFiles)).sort();
 
   writeFile(
-    path.join(appDir, 'XELERA_PACKAGE_GENERATION_REPORT.md'),
-    `# XELERA_PACKAGE_GENERATION_REPORT
+    path.join(appDir, 'MANOA_PACKAGE_GENERATION_REPORT.md'),
+    `# MANOA_PACKAGE_GENERATION_REPORT
 
 - Source input: examples/${app.exampleFile}
 - Package root: ${app.folder}
-- Generated with existing Xelera Method generator: yes
+- Generated with existing Manoa Method generator: yes
 - Bundle style: local-first markdown workspace plus local TypeScript MVP
 - Key artifacts confirmed: README.md, START_HERE.md, 00_PROJECT_CONTEXT.md, 01_CONTEXT_RULES.md, SCORECARD.md, TESTING_STRATEGY.md, REGRESSION_TEST_PLAN.md, ORCHESTRATOR_GUIDE.md
 - Runnable app folder: app/
@@ -1166,7 +1166,7 @@ No follow-up recovery prompt is required. Preserve the current local-first scope
 
 - App name: ${input.productName}
 - Objective: ${objective}
-- Build summary: generated Xelera package, added runnable local TypeScript MVP, ran validation/build/test/gate/score commands, and wrote evidence-backed reports.
+- Build summary: generated Manoa package, added runnable local TypeScript MVP, ran validation/build/test/gate/score commands, and wrote evidence-backed reports.
 - Files created/changed: ${createdList.length}
 - Commands run:
 ${commandsSection}
@@ -1322,12 +1322,12 @@ ${appSummaries
 - No repeated critical failure pattern was observed in the final swarm run.
 - The largest structural risk remains future drift between generated package docs and the runnable MVP if later edits bypass the same command set.
 
-## What Xelera Method handled well
+## What Manoa Method handled well
 - Generated project-specific planning artifacts quickly.
 - Provided enough phase and handoff structure to anchor evidence-backed verification.
 - Supported beginner-facing root docs without needing a hosted service.
 
-## What Xelera Method handled poorly
+## What Manoa Method handled poorly
 - Fresh generated verification reports start as pending shells, so they need a real evidence fill-in step before the evidence gate can pass.
 - The package generator alone does not build a runnable MVP, so the swarm runner had to add that implementation layer explicitly.
 
@@ -1339,11 +1339,11 @@ ${appSummaries
 - It does not apply fixes itself.
 - It scores what exists honestly, but it depends on external builders to convert pending package scaffolds into verified implementation evidence.
 
-## Recommended changes to Xelera Method
+## Recommended changes to Manoa Method
 - Add an explicit post-generation evidence fill checklist for real build outputs.
 - Make runnable-MVP expectations clearer when the package is used for implementation rather than planning only.
 
-## Recommended changes to Xelera Orchestrator
+## Recommended changes to Manoa Orchestrator
 - Add an optional package-aware app scaffold mode.
 - Add first-class support for multi-package swarm runs and aggregate reports.
 
@@ -1381,7 +1381,7 @@ ${failures.length === 0 ? '- No app finished below 90 in the final swarm run.' :
 - Failed gates: ${app.gateStatus.filter((gate) => gate.status !== 'pass').map((gate) => gate.gate).join(', ') || 'none recorded'}
 - Failed tests: ${app.failedTests.join(', ') || 'none recorded'}
 - Missing capabilities: none beyond current thin-slice scope
-- Failure source: ${app.buildBlocked ? 'app implementation or environment' : 'Xelera Method or orchestrator scoring limits'}`
+- Failure source: ${app.buildBlocked ? 'app implementation or environment' : 'Manoa Method or orchestrator scoring limits'}`
       )
       .join('\n\n')}
 `
@@ -1404,7 +1404,7 @@ ${appSummaries
     path.join(reportsRoot, 'SWARM_10_APP_RECOMMENDATIONS.md'),
     `# SWARM_10_APP_RECOMMENDATIONS
 
-- Keep the Xelera package generator focused on project-specific docs and use a separate scaffold step when a runnable MVP is required.
+- Keep the Manoa package generator focused on project-specific docs and use a separate scaffold step when a runnable MVP is required.
 - Promote the evidence-gate rules into the beginner docs so users know pending verification templates are not enough.
 - Add a native swarm mode to orchestrator v2 so multi-app aggregation does not need a custom wrapper script.
 - Preserve the local-first rule set across all future templates: local-first, markdown-first, no database, no auth, no hosted backend.
@@ -1412,10 +1412,10 @@ ${appSummaries
   );
 
   writeFile(
-    path.join(reportsRoot, 'SWARM_10_APP_XELERA_METHOD_AUDIT.md'),
-    `# SWARM_10_APP_XELERA_METHOD_AUDIT
+    path.join(reportsRoot, 'SWARM_10_APP_MANOA_METHOD_AUDIT.md'),
+    `# SWARM_10_APP_MANOA_METHOD_AUDIT
 
-- Did Xelera Method produce useful project-specific artifacts?
+- Did Manoa Method produce useful project-specific artifacts?
   Yes. The generated root docs, phase packets, and support modules were specific enough to each product idea to use as implementation anchors.
 - Did the phase structure help build better apps?
   Yes. The phases made it easier to keep handoff, verification, and beginner docs aligned.
@@ -1432,7 +1432,7 @@ ${appSummaries
 - Did the orchestrator make the process more reliable?
   Yes. It standardized commands, gates, scoring, and final report output.
 - What must be fixed before calling this production-ready?
-  Xelera Method still needs a native bridge between package generation and runnable MVP evidence collection. Orchestrator v2 should support multi-app swarm execution directly.
+  Manoa Method still needs a native bridge between package generation and runnable MVP evidence collection. Orchestrator v2 should support multi-app swarm execution directly.
 `
   );
 
@@ -1440,7 +1440,7 @@ ${appSummaries
     path.join(repoRoot, 'FINAL_10_APP_SWARM_DELIVERABLE.md'),
     `# FINAL_10_APP_SWARM_DELIVERABLE
 
-- Summary of work completed: generated 10 Xelera packages, added 10 runnable local TypeScript MVPs, ran validation/build/test/gate/score flows, and wrote app-level plus global reports.
+- Summary of work completed: generated 10 Manoa packages, added 10 runnable local TypeScript MVPs, ran validation/build/test/gate/score flows, and wrote app-level plus global reports.
 - List of 10 apps built: ${appSummaries.map((app) => app.appName).join(', ')}
 - Final scores: ${appSummaries.map((app) => `${app.appName}=${app.finalScore}`).join(', ')}
 - Apps that reached 90+: ${appSummaries.filter((app) => app.reached90).map((app) => app.appName).join(', ') || 'none'}
@@ -1449,8 +1449,8 @@ ${appSummaries
 - Gates summary: ${appSummaries.map((app) => `${app.appName}[${app.gateStatus.map((gate) => `${gate.gate}:${gate.status}`).join(', ')}]`).join('; ')}
 - Key improvements made during auto-improvement: the runner converted pending verification shells into evidence-backed reports and added runnable MVP plus test assets.
 - Remaining blockers: none in the final 10-app run; future scope creep remains the main risk.
-- Recommendation for Xelera Method: keep the package generator and add a built-in runnable-MVP evidence bridge.
-- Recommendation for Xelera Orchestrator: add native swarm aggregation and optional scaffold hooks in v2.
+- Recommendation for Manoa Method: keep the package generator and add a built-in runnable-MVP evidence bridge.
+- Recommendation for Manoa Orchestrator: add native swarm aggregation and optional scaffold hooks in v2.
 - Whether the system is ready for v2: yes, with the recommended orchestration and evidence improvements.
 `
   );

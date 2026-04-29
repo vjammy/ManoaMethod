@@ -30,7 +30,7 @@ export type GeneratedFile = {
   content: string;
 };
 
-export type XeleraState = {
+export type ManoaState = {
   currentPhase: number;
   lifecycleStatus: LifecycleStatus;
   completedPhases: string[];

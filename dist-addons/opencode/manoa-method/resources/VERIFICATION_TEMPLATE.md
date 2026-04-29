@@ -62,7 +62,7 @@ Check all items in `EVIDENCE_CHECKLIST.md`:
 
 ## Advancing
 
-Use `/xelera-next` with evidence:
+Use `/manoa-next` with evidence:
 ```bash
 npm run next-phase -- --package=./output --evidence=phases/phase-01/VERIFICATION_REPORT.md
 ```

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { runOrchestrate } from './xelera-orchestrate';
-import { runScore } from './xelera-score';
-import { runGates } from './xelera-gates';
-import { runRecover } from './xelera-recover';
+import { runOrchestrate } from './manoa-orchestrate';
+import { runScore } from './manoa-score';
+import { runGates } from './manoa-gates';
+import { runRecover } from './manoa-recover';
 
 export function runCli() {
   const command = process.argv[2];
@@ -26,7 +26,7 @@ export function runCli() {
     return;
   }
 
-  console.log('Usage: xelera <orchestrate|score|gates|recover> [--repo=path] [--package=path]');
+  console.log('Usage: manoa <orchestrate|score|gates|recover> [--repo=path] [--package=path]');
 }
 
 const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

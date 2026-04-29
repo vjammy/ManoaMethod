@@ -1,6 +1,6 @@
-# Xelera Orchestrator
+# Manoa Orchestrator
 
-Xelera Orchestrator is the local-first run loop for generated Xelera workspaces and repos.
+Manoa Orchestrator is the local-first run loop for generated Manoa workspaces and repos.
 
 It reads the repo and package docs, derives objective criteria, writes prompt packets for focused agents, runs local commands, enforces entry/build/evidence/exit gates, scores the result from 0 to 100, and writes recovery plans when a gate fails.
 
@@ -33,10 +33,10 @@ Because tests and build are intentionally skipped in dry-run mode, the score is 
 You can also use the thin subcommand wrapper:
 
 ```bash
-npm run xelera -- orchestrate
-npm run xelera -- score
-npm run xelera -- gates
-npm run xelera -- recover
+npm run manoa -- orchestrate
+npm run manoa -- score
+npm run manoa -- gates
+npm run manoa -- recover
 ```
 
 ## Reports

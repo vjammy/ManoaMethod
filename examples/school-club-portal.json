@@ -14,7 +14,7 @@
   "successMetrics": "A reviewer can understand student roles, privacy boundaries, event workflow, and what evidence proves the portal is safe for students.",
   "nonGoals": "No grades integration, no school-wide directory, no payment collection in v1.",
   "timeline": "Plan a realistic first release that proves the club workflow works before adding richer features.",
-  "teamContext": "A student club advisor uses Xelera Method to prepare the portal plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
+  "teamContext": "A student club advisor uses Manoa Method to prepare the portal plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
   "questionnaireAnswers": {
     "north-star": "The first release must prove that students can join clubs, see events, and receive announcements while privacy guardrails stay explicit.",
     "primary-workflow": "A student joins a club, views upcoming events, signs up for events, and receives announcements. Advisors oversee club activity and permissions.",

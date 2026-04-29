@@ -2,7 +2,7 @@
 
 ## What This Guide Is For
 
-Use this guide if you want to run a Xelera Method workspace with Codex.
+Use this guide if you want to run a Manoa Method workspace with Codex.
 
 Codex is one of three supported agent flows. The project package stays the same even if you later switch to Claude Code or OpenCode.
 
@@ -16,7 +16,7 @@ npm run create-project -- --input=examples/family-task-app.json --out=.tmp-famil
 
 Then open:
 
-- `.tmp-family-task-app/xelera-method-workspace/CODEX_START_HERE.md`
+- `.tmp-family-task-app/manoa-method-workspace/CODEX_START_HERE.md`
 
 ## What To Open First
 
@@ -66,19 +66,19 @@ For the current phase, you will usually also give Codex:
 Validate:
 
 ```bash
-npm run validate -- --package=.tmp-family-task-app/xelera-method-workspace
+npm run validate -- --package=.tmp-family-task-app/manoa-method-workspace
 ```
 
 Check status:
 
 ```bash
-npm run status -- --package=.tmp-family-task-app/xelera-method-workspace
+npm run status -- --package=.tmp-family-task-app/manoa-method-workspace
 ```
 
 Advance after successful verification:
 
 ```bash
-npm run next-phase -- --package=.tmp-family-task-app/xelera-method-workspace --evidence=phases/phase-01/VERIFICATION_REPORT.md
+npm run next-phase -- --package=.tmp-family-task-app/manoa-method-workspace --evidence=phases/phase-01/VERIFICATION_REPORT.md
 ```
 
 ## Important Rules

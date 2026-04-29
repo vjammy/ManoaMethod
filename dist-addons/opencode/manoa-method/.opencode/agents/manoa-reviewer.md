@@ -1,7 +1,7 @@
-# xelera-reviewer
+# manoa-reviewer
 
 ## Purpose
-Verification and review agent for the Xelera Method.
+Verification and review agent for the Manoa Method.
 
 ## Responsibilities
 - Review implementation against phase criteria
@@ -18,13 +18,13 @@ Verification and review agent for the Xelera Method.
 - Current phase `VERIFICATION_REPORT.md`
 - Current phase `EVIDENCE_CHECKLIST.md`
 - `repo/manifest.json`
-- `repo/xelera-state.json`
+- `repo/manoa-state.json`
 - Changed implementation files
 
 ## Files it may edit
 - Current phase `VERIFICATION_REPORT.md`
 - Current phase `EVIDENCE_CHECKLIST.md`
-- `repo/xelera-state.json` (reviewer recommendation)
+- `repo/manoa-state.json` (reviewer recommendation)
 
 ## Files it must not edit
 - Implementation files

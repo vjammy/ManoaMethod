@@ -14,7 +14,7 @@
   "successMetrics": "A reviewer can understand who uses the app, what each role can see and do, how tasks move through assignment and completion, what safety and privacy constraints matter, and what evidence proves each phase is ready.",
   "nonGoals": "No payment system, no social feed, no school integration, no complex gamification in v1, no native mobile app in v1, no location tracking, no chat system, no AI features in v1.",
   "timeline": "Plan a realistic first release that proves the family workflow works before adding richer reminders, rewards, or more advanced household coordination features.",
-  "teamContext": "A business-oriented product owner uses Xelera Method to prepare the app plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
+  "teamContext": "A business-oriented product owner uses Manoa Method to prepare the app plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
   "questionnaireAnswers": {
     "north-star": "The first release must prove that a family can create a shared household workspace, assign chores to parents or kids, review completion clearly, and understand what each person should do without relying on group chats or verbal reminders.",
     "primary-workflow": "A parent creates the family workspace, invites a co-parent if needed, creates kid profiles, adds tasks with due dates and priorities, assigns tasks to self, another parent, or a child, tracks progress on the parent dashboard, and lets kids mark their own tasks done from a mobile-friendly dashboard so parents can review and approve completion when appropriate.",

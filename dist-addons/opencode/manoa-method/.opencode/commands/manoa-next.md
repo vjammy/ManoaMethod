@@ -1,4 +1,4 @@
-# /xelera-next
+# /manoa-next
 
 ## Purpose
 Move to the next phase only when exit criteria, verification evidence, and handoff requirements are satisfied.
@@ -11,7 +11,7 @@ Move to the next phase only when exit criteria, verification evidence, and hando
 - Current phase `VERIFICATION_REPORT.md`
 - Current phase `EVIDENCE_CHECKLIST.md`
 - Current phase `HANDOFF_SUMMARY.md`
-- `repo/xelera-state.json`
+- `repo/manoa-state.json`
 - `repo/manifest.json`
 
 ## What to do
@@ -20,7 +20,7 @@ Move to the next phase only when exit criteria, verification evidence, and hando
 3. Check that the verification recommendation is `proceed`.
 4. Check that the exit gate result is `pass`.
 5. If evidence is insufficient, require `--approve=true` for manual override.
-6. Update `repo/xelera-state.json` with the new current phase.
+6. Update `repo/manoa-state.json` with the new current phase.
 7. Record the phase transition in completedPhases.
 
 ## What not to do

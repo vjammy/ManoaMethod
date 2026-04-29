@@ -1,6 +1,6 @@
 # CONTEXT_MANAGEMENT
 
-Xelera Method is designed around small, explicit context packets rather than long, growing chat sessions across Codex, Claude Code, and OpenCode.
+Manoa Method is designed around small, explicit context packets rather than long, growing chat sessions across Codex, Claude Code, and OpenCode.
 
 ## Root context files
 
@@ -11,7 +11,7 @@ Xelera Method is designed around small, explicit context packets rather than lon
 - `PROJECT_BRIEF.md`
 - `PHASE_PLAN.md`
 - `repo/manifest.json`
-- `repo/xelera-state.json`
+- `repo/manoa-state.json`
 
 ## Phase context packet
 

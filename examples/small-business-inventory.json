@@ -14,7 +14,7 @@
   "successMetrics": "A reviewer can trace low-stock, adjustment, and deferred purchase planning behavior with clear evidence.",
   "nonGoals": "No accounting suite, no POS integrations, no warehouse robotics.",
   "timeline": "Plan a realistic first release that proves the inventory workflow works before adding richer features.",
-  "teamContext": "A store manager uses Xelera Method to prepare the inventory plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
+  "teamContext": "A store manager uses Manoa Method to prepare the inventory plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
   "questionnaireAnswers": {
     "north-star": "The first release must make stock states, low-stock thresholds, and adjustments explicit enough to guide implementation.",
     "primary-workflow": "A manager reviews stock states, records adjustments, checks low-stock items, and decides what purchase planning stays deferred.",

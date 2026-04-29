@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Xelera Method',
+  title: 'Manoa Method',
   description: 'Markdown-first planning, gating, scoring, and handoff before coding starts.'
 };
 

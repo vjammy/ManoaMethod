@@ -14,7 +14,7 @@
   "successMetrics": "A reviewer can understand the qualification flow, sequence structure, handoff requirements, and what evidence proves an SDR is ready to advance a lead.",
   "nonGoals": "No full CRM replacement, no marketing automation, no customer support ticketing, no billing integration in v1.",
   "timeline": "Plan a realistic first release that proves the SDR workflow works before adding richer integrations or automation.",
-  "teamContext": "A sales operations lead uses Xelera Method to prepare the SDR module plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
+  "teamContext": "A sales operations lead uses Manoa Method to prepare the SDR module plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
   "questionnaireAnswers": {
     "north-star": "The first release must prove that an SDR can capture a lead, follow a sequence, record qualification signals, and hand off to an AE with clear context.",
     "primary-workflow": "An SDR captures a lead from a source, selects a sequence, sends outreach, records responses, updates qualification signals, and hands off qualified leads to an AE with a summary of interactions and next steps.",

@@ -2,7 +2,7 @@
 
 ## What This Guide Is For
 
-Use this guide if you want to run a Xelera Method workspace with Claude Code.
+Use this guide if you want to run a Manoa Method workspace with Claude Code.
 
 Claude Code uses the same generated package as Codex and OpenCode. Only the startup instructions and prompt file change.
 
@@ -16,7 +16,7 @@ npm run create-project -- --input=examples/family-task-app.json --out=.tmp-famil
 
 Then open:
 
-- `.tmp-family-task-app/xelera-method-workspace/CLAUDE_START_HERE.md`
+- `.tmp-family-task-app/manoa-method-workspace/CLAUDE_START_HERE.md`
 
 ## What To Open First
 
@@ -65,19 +65,19 @@ For the current phase, the most useful files are usually:
 Validate:
 
 ```bash
-npm run validate -- --package=.tmp-family-task-app/xelera-method-workspace
+npm run validate -- --package=.tmp-family-task-app/manoa-method-workspace
 ```
 
 Status:
 
 ```bash
-npm run status -- --package=.tmp-family-task-app/xelera-method-workspace
+npm run status -- --package=.tmp-family-task-app/manoa-method-workspace
 ```
 
 Advance:
 
 ```bash
-npm run next-phase -- --package=.tmp-family-task-app/xelera-method-workspace --evidence=phases/phase-01/VERIFICATION_REPORT.md
+npm run next-phase -- --package=.tmp-family-task-app/manoa-method-workspace --evidence=phases/phase-01/VERIFICATION_REPORT.md
 ```
 
 ## Important Rules

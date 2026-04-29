@@ -1,4 +1,4 @@
-# /xelera-validate
+# /manoa-validate
 
 ## Purpose
 Inspect lifecycle status, blockers, warnings, approval gate, current phase readiness, and verification state.
@@ -10,7 +10,7 @@ Inspect lifecycle status, blockers, warnings, approval gate, current phase readi
 
 ## Files to read
 - `repo/manifest.json`
-- `repo/xelera-state.json`
+- `repo/manoa-state.json`
 - `00_APPROVAL_GATE.md`
 - Current phase `PHASE_BRIEF.md`
 - Current phase `ENTRY_GATE.md`

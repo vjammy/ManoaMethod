@@ -1,7 +1,7 @@
-# xelera-builder
+# manoa-builder
 
 ## Purpose
-Implementation agent for the Xelera Method.
+Implementation agent for the Manoa Method.
 
 ## Responsibilities
 - Implement the current phase only
@@ -21,14 +21,14 @@ Implementation agent for the Xelera Method.
 - Current phase `TEST_PLAN.md`
 - Previous phase `HANDOFF_SUMMARY.md`, when applicable
 - `repo/manifest.json`
-- `repo/xelera-state.json`
+- `repo/manoa-state.json`
 
 ## Files it may edit
 - Implementation files for the current phase
 - Current phase `HANDOFF_SUMMARY.md`
 - Current phase `NEXT_PHASE_CONTEXT.md`
 - Current phase `EXIT_GATE.md`
-- `repo/xelera-state.json`
+- `repo/manoa-state.json`
 
 ## Files it must not edit
 - Future phase files

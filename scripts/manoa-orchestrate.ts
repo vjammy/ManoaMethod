@@ -23,7 +23,7 @@ export function runOrchestrate() {
     dryRun
   });
 
-  console.log(`Xelera Orchestrator completed ${result.rounds.length} round(s).`);
+  console.log(`Manoa Orchestrator completed ${result.rounds.length} round(s).`);
   console.log(`Final score: ${result.finalRound.scorecard.cappedTotal}/100`);
   console.log(`Stop reason: ${result.stopReason}`);
   console.log(`Reports: ${path.join(repoRoot, 'orchestrator', 'reports')}`);

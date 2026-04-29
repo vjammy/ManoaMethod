@@ -2,7 +2,7 @@
 
 ## What This Example Is
 
-This example is a realistic sample project for Xelera Method called **Family Task Board**.
+This example is a realistic sample project for Manoa Method called **Family Task Board**.
 
 It represents a family task management web app where:
 
@@ -24,13 +24,13 @@ npm run create-project -- --input=examples/family-task-app.json --out=.tmp-famil
 Validate it:
 
 ```bash
-npm run validate -- --package=.tmp-family-task-app/xelera-method-workspace
+npm run validate -- --package=.tmp-family-task-app/manoa-method-workspace
 ```
 
 Check status:
 
 ```bash
-npm run status -- --package=.tmp-family-task-app/xelera-method-workspace
+npm run status -- --package=.tmp-family-task-app/manoa-method-workspace
 ```
 
 ## What The Sample Includes
@@ -90,4 +90,4 @@ Then open the agent-specific starter file:
 
 ## What This Example Does Not Mean
 
-This sample does not mean the repo already includes a production family task app. It is a planning input and test case for Xelera Method.
+This sample does not mean the repo already includes a production family task app. It is a planning input and test case for Manoa Method.

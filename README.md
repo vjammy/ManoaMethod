@@ -1,14 +1,14 @@
-# Xelera Method
+# Manoa Method
 
-Xelera Method is a local, markdown-first planning system for AI-assisted builds in Codex, Claude Code, and OpenCode.
+Manoa Method is a local, markdown-first planning system for AI-assisted builds in Codex, Claude Code, and OpenCode.
 
 It helps you turn a rough idea into a reusable workspace of markdown files before and during coding. That workspace explains the project, breaks the work into phases, records gates, tracks evidence, and preserves context so you can resume later or switch agents without losing your place.
 
-Xelera Method is not a hosted app, project manager, or quality guarantee. It gives you structure, but you still need human review and good judgment.
+Manoa Method is not a hosted app, project manager, or quality guarantee. It gives you structure, but you still need human review and good judgment.
 
-## Xelera Orchestrator
+## Manoa Orchestrator
 
-The repo now includes Xelera Orchestrator, a local-first orchestrator that can read a generated workspace or repo, derive objective criteria, generate focused prompt packets, run local commands, enforce gates, score the build from 0 to 100, and write recovery plans when something fails.
+The repo now includes Manoa Orchestrator, a local-first orchestrator that can read a generated workspace or repo, derive objective criteria, generate focused prompt packets, run local commands, enforce gates, score the build from 0 to 100, and write recovery plans when something fails.
 
 What it does not do:
 
@@ -32,7 +32,7 @@ Reports are written to `orchestrator/reports/` and run artifacts to `orchestrato
 
 ## Production Build Mode
 
-Xelera Method now includes a reusable production-build prompt and production-release document set so teams can distinguish:
+Manoa Method now includes a reusable production-build prompt and production-release document set so teams can distinguish:
 
 - planning package only
 - runnable MVP
@@ -40,7 +40,7 @@ Xelera Method now includes a reusable production-build prompt and production-rel
 
 Use the reusable production prompt here:
 
-- [docs/XELERA_PRODUCTION_BUILD_PROMPT.md](C:\AI\XeleraMethod\docs\XELERA_PRODUCTION_BUILD_PROMPT.md)
+- [docs/MANOA_PRODUCTION_BUILD_PROMPT.md](C:\AI\ManoaMethod\docs\MANOA_PRODUCTION_BUILD_PROMPT.md)
 
 Generated workspaces now also include production-oriented files such as:
 
@@ -59,9 +59,9 @@ Generated workspaces now also include production-oriented files such as:
 
 These files are intended to prevent a runnable MVP from being mistaken for a complete end-to-end production build.
 
-## What Is Xelera Method?
+## What Is Manoa Method?
 
-Use Xelera Method when you want to:
+Use Manoa Method when you want to:
 
 - plan a project before asking an AI coding agent to build it
 - keep build context in local markdown instead of hidden chat history
@@ -81,7 +81,7 @@ Many teams start coding too early. They lose time because:
 - important assumptions live only in chat
 - nobody can tell whether a phase is really complete
 
-Xelera Method solves this by generating a local workspace with:
+Manoa Method solves this by generating a local workspace with:
 
 - project context
 - rules
@@ -94,7 +94,7 @@ Xelera Method solves this by generating a local workspace with:
 
 ## What It Does Not Do
 
-Xelera Method does not:
+Manoa Method does not:
 
 - host your product
 - create a SaaS workflow
@@ -134,7 +134,7 @@ npm run create-project -- --input=examples/family-task-app.json --out=.tmp-famil
 
 What you should see:
 
-- a created folder at `.tmp-family-task-app/xelera-method-workspace`
+- a created folder at `.tmp-family-task-app/manoa-method-workspace`
 - a zip file beside it
 - command output telling you where the workspace was created
 
@@ -191,9 +191,9 @@ The simplest rule is:
 
 Start here for each agent:
 
-- Codex: [docs/USING_WITH_CODEX.md](C:\AI\XeleraMethod\docs\USING_WITH_CODEX.md)
-- Claude Code: [docs/USING_WITH_CLAUDE_CODE.md](C:\AI\XeleraMethod\docs\USING_WITH_CLAUDE_CODE.md)
-- OpenCode: [docs/USING_WITH_OPENCODE.md](C:\AI\XeleraMethod\docs\USING_WITH_OPENCODE.md)
+- Codex: [docs/USING_WITH_CODEX.md](C:\AI\ManoaMethod\docs\USING_WITH_CODEX.md)
+- Claude Code: [docs/USING_WITH_CLAUDE_CODE.md](C:\AI\ManoaMethod\docs\USING_WITH_CLAUDE_CODE.md)
+- OpenCode: [docs/USING_WITH_OPENCODE.md](C:\AI\ManoaMethod\docs\USING_WITH_OPENCODE.md)
 
 ## Verify The Phase
 
@@ -219,7 +219,7 @@ Important verification rules:
 Run:
 
 ```bash
-npm run validate -- --package=.tmp-family-task-app/xelera-method-workspace
+npm run validate -- --package=.tmp-family-task-app/manoa-method-workspace
 ```
 
 What you should see:
@@ -243,7 +243,7 @@ Validation tells you whether the package structure is healthy. It does not autom
 Run:
 
 ```bash
-npm run status -- --package=.tmp-family-task-app/xelera-method-workspace
+npm run status -- --package=.tmp-family-task-app/manoa-method-workspace
 ```
 
 What you should see:
@@ -269,13 +269,13 @@ Advance only after:
 Command:
 
 ```bash
-npm run next-phase -- --package=.tmp-family-task-app/xelera-method-workspace --evidence=phases/phase-01/VERIFICATION_REPORT.md
+npm run next-phase -- --package=.tmp-family-task-app/manoa-method-workspace --evidence=phases/phase-01/VERIFICATION_REPORT.md
 ```
 
 You can also add a handoff note:
 
 ```bash
-npm run next-phase -- --package=.tmp-family-task-app/xelera-method-workspace --evidence=phases/phase-01/VERIFICATION_REPORT.md --handoff="Phase 1 reviewed and approved."
+npm run next-phase -- --package=.tmp-family-task-app/manoa-method-workspace --evidence=phases/phase-01/VERIFICATION_REPORT.md --handoff="Phase 1 reviewed and approved."
 ```
 
 ## Repeat
@@ -292,12 +292,12 @@ The normal lifecycle loop is:
 
 ## Where To Read Next
 
-- Beginner manual: [docs/NOVICE_GUIDE.md](C:\AI\XeleraMethod\docs\NOVICE_GUIDE.md)
-- Quick commands: [docs/QUICKSTART.md](C:\AI\XeleraMethod\docs\QUICKSTART.md)
-- Troubleshooting: [docs/TROUBLESHOOTING.md](C:\AI\XeleraMethod\docs\TROUBLESHOOTING.md)
-- Glossary: [docs/GLOSSARY.md](C:\AI\XeleraMethod\docs\GLOSSARY.md)
-- Family task example: [docs/EXAMPLE_FAMILY_TASK_APP.md](C:\AI\XeleraMethod\docs\EXAMPLE_FAMILY_TASK_APP.md)
-- Orchestrator guide: [docs/ORCHESTRATOR.md](C:\AI\XeleraMethod\docs\ORCHESTRATOR.md)
+- Beginner manual: [docs/NOVICE_GUIDE.md](C:\AI\ManoaMethod\docs\NOVICE_GUIDE.md)
+- Quick commands: [docs/QUICKSTART.md](C:\AI\ManoaMethod\docs\QUICKSTART.md)
+- Troubleshooting: [docs/TROUBLESHOOTING.md](C:\AI\ManoaMethod\docs\TROUBLESHOOTING.md)
+- Glossary: [docs/GLOSSARY.md](C:\AI\ManoaMethod\docs\GLOSSARY.md)
+- Family task example: [docs/EXAMPLE_FAMILY_TASK_APP.md](C:\AI\ManoaMethod\docs\EXAMPLE_FAMILY_TASK_APP.md)
+- Orchestrator guide: [docs/ORCHESTRATOR.md](C:\AI\ManoaMethod\docs\ORCHESTRATOR.md)
 
 ## Exported Workspace Contents
 
@@ -315,7 +315,7 @@ Every generated workspace includes beginner guidance, phase files, a testing lay
 - `TESTING_STRATEGY.md`
 - `REGRESSION_TEST_PLAN.md`
 - `TEST_SCRIPT_INDEX.md`
-- `repo/xelera-state.json`
+- `repo/manoa-state.json`
 
 ### Per-phase files (inside each `phases/phase-XX/` folder)
 - `PHASE_BRIEF.md`

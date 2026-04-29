@@ -13,7 +13,7 @@ import {
   readJsonFile,
   readState,
   resolvePackageRoot
-} from './xelera-package-utils';
+} from './manoa-package-utils';
 
 const GENERIC_TEST_PHRASES = [
   'run the tests and confirm everything works',
@@ -184,7 +184,7 @@ export function runValidate() {
   try {
     state = readState(packageRoot);
   } catch (e) {
-    issues.push(`Could not read repo/xelera-state.json: ${(e as Error).message}. Try regenerating the package or fixing JSON syntax.`);
+    issues.push(`Could not read repo/manoa-state.json: ${(e as Error).message}. Try regenerating the package or fixing JSON syntax.`);
   }
 
   if (!manifest || !state) {
@@ -194,22 +194,22 @@ export function runValidate() {
 
   // Validate state shape
   if (typeof state.currentPhase !== 'number') {
-    issues.push('repo/xelera-state.json is missing currentPhase. Expected a number like 1.');
+    issues.push('repo/manoa-state.json is missing currentPhase. Expected a number like 1.');
   }
   if (typeof state.lifecycleStatus !== 'string') {
-    issues.push('repo/xelera-state.json is missing lifecycleStatus. Expected Draft, Blocked, ReviewReady, or ApprovedForBuild.');
+    issues.push('repo/manoa-state.json is missing lifecycleStatus. Expected Draft, Blocked, ReviewReady, or ApprovedForBuild.');
   }
   if (!Array.isArray(state.completedPhases)) {
-    issues.push('repo/xelera-state.json is missing completedPhases array.');
+    issues.push('repo/manoa-state.json is missing completedPhases array.');
   }
   if (!Array.isArray(state.blockedPhases)) {
-    issues.push('repo/xelera-state.json is missing blockedPhases array.');
+    issues.push('repo/manoa-state.json is missing blockedPhases array.');
   }
   if (!Array.isArray(state.unresolvedBlockers)) {
-    issues.push('repo/xelera-state.json is missing unresolvedBlockers array.');
+    issues.push('repo/manoa-state.json is missing unresolvedBlockers array.');
   }
   if (typeof state.phaseEvidence !== 'object' || state.phaseEvidence === null) {
-    issues.push('repo/xelera-state.json is missing phaseEvidence object.');
+    issues.push('repo/manoa-state.json is missing phaseEvidence object.');
   }
   if (state.lifecycleStatus !== manifest.lifecycleStatus) {
     issues.push(`Manifest and state lifecycle status are inconsistent. Manifest says "${manifest.lifecycleStatus}" but state says "${state.lifecycleStatus}".`);
@@ -284,7 +284,7 @@ export function runValidate() {
     'PROJECT_BRIEF.md',
     'PHASE_PLAN.md',
     'repo/manifest.json',
-    'repo/xelera-state.json'
+    'repo/manoa-state.json'
   ];
 
   for (const file of requiredRootFiles) {

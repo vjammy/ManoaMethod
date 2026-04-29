@@ -1,27 +1,27 @@
-# XELERA_PRODUCTION_BUILD_PROMPT
+# MANOA_PRODUCTION_BUILD_PROMPT
 
-Use this prompt when the goal is a complete end-to-end production build through Xelera Method, not only package generation or a thin-slice MVP.
+Use this prompt when the goal is a complete end-to-end production build through Manoa Method, not only package generation or a thin-slice MVP.
 
 ```text
-You are building this project using Xelera Method in full production mode.
+You are building this project using Manoa Method in full production mode.
 
 This is not a planning-only run.
 This is not a thin-slice MVP run.
 This is not a documentation exercise.
 
-Your job is to complete the entire end-to-end Xelera lifecycle and produce a production-ready application, with all required implementation, testing, gates, handoffs, release artifacts, and final state progression completed honestly.
+Your job is to complete the entire end-to-end Manoa lifecycle and produce a production-ready application, with all required implementation, testing, gates, handoffs, release artifacts, and final state progression completed honestly.
 
 Core rule:
 Do not fake implementation, tests, scores, gates, deployment readiness, phase completion, or evidence.
 If something cannot be completed, mark it blocked with the exact reason and stop claiming production readiness.
 
 Primary objective:
-Build the full application end to end and advance it through the full Xelera Method lifecycle until all required phases are completed and the final release gate passes.
+Build the full application end to end and advance it through the full Manoa Method lifecycle until all required phases are completed and the final release gate passes.
 
 Success is only true if all of the following are true:
 1. The real application is fully implemented for the agreed production scope.
-2. All required Xelera phases are actually completed, not merely generated.
-3. repo/xelera-state.json reflects final lifecycle completion rather than an early planning phase.
+2. All required Manoa phases are actually completed, not merely generated.
+3. repo/manoa-state.json reflects final lifecycle completion rather than an early planning phase.
 4. All required gates pass with real evidence.
 5. Tests, regression, security, and release-readiness checks are run and recorded.
 6. Final reports, state files, scorecards, and final handoff files all agree.
@@ -32,7 +32,7 @@ Production application, not MVP.
 
 Execution rules:
 - Read the repo and package state first.
-- Use existing Xelera Method structure as the source of truth.
+- Use existing Manoa Method structure as the source of truth.
 - Touch only what is necessary.
 - Preserve unrelated local changes.
 - Do not overwrite unrelated worktree changes.
@@ -43,7 +43,7 @@ Execution rules:
 - Do not mark the build complete unless final lifecycle state, release gate, and handoff are done.
 
 Required delivery standard:
-The finished project must be a complete build through the Xelera lifecycle, including:
+The finished project must be a complete build through the Manoa lifecycle, including:
 - planning artifacts
 - implementation artifacts
 - production architecture
@@ -61,7 +61,7 @@ The finished project must be a complete build through the Xelera lifecycle, incl
 - final operational documentation
 
 Phase enforcement:
-For every Xelera phase:
+For every Manoa phase:
 1. Read the phase brief and gates.
 2. Implement the actual work required for that phase.
 3. Produce real evidence files.
@@ -77,7 +77,7 @@ You must make phase progression real.
 Required lifecycle behavior:
 - If currentPhase is phase-01, do not leave it there after implementation is done.
 - Advance phases only when evidence is real.
-- Keep CURRENT_STATUS.md, repo/xelera-state.json, verification reports, and final reports synchronized.
+- Keep CURRENT_STATUS.md, repo/manoa-state.json, verification reports, and final reports synchronized.
 - If there is a contradiction between state and reality, fix the contradiction before continuing.
 - Do not allow a final report to say pass while the state file still shows an early phase.
 
@@ -238,7 +238,7 @@ Final report must include:
 - final recommendation: PASS, CONDITIONAL PASS, or FAIL UNTIL FIXED
 
 Most important rule:
-Do not confuse “generated Xelera package” with “finished Xelera build.”
+Do not confuse “generated Manoa package” with “finished Manoa build.”
 Do not confuse “runnable app” with “production-ready app.”
-Do not stop until the complete Xelera lifecycle has been executed honestly.
+Do not stop until the complete Manoa lifecycle has been executed honestly.
 ```

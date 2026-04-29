@@ -1,4 +1,4 @@
-# /xelera-handoff
+# /manoa-handoff
 
 ## Purpose
 Create a compact handoff summary after implementation or review.
@@ -13,12 +13,12 @@ Create a compact handoff summary after implementation or review.
 - Current phase `EXIT_GATE.md`
 - Current phase `TEST_PLAN.md`
 - Current phase `VERIFICATION_REPORT.md`
-- `repo/xelera-state.json`
+- `repo/manoa-state.json`
 
 ## Files to edit
 - Current phase `HANDOFF_SUMMARY.md`
 - Current phase `NEXT_PHASE_CONTEXT.md`
-- `repo/xelera-state.json`
+- `repo/manoa-state.json`
 
 ## What to do
 1. Summarize what changed in this phase.
@@ -28,7 +28,7 @@ Create a compact handoff summary after implementation or review.
 5. State whether the exit gate passed.
 6. Update `HANDOFF_SUMMARY.md`.
 7. Update `NEXT_PHASE_CONTEXT.md` with what the next phase needs.
-8. Update `repo/xelera-state.json` with current status.
+8. Update `repo/manoa-state.json` with current status.
 
 ## What not to do
 - Do not create a handoff without verification.

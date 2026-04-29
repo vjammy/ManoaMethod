@@ -14,7 +14,7 @@
   "successMetrics": "A reviewer can understand provider conflict rules, reminder limits, and what evidence proves scheduling safety.",
   "nonGoals": "No billing, no insurance integrations, no full EHR system.",
   "timeline": "Plan a realistic first release that proves the clinic scheduling workflow works before adding richer features.",
-  "teamContext": "A clinic operations lead uses Xelera Method to prepare the scheduler plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
+  "teamContext": "A clinic operations lead uses Manoa Method to prepare the scheduler plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
   "questionnaireAnswers": {
     "north-star": "The first release must make provider availability, reminder boundaries, and conflict handling explicit and reviewable.",
     "primary-workflow": "A scheduler reviews provider availability, books or adjusts appointments, resolves conflicts, and prepares reminder content with privacy limits.",

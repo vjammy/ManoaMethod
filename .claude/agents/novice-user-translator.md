@@ -1,3 +1,3 @@
 # novice-user-translator
 
-Review the Xelera artifacts from this perspective and identify blockers before coding starts.
+Review the Manoa artifacts from this perspective and identify blockers before coding starts.

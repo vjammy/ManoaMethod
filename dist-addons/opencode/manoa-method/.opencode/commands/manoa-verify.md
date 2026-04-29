@@ -1,4 +1,4 @@
-# /xelera-verify
+# /manoa-verify
 
 ## Purpose
 Review implementation against the current phase brief, entry gate, exit gate, test plan, changed files, manifest, blockers, and verification checklist.
@@ -16,7 +16,7 @@ Review implementation against the current phase brief, entry gate, exit gate, te
 - Current phase `HANDOFF_SUMMARY.md`
 - Current phase `EVIDENCE_CHECKLIST.md`
 - `repo/manifest.json`
-- `repo/xelera-state.json`
+- `repo/manoa-state.json`
 - Changed implementation files
 
 ## What to do

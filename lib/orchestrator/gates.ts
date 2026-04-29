@@ -4,7 +4,7 @@ import {
   assessEvidenceFilesForApproval,
   findVerificationBodyContradictions,
   parseVerificationEvidenceFiles
-} from '../../scripts/xelera-package-utils';
+} from '../../scripts/manoa-package-utils';
 import type { CommandResult, GateResult, RepoState, Scorecard } from './types';
 import { readFileSafe } from './utils';
 
@@ -294,7 +294,7 @@ function releaseGate(repoState: RepoState, commands: CommandResult[]): GateResul
         approvedForBuild?: boolean;
       }
     | null;
-  const state = repoState.xeleraState as
+  const state = repoState.manoaState as
     | {
         lifecycleStatus?: string;
         completedPhases?: string[];
@@ -342,7 +342,7 @@ function releaseGate(repoState: RepoState, commands: CommandResult[]): GateResul
 }
 
 function exitGate(repoState: RepoState, scorecard?: Scorecard): GateResult {
-  const state = repoState.xeleraState as { currentPhase?: number; completedPhases?: string[]; phaseEvidence?: Record<string, { approvedToProceed?: boolean }> } | null;
+  const state = repoState.manoaState as { currentPhase?: number; completedPhases?: string[]; phaseEvidence?: Record<string, { approvedToProceed?: boolean }> } | null;
   const currentPhase = typeof state?.currentPhase === 'number' ? state.currentPhase : 1;
   const previousPhaseSlug = `phase-${String(currentPhase - 1).padStart(2, '0')}`;
   const currentPhaseSlug = `phase-${String(currentPhase).padStart(2, '0')}`;

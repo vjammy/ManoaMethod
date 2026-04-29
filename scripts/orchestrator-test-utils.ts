@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { baseProjectInput } from '../lib/templates';
 import type { ProjectInput } from '../lib/types';
-import { createArtifactPackage } from './xelera-create-project';
+import { createArtifactPackage } from './manoa-create-project';
 import { buildRepoState } from '../lib/orchestrator/scanner';
 import { deriveObjectiveCriteria } from '../lib/orchestrator/criteria';
 import { runProjectCommands } from '../lib/orchestrator/commands';
@@ -34,7 +34,7 @@ function buildAnsweredInput(overrides: Partial<ProjectInput> = {}): ProjectInput
 }
 
 function makePackage() {
-  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-orchestrator-'));
+  const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-orchestrator-'));
   return createArtifactPackage({
     input: buildAnsweredInput({
       productName: 'Orchestrator Test Package',
@@ -103,7 +103,7 @@ export async function runOrchestratorRegressionChecks() {
   ensureDir(commandsRoot);
 
   const repoState = buildRepoState(process.cwd(), pkg.rootDir);
-  assert(repoState.isGeneratedPackage, 'Repo scanner should detect a generated Xelera package.');
+  assert(repoState.isGeneratedPackage, 'Repo scanner should detect a generated Manoa package.');
   assert(repoState.phases.length > 0, 'Repo scanner should discover phase folders.');
   assert(repoState.docs.some((doc) => doc.key === 'readme' && doc.exists), 'Repo scanner should read README.md.');
   assert(repoState.mode === 'package', 'Explicit package root should switch the scanner into package mode.');
@@ -189,7 +189,7 @@ export async function runOrchestratorRegressionChecks() {
 
   // Phase 2 missing prior handoff should fail exit gate and trigger the 69 cap.
   const pkg3 = await makePackage();
-  const statePath3 = path.join(pkg3.rootDir, 'repo', 'xelera-state.json');
+  const statePath3 = path.join(pkg3.rootDir, 'repo', 'manoa-state.json');
   const state3 = JSON.parse(fs.readFileSync(statePath3, 'utf8'));
   state3.currentPhase = 2;
   state3.completedPhases = [];

@@ -14,7 +14,7 @@
   "successMetrics": "A reviewer can trace income, expense categories, monthly review flow, and alert behavior with clear evidence.",
   "nonGoals": "No investment advice, no bank integrations, no tax filing help.",
   "timeline": "Plan a realistic first release that proves the household budgeting workflow works before adding richer features.",
-  "teamContext": "A household finance lead uses Xelera Method to prepare the budget planner plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
+  "teamContext": "A household finance lead uses Manoa Method to prepare the budget planner plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
   "questionnaireAnswers": {
     "north-star": "The release must make income, expenses, categories, and monthly review explicit enough for a household to use.",
     "primary-workflow": "A budget manager enters income and expenses, reviews categories monthly, sets alert thresholds, and shares summaries with household members.",

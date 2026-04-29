@@ -1,4 +1,4 @@
-# /xelera-plan
+# /manoa-plan
 
 ## Purpose
 Create or update the planning package before coding begins.
@@ -15,14 +15,14 @@ Create or update the planning package before coding begins.
 - `PHASE_PLAN.md`
 - `00_APPROVAL_GATE.md`
 - `repo/manifest.json`
-- `repo/xelera-state.json`
+- `repo/manoa-state.json`
 
 ## What to do
 1. Read the project context and brief.
 2. Confirm the selected profile and mode.
 3. Verify the phase plan matches the current scope.
 4. Update any planning artifacts that are stale or incomplete.
-5. Record the planning state in `repo/xelera-state.json`.
+5. Record the planning state in `repo/manoa-state.json`.
 
 ## What not to do
 - Do not start implementation during planning.

@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   return new NextResponse(data, {
     headers: {
       'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="${bundle.exportRoot}-xelera-handoff.zip"`
+      'Content-Disposition': `attachment; filename="${bundle.exportRoot}-manoa-handoff.zip"`
     }
   });
 }

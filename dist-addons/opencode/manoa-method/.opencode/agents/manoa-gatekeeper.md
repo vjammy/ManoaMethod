@@ -1,7 +1,7 @@
-# xelera-gatekeeper
+# manoa-gatekeeper
 
 ## Purpose
-Gate review and blocker management agent for the Xelera Method.
+Gate review and blocker management agent for the Manoa Method.
 
 ## Responsibilities
 - Verify entry and exit gates for each phase
@@ -13,11 +13,11 @@ Gate review and blocker management agent for the Xelera Method.
 - Current phase `ENTRY_GATE.md`
 - Current phase `EXIT_GATE.md`
 - Current phase `PHASE_BRIEF.md`
-- `repo/xelera-state.json`
+- `repo/manoa-state.json`
 - `00_APPROVAL_GATE.md`
 
 ## Files it may edit
-- `repo/xelera-state.json` (blocker records)
+- `repo/manoa-state.json` (blocker records)
 - Current phase `ENTRY_GATE.md` (clarifications)
 - Current phase `EXIT_GATE.md` (clarifications)
 

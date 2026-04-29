@@ -2,7 +2,7 @@
 
 ## What This Guide Is For
 
-Use this guide if you want to run a Xelera Method workspace with OpenCode.
+Use this guide if you want to run a Manoa Method workspace with OpenCode.
 
 OpenCode is a first-class workflow alongside Codex and Claude Code. The generated workspace stays the same across all three.
 
@@ -16,7 +16,7 @@ npm run create-project -- --input=examples/family-task-app.json --out=.tmp-famil
 
 Then open:
 
-- `.tmp-family-task-app/xelera-method-workspace/OPENCODE_START_HERE.md`
+- `.tmp-family-task-app/manoa-method-workspace/OPENCODE_START_HERE.md`
 
 ## What To Open First
 
@@ -52,7 +52,7 @@ For the current phase, the usual packet is:
 
 This repo also includes an OpenCode config pack under:
 
-`dist-addons/opencode/xelera-method/`
+`dist-addons/opencode/manoa-method/`
 
 If your OpenCode setup supports local commands or agents, copy those files into the location where you keep them.
 
@@ -80,14 +80,14 @@ After phase work, update `VERIFICATION_REPORT.md` with:
 Then use:
 
 ```bash
-npm run validate -- --package=.tmp-family-task-app/xelera-method-workspace
-npm run status -- --package=.tmp-family-task-app/xelera-method-workspace
+npm run validate -- --package=.tmp-family-task-app/manoa-method-workspace
+npm run status -- --package=.tmp-family-task-app/manoa-method-workspace
 ```
 
 Advance with:
 
 ```bash
-npm run next-phase -- --package=.tmp-family-task-app/xelera-method-workspace --evidence=phases/phase-01/VERIFICATION_REPORT.md
+npm run next-phase -- --package=.tmp-family-task-app/manoa-method-workspace --evidence=phases/phase-01/VERIFICATION_REPORT.md
 ```
 
 ## Important Rules

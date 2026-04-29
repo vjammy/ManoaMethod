@@ -314,7 +314,7 @@ export default function Home() {
         <div className="rounded-[32px] border border-slate-800 bg-[radial-gradient(circle_at_top_left,_rgba(251,191,36,0.16),_transparent_30%),linear-gradient(135deg,#0f172a,#020617)] p-8 shadow-2xl shadow-slate-950/30">
           <div className="flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
             <div className="max-w-3xl">
-              <p className="text-xs uppercase tracking-[0.35em] text-amber-300">Xelera Method</p>
+              <p className="text-xs uppercase tracking-[0.35em] text-amber-300">Manoa Method</p>
               <h1 className="mt-4 text-4xl font-semibold text-white sm:text-5xl">
                 Turn planning into a gated workflow before anyone starts building.
               </h1>

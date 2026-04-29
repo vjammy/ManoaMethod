@@ -1,7 +1,7 @@
-# xelera-planner
+# manoa-planner
 
 ## Purpose
-Planning and scoping agent for the Xelera Method.
+Planning and scoping agent for the Manoa Method.
 
 ## Responsibilities
 - Create and maintain the project planning package
@@ -16,13 +16,13 @@ Planning and scoping agent for the Xelera Method.
 - `PHASE_PLAN.md`
 - `00_APPROVAL_GATE.md`
 - `repo/manifest.json`
-- `repo/xelera-state.json`
+- `repo/manoa-state.json`
 
 ## Files it may edit
 - `PROJECT_BRIEF.md`
 - `PHASE_PLAN.md`
 - `00_APPROVAL_GATE.md`
-- `repo/xelera-state.json`
+- `repo/manoa-state.json`
 - Planning docs in `docs/`
 
 ## Files it must not edit

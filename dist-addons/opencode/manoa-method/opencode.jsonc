@@ -1,22 +1,22 @@
 {
-  // OpenCode configuration for Xelera Method
+  // OpenCode configuration for Manoa Method
   // Copy this folder into your project root and rename to .opencode
   "agents": {
-    "planner": "agents/xelera-planner.md",
-    "gatekeeper": "agents/xelera-gatekeeper.md",
-    "builder": "agents/xelera-builder.md",
-    "reviewer": "agents/xelera-reviewer.md"
+    "planner": "agents/manoa-planner.md",
+    "gatekeeper": "agents/manoa-gatekeeper.md",
+    "builder": "agents/manoa-builder.md",
+    "reviewer": "agents/manoa-reviewer.md"
   },
   "commands": {
-    "xelera-plan": "commands/xelera-plan.md",
-    "xelera-validate": "commands/xelera-validate.md",
-    "xelera-phase": "commands/xelera-phase.md",
-    "xelera-verify": "commands/xelera-verify.md",
-    "xelera-handoff": "commands/xelera-handoff.md",
-    "xelera-next": "commands/xelera-next.md"
+    "manoa-plan": "commands/manoa-plan.md",
+    "manoa-validate": "commands/manoa-validate.md",
+    "manoa-phase": "commands/manoa-phase.md",
+    "manoa-verify": "commands/manoa-verify.md",
+    "manoa-handoff": "commands/manoa-handoff.md",
+    "manoa-next": "commands/manoa-next.md"
   },
   "resources": {
-    "xelera-method": "resources/XELERA_METHOD.md",
+    "manoa-method": "resources/MANOA_METHOD.md",
     "context-management": "resources/CONTEXT_MANAGEMENT.md",
     "gate-rules": "resources/GATE_RULES.md",
     "phase-packet-template": "resources/PHASE_PACKET_TEMPLATE.md",

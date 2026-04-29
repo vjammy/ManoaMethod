@@ -1,8 +1,8 @@
-# XELERA_METHOD
+# MANOA_METHOD
 
-## What is Xelera Method?
+## What is Manoa Method?
 
-Xelera Method is a local, markdown-first planning, gating, handoff, verification, and context-management system for AI-assisted builds.
+Manoa Method is a local, markdown-first planning, gating, handoff, verification, and context-management system for AI-assisted builds.
 
 ## Core principles
 - **Local-first**: all artifacts are local markdown files
@@ -23,12 +23,12 @@ Xelera Method is a local, markdown-first planning, gating, handoff, verification
 - Root context files: `00_PROJECT_CONTEXT.md`, `01_CONTEXT_RULES.md`, `AGENTS.md`
 - Agent start files: `CODEX_START_HERE.md`, `CLAUDE_START_HERE.md`, `OPENCODE_START_HERE.md`
 - Phase folders: `phases/phase-XX/` with brief, gates, prompts, tests, and verification
-- State files: `repo/manifest.json`, `repo/xelera-state.json`
+- State files: `repo/manifest.json`, `repo/manoa-state.json`
 
 ## Commands
-- `/xelera-plan` — create or update planning package
-- `/xelera-validate` — inspect status and blockers
-- `/xelera-phase` — load current phase packet
-- `/xelera-verify` — review implementation
-- `/xelera-handoff` — create handoff summary
-- `/xelera-next` — advance phase with evidence
+- `/manoa-plan` — create or update planning package
+- `/manoa-validate` — inspect status and blockers
+- `/manoa-phase` — load current phase packet
+- `/manoa-verify` — review implementation
+- `/manoa-handoff` — create handoff summary
+- `/manoa-next` — advance phase with evidence

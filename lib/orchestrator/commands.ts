@@ -23,7 +23,7 @@ function runScript(repoRoot: string, script: string) {
     shell: process.platform === 'win32',
     env: {
       ...process.env,
-      XELERA_REPORT_ROOT: path.join(path.dirname(commandsRootForScript(repoRoot, script)), 'nested-orchestrator')
+      MANOA_REPORT_ROOT: path.join(path.dirname(commandsRootForScript(repoRoot, script)), 'nested-orchestrator')
     }
   });
   return {

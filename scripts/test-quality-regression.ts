@@ -4,8 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generateProjectBundle } from '../lib/generator';
 import { baseProjectInput } from '../lib/templates';
-import { createArtifactPackage } from './xelera-create-project';
-import { runValidate } from './xelera-validate';
+import { createArtifactPackage } from './manoa-create-project';
+import { runValidate } from './manoa-validate';
 import { runOrchestratorRegressionChecks } from './orchestrator-test-utils';
 import type { ProjectInput } from '../lib/types';
 
@@ -614,7 +614,7 @@ async function main() {
       console.error(`  FAIL: ${useCase.name} invented a generic external API integration.`);
       failures++;
     }
-    if (/guided root docs|phase packets|support folders|the xelera workspace itself/i.test(systemOverview)) {
+    if (/guided root docs|phase packets|support folders|the manoa workspace itself/i.test(systemOverview)) {
       console.error(`  FAIL: ${useCase.name} architecture still describes the workspace instead of the product.`);
       failures++;
     }
@@ -898,10 +898,10 @@ async function main() {
     }) as typeof process.exit);
 
     const expectValidateFailure = async (label: string, mutate: (rootDir: string) => void, expectedPattern: RegExp) => {
-      const pkgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-quality-'));
+      const pkgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-quality-'));
       const result = await createArtifactPackage({ input: USE_CASES[0].input, outDir: pkgDir, zip: false });
       mutate(result.rootDir);
-      process.argv = ['node', 'xelera-validate.ts', `--package=${result.rootDir}`];
+      process.argv = ['node', 'manoa-validate.ts', `--package=${result.rootDir}`];
       try {
         runValidate();
         console.error(`  FAIL: ${label} was not rejected by validate.`);

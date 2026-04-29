@@ -113,7 +113,7 @@ export const CORE_AGENT_OPERATING_RULES = `## Core Agent Operating Rules
 4. Define success criteria. Loop until verified.`;
 
 export function slugify(value: string) {
-  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'xelera-project';
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'manoa-project';
 }
 
 export function getProfileKey(input: Pick<ProjectInput, 'level' | 'track'>): ProfileKey {
@@ -126,7 +126,7 @@ export function getProfileConfig(input: Pick<ProjectInput, 'level' | 'track'>) {
 
 export function baseProjectInput(): ProjectInput {
   return {
-    productName: 'Xelera Method Sample',
+    productName: 'Manoa Method Sample',
     level: 'beginner',
     track: 'business',
     productIdea: 'A planning layer that slows teams down long enough to turn a rough product idea into build-ready artifacts before coding begins.',

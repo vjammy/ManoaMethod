@@ -1,6 +1,6 @@
 # GLOSSARY
 
-## Xelera Method
+## Manoa Method
 
 A local, markdown-first planning and gating system for AI-assisted builds.
 

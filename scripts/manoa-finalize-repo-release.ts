@@ -104,7 +104,7 @@ const phaseDefinitions: PhaseDefinition[] = [
     index: 1,
     title: 'Product objective and production target',
     phaseType: 'planning',
-    goal: 'Lock the repo onto a production application target and document what Xelera Method must deliver in this release.',
+    goal: 'Lock the repo onto a production application target and document what Manoa Method must deliver in this release.',
     summary: 'This phase ties the repo to a production-grade local-first planning and orchestration product rather than a planning-only package.',
     repoFiles: ['README.md', 'BUILD_TARGET.md', 'APP_OBJECTIVE.md', 'PRODUCTION_SCOPE.md', 'PROJECT_BRIEF.md'],
     commands: ['repo/release-evidence/commands/status.md', 'repo/release-evidence/commands/validate.md'],
@@ -174,9 +174,9 @@ const phaseDefinitions: PhaseDefinition[] = [
     index: 6,
     title: 'Core generator implementation',
     phaseType: 'implementation',
-    goal: 'Validate the markdown package generator, templates, and type model that power Xelera Method.',
+    goal: 'Validate the markdown package generator, templates, and type model that power Manoa Method.',
     summary: 'This phase anchors the implemented generator, scoring logic, and template coverage that create the workspace package.',
-    repoFiles: ['lib/generator.ts', 'lib/templates.ts', 'lib/types.ts', 'scripts/xelera-create-project.ts'],
+    repoFiles: ['lib/generator.ts', 'lib/templates.ts', 'lib/types.ts', 'scripts/manoa-create-project.ts'],
     commands: ['repo/release-evidence/commands/test.md', 'repo/release-evidence/commands/smoke.md'],
     evidenceFiles: ['repo/release-evidence/phases/phase-06-evidence.md'],
     changedFiles: ['lib/generator.ts', 'lib/types.ts', 'scripts/smoke-test.ts'],
@@ -202,12 +202,12 @@ const phaseDefinitions: PhaseDefinition[] = [
     index: 8,
     title: 'CLI lifecycle tooling',
     phaseType: 'implementation',
-    goal: 'Make repo-root status, validate, scoring, and phase-state behavior work as a real Xelera package lifecycle.',
+    goal: 'Make repo-root status, validate, scoring, and phase-state behavior work as a real Manoa package lifecycle.',
     summary: 'This phase closes the gap between repo mode and package mode by adding real package state to the repo and fixing final lifecycle reporting.',
-    repoFiles: ['scripts/xelera-status.ts', 'scripts/xelera-validate.ts', 'scripts/xelera-package-utils.ts', 'repo/xelera-state.json'],
+    repoFiles: ['scripts/manoa-status.ts', 'scripts/manoa-validate.ts', 'scripts/manoa-package-utils.ts', 'repo/manoa-state.json'],
     commands: ['repo/release-evidence/commands/status.md', 'repo/release-evidence/commands/validate.md'],
     evidenceFiles: ['repo/release-evidence/phases/phase-08-evidence.md'],
-    changedFiles: ['scripts/xelera-status.ts', 'repo/manifest.json', 'repo/xelera-state.json', 'package.json'],
+    changedFiles: ['scripts/manoa-status.ts', 'repo/manifest.json', 'repo/manoa-state.json', 'package.json'],
     testsRun: ['npm run status', 'npm run validate'],
     knownIssues: [],
     nextPhaseFocus: 'Expand orchestrator gates so required lifecycle gates can be produced from one command.'
@@ -217,8 +217,8 @@ const phaseDefinitions: PhaseDefinition[] = [
     title: 'Orchestrator scoring and gate enforcement',
     phaseType: 'implementation',
     goal: 'Ensure the orchestrator can score, gate, and recover against the repo with the required production lifecycle semantics.',
-    summary: 'The gate runner now exposes the named gates required for a production Xelera release, and the repo produces score and gate reports from real commands.',
-    repoFiles: ['lib/orchestrator/gates.ts', 'lib/orchestrator/score.ts', 'lib/orchestrator/recovery.ts', 'scripts/xelera-gates.ts'],
+    summary: 'The gate runner now exposes the named gates required for a production Manoa release, and the repo produces score and gate reports from real commands.',
+    repoFiles: ['lib/orchestrator/gates.ts', 'lib/orchestrator/score.ts', 'lib/orchestrator/recovery.ts', 'scripts/manoa-gates.ts'],
     commands: ['repo/release-evidence/commands/score.md', 'repo/release-evidence/commands/gates.md'],
     evidenceFiles: ['repo/release-evidence/phases/phase-09-evidence.md'],
     changedFiles: ['lib/orchestrator/gates.ts', 'lib/orchestrator/types.ts', 'lib/orchestrator/recovery.ts', 'scripts/orchestrator-test-utils.ts'],
@@ -280,10 +280,10 @@ const phaseDefinitions: PhaseDefinition[] = [
     phaseType: 'finalization',
     goal: 'Mark the repo package complete with synchronized final reports, approved lifecycle state, and explicit remaining risks.',
     summary: 'The final state moves the repo into ApprovedForBuild with phase evidence, final handoff, deployment status, and recovery summary aligned.',
-    repoFiles: ['FINAL_RELEASE_REPORT.md', 'FINAL_HANDOFF.md', 'FINAL_DEPLOYMENT_STATUS.md', 'repo/manifest.json', 'repo/xelera-state.json'],
+    repoFiles: ['FINAL_RELEASE_REPORT.md', 'FINAL_HANDOFF.md', 'FINAL_DEPLOYMENT_STATUS.md', 'repo/manifest.json', 'repo/manoa-state.json'],
     commands: ['repo/release-evidence/commands/status.md', 'repo/release-evidence/commands/validate.md', 'repo/release-evidence/commands/gates.md'],
     evidenceFiles: ['repo/release-evidence/phases/phase-13-evidence.md'],
-    changedFiles: ['FINAL_RELEASE_REPORT.md', 'FINAL_HANDOFF.md', 'FINAL_DEPLOYMENT_STATUS.md', 'repo/manifest.json', 'repo/xelera-state.json'],
+    changedFiles: ['FINAL_RELEASE_REPORT.md', 'FINAL_HANDOFF.md', 'FINAL_DEPLOYMENT_STATUS.md', 'repo/manifest.json', 'repo/manoa-state.json'],
     testsRun: ['npm run status', 'npm run validate', 'npm run gates'],
     knownIssues: ['No hosted multi-user backend is provided because the approved product scope is local-first by design.'],
     nextPhaseFocus: 'Lifecycle complete. Maintain evidence freshness and update release docs when commands or workflows change.'
@@ -317,7 +317,7 @@ ${phase.testsRun.map((item) => `- ${item}`).join('\n')}
 
 ## Observed result
 - ${phase.summary}
-- The referenced repo files exist in the current workspace and align with the production release target for Xelera Method.
+- The referenced repo files exist in the current workspace and align with the production release target for Manoa Method.
 - The referenced command outputs were captured during the release validation run and used in the final recommendation for this repo.
 - The phase evidence is anchored to concrete repo paths, concrete command names, and the actual files changed for this release.
 
@@ -496,7 +496,7 @@ ApprovedForBuild
 
 The repo package has completed the production lifecycle and is approved for build and release handoff.
 
-This package contains ${phaseDefinitions.length} phases for Xelera Method.
+This package contains ${phaseDefinitions.length} phases for Manoa Method.
 
 ${phaseDefinitions
   .map(
@@ -587,7 +587,7 @@ function buildTargetDoc() {
 
 ## Selected target
 - Production application
-- Repo: Xelera Method
+- Repo: Manoa Method
 - Reason: this release packages the existing Next.js app, generator, CLI, orchestrator, tests, and handoff artifacts as a complete production-ready local-first application.
 `;
 }
@@ -596,7 +596,7 @@ function buildObjectiveDoc() {
   return `# APP_OBJECTIVE
 
 ## Product
-Xelera Method
+Manoa Method
 
 ## Objective
 Deliver a production-grade local-first planning and orchestration application that converts product ideas into gated markdown workspaces, validates lifecycle evidence, scores readiness, and hands work off cleanly across Codex, Claude Code, OpenCode, and human reviewers.
@@ -611,8 +611,8 @@ Deliver a production-grade local-first planning and orchestration application th
 - app/page.tsx
 - lib/generator.ts
 - lib/orchestrator/gates.ts
-- scripts/xelera-status.ts
-- scripts/xelera-validate.ts
+- scripts/manoa-status.ts
+- scripts/manoa-validate.ts
 `;
 }
 
@@ -648,7 +648,7 @@ function buildDeploymentPlan() {
   return `# DEPLOYMENT_PLAN
 
 ## Release objective
-- Release the validated local-first Xelera Method repo as a production-ready developer tool and handoff package.
+- Release the validated local-first Manoa Method repo as a production-ready developer tool and handoff package.
 
 ## Intended runtime
 - Node.js with Next.js for the local web application
@@ -663,7 +663,7 @@ function buildDeploymentPlan() {
 ## Deployment steps
 - Install dependencies
 - Run typecheck, build, test, smoke, quality regression, score, gates, status, and validate sequentially
-- Verify FINAL_* docs and repo/xelera-state.json remain synchronized
+- Verify FINAL_* docs and repo/manoa-state.json remain synchronized
 - Package or distribute the repo with the validated command outputs and release docs
 
 ## Ownership
@@ -696,7 +696,7 @@ function buildReadinessChecklist(score: ReturnType<typeof parseScore>, gates: Ga
 - [x] Application implementation exists for the approved scope.
 - [x] Required command suite has been run with captured evidence.
 - [x] Score and gate reports were generated from the current repo state.
-- [x] repo/xelera-state.json and repo/manifest.json reflect final lifecycle completion.
+- [x] repo/manoa-state.json and repo/manifest.json reflect final lifecycle completion.
 - [x] Deployment, rollback, runbook, and incident docs are present.
 - [x] Final handoff and release reports are synchronized.
 - [x] Final score: ${score.total}/100 (${score.verdict}).
@@ -708,7 +708,7 @@ function buildOperationsRunbook() {
   return `# OPERATIONS_RUNBOOK
 
 ## Service overview
-- Xelera Method is a local-first Next.js and Node.js toolchain for generating, validating, scoring, and handing off markdown-based project packages.
+- Manoa Method is a local-first Next.js and Node.js toolchain for generating, validating, scoring, and handing off markdown-based project packages.
 
 ## Daily or regular checks
 - Confirm dependencies still install cleanly.
@@ -737,7 +737,7 @@ function buildIncidentGuide() {
 ## Initial response steps
 - Stop further release claims.
 - Capture the failing command output or broken artifact.
-- Compare repo/xelera-state.json, FINAL_RELEASE_REPORT.md, and orchestrator reports for drift.
+- Compare repo/manoa-state.json, FINAL_RELEASE_REPORT.md, and orchestrator reports for drift.
 
 ## Severity guide
 - Sev 1: build, test, or release gate failure in the release candidate
@@ -783,7 +783,7 @@ function buildRootDataModel() {
 ## Runtime entities
 - Project input: the structured data collected from the UI or CLI
 - Generated file bundle: markdown artifacts emitted by lib/generator.ts
-- Lifecycle state: repo/manifest.json and repo/xelera-state.json
+- Lifecycle state: repo/manifest.json and repo/manoa-state.json
 - Command evidence: captured outputs stored under repo/release-evidence/commands/
 - Final reports: FINAL_* markdown artifacts generated for the release handoff
 
@@ -1050,7 +1050,7 @@ function buildFinalDeploymentStatus(recommendation: string) {
 function buildManifest() {
   const input = JSON.parse(readFile('repo/input.json')) as Record<string, unknown>;
   return {
-    exportRoot: 'xelera-method-workspace',
+    exportRoot: 'manoa-method-workspace',
     profile: 'advanced-technical',
     readinessScore: 100,
     rating: 'Strong handoff',
@@ -1071,7 +1071,7 @@ function buildManifest() {
       'FINAL_GATE_REPORT.md',
       'FINAL_SCORECARD.md'
     ],
-    packageSummary: 'Production-ready Xelera Method repo package with synchronized lifecycle evidence.',
+    packageSummary: 'Production-ready Manoa Method repo package with synchronized lifecycle evidence.',
     warningCounts: {
       info: 0,
       warning: 0,
@@ -1161,7 +1161,7 @@ function main() {
   writeFile('FINAL_DEPLOYMENT_STATUS.md', buildFinalDeploymentStatus(recommendation));
   writeFile('HANDOFF.md', buildFinalHandoff(recommendation));
   writeFile('repo/manifest.json', JSON.stringify(buildManifest(), null, 2));
-  writeFile('repo/xelera-state.json', JSON.stringify(buildState(), null, 2));
+  writeFile('repo/manoa-state.json', JSON.stringify(buildState(), null, 2));
 }
 
 main();

@@ -39,7 +39,7 @@ export type RepoState = {
   mode: 'repo' | 'package';
   packageScripts: Record<string, string>;
   manifest: Record<string, unknown> | null;
-  xeleraState: Record<string, unknown> | null;
+  manoaState: Record<string, unknown> | null;
   docs: RepoDocument[];
   phases: PhaseInfo[];
   verificationReports: string[];

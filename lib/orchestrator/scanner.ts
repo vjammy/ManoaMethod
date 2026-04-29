@@ -110,7 +110,7 @@ export function buildRepoState(repoRoot: string, explicitPackageRoot?: string): 
   const allFiles = listFilesRecursive(scanRoot, scanRoot);
   const packageJson = readJsonSafe<{ scripts?: Record<string, string> }>(path.join(normalizedRepoRoot, 'package.json'));
   const manifest = readJsonSafe<Record<string, unknown>>(path.join(scanRoot, 'repo', 'manifest.json'));
-  const xeleraState = readJsonSafe<Record<string, unknown>>(path.join(scanRoot, 'repo', 'xelera-state.json'));
+  const manoaState = readJsonSafe<Record<string, unknown>>(path.join(scanRoot, 'repo', 'manoa-state.json'));
   const readme = docs.find((doc) => doc.key === 'readme')?.content || '';
   const projectName = guessProjectName(normalizedRepoRoot, packageRoot, docs);
 
@@ -123,7 +123,7 @@ export function buildRepoState(repoRoot: string, explicitPackageRoot?: string): 
     mode,
     packageScripts: packageJson?.scripts || {},
     manifest,
-    xeleraState,
+    manoaState,
     docs,
     phases,
     verificationReports: allFiles.filter((file) => /VERIFICATION_REPORT\.md$/i.test(file)),

@@ -11,7 +11,7 @@ import {
   readJsonFile,
   readState,
   resolvePackageRoot
-} from './xelera-package-utils';
+} from './manoa-package-utils';
 
 function getPhaseTitle(packageRoot: string, slug: string): string {
   const readmePath = path.join(packageRoot, 'phases', slug, 'README.md');
@@ -192,7 +192,7 @@ export function runStatus() {
 
   console.log('');
   console.log('========================================');
-  console.log('  Xelera Method Package Status');
+  console.log('  Manoa Method Package Status');
   console.log('========================================');
   console.log('');
   console.log(`Project:        ${projectName}`);

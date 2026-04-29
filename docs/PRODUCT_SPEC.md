@@ -1,6 +1,6 @@
 # Product Spec
 
-Xelera Method is the markdown-first planning, gating, scoring, and handoff layer before AI coding starts.
+Manoa Method is the markdown-first planning, gating, scoring, and handoff layer before AI coding starts.
 
 ## V1 scope
 

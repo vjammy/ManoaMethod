@@ -19,7 +19,7 @@ Before finishing a phase:
 
 ## Blocker rules
 
-- Blockers must be recorded in `repo/xelera-state.json`
+- Blockers must be recorded in `repo/manoa-state.json`
 - Blockers must be visible in the current phase packet
 - Do not bypass blockers with silent assumptions
 - If a blocker is resolved, update the state file and handoff summary

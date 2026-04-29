@@ -14,7 +14,7 @@
   "successMetrics": "A reviewer can see what the product helps with, what it explicitly does not do, and what family readiness caveats must stay visible.",
   "nonGoals": "No legal advice, no emergency dispatch integration, no cloud backend, no automatic document filing.",
   "timeline": "Plan a realistic first release that proves the household readiness workflow works before adding richer integrations or automation.",
-  "teamContext": "A business-oriented product owner uses Xelera Method to prepare the readiness plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
+  "teamContext": "A business-oriented product owner uses Manoa Method to prepare the readiness plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
   "questionnaireAnswers": {
     "north-star": "The first release must help a family organize readiness information while clearly stating the limits of the tool.",
     "primary-workflow": "A parent organizer sets up the family readiness workspace, records key contacts and documents, reviews emergency notes, and shares clear role expectations with other adults.",

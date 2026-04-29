@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { XeleraState } from '../lib/types';
+import type { ManoaState } from '../lib/types';
 
 export function getArg(name: string) {
   const exact = process.argv.find((arg) => arg.startsWith(`--${name}=`));
@@ -17,7 +17,7 @@ export function resolvePackageRoot(explicitPath?: string) {
     if (fs.existsSync(path.join(candidate, 'repo', 'manifest.json'))) return candidate;
   }
 
-  throw new Error(`Could not find a generated Xelera package under ${base}`);
+  throw new Error(`Could not find a generated Manoa package under ${base}`);
 }
 
 export function readJsonFile<T>(filePath: string): T {
@@ -29,7 +29,7 @@ export function writeJsonFile(filePath: string, value: unknown) {
 }
 
 export function readState(packageRoot: string) {
-  return readJsonFile<XeleraState>(path.join(packageRoot, 'repo', 'xelera-state.json'));
+  return readJsonFile<ManoaState>(path.join(packageRoot, 'repo', 'manoa-state.json'));
 }
 
 export function getPhaseSlug(phaseNumber: number) {

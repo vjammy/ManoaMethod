@@ -4,11 +4,11 @@ import path from 'node:path';
 import { generateProjectBundle } from '../lib/generator';
 import { baseProjectInput } from '../lib/templates';
 import { buildWorkflowSteps, canApproveForBuild, canExportBuildReady, mapWarningToStep } from '../lib/workflow';
-import { createArtifactPackage, loadInput } from './xelera-create-project';
-import { runNextPhase } from './xelera-next-phase';
-import { runValidate } from './xelera-validate';
-import { runStatus } from './xelera-status';
-import { parseExitGateResult, parseVerificationEvidenceFiles, parseVerificationRecommendation } from './xelera-package-utils';
+import { createArtifactPackage, loadInput } from './manoa-create-project';
+import { runNextPhase } from './manoa-next-phase';
+import { runValidate } from './manoa-validate';
+import { runStatus } from './manoa-status';
+import { parseExitGateResult, parseVerificationEvidenceFiles, parseVerificationRecommendation } from './manoa-package-utils';
 import { runOrchestratorRegressionChecks } from './orchestrator-test-utils';
 import type { ProjectInput } from '../lib/types';
 
@@ -96,7 +96,7 @@ async function main() {
   const scorecard = getFile(bundle, 'SCORECARD.md');
   const readme = fs.readFileSync(path.resolve('README.md'), 'utf8');
   const manifest = JSON.parse(getFile(bundle, 'repo/manifest.json'));
-  const state = JSON.parse(getFile(bundle, 'repo/xelera-state.json'));
+  const state = JSON.parse(getFile(bundle, 'repo/manoa-state.json'));
   const workflowSteps = buildWorkflowSteps(sample, bundle);
 
   assert(bundle.phases.length >= 10, `Expected at least 10 phases, received ${bundle.phases.length}`);
@@ -210,7 +210,7 @@ async function main() {
   assert(bundle.files.some((file) => file.path === 'regression-suite/scripts/handoff-continuity.md'), 'Missing regression-suite/scripts/handoff-continuity.md');
   assert(bundle.files.some((file) => file.path === 'regression-suite/scripts/agent-rules.md'), 'Missing regression-suite/scripts/agent-rules.md');
   assert(bundle.files.some((file) => file.path === 'regression-suite/scripts/local-first.md'), 'Missing regression-suite/scripts/local-first.md');
-  assert(bundle.files.some((file) => file.path === 'repo/xelera-state.json'), 'Missing repo/xelera-state.json');
+  assert(bundle.files.some((file) => file.path === 'repo/manoa-state.json'), 'Missing repo/manoa-state.json');
   assert(fs.existsSync(familySamplePath), 'Missing examples/family-task-app.json');
   assert(fs.existsSync(path.resolve('docs/NOVICE_GUIDE.md')), 'Missing docs/NOVICE_GUIDE.md');
   assert(fs.existsSync(path.resolve('docs/QUICKSTART.md')), 'Missing docs/QUICKSTART.md');
@@ -218,7 +218,7 @@ async function main() {
   assert(fs.existsSync(path.resolve('docs/TROUBLESHOOTING.md')), 'Missing docs/TROUBLESHOOTING.md');
   assert(fs.existsSync(path.resolve('docs/EXAMPLE_FAMILY_TASK_APP.md')), 'Missing docs/EXAMPLE_FAMILY_TASK_APP.md');
   assert(fs.existsSync(path.resolve('docs/ORCHESTRATOR.md')), 'Missing docs/ORCHESTRATOR.md');
-  assert(fs.existsSync(path.resolve('autoresearch/XELERA_AUTORESEARCH_PROGRAM.md')), 'Missing autoresearch/XELERA_AUTORESEARCH_PROGRAM.md');
+  assert(fs.existsSync(path.resolve('autoresearch/MANOA_AUTORESEARCH_PROGRAM.md')), 'Missing autoresearch/MANOA_AUTORESEARCH_PROGRAM.md');
   assert(fs.existsSync(path.resolve('autoresearch/README.md')), 'Missing autoresearch/README.md');
   assert(fs.existsSync(path.resolve('autoresearch/results.tsv')), 'Missing autoresearch/results.tsv');
   assert(fs.existsSync(path.resolve('autoresearch/benchmarks/10-use-case-benchmark.md')), 'Missing autoresearch benchmark file');
@@ -357,8 +357,8 @@ async function main() {
   assert(manifest.rating === bundle.score.rating, 'Manifest rating should match the bundle score rating.');
   assert(manifest.approvalRequired === true, 'Manifest approvalRequired should be true.');
   assert(manifest.approvedForBuild === false, 'Sample package should not be approved for build.');
-  assert(state.currentPhase === 1, `Expected xelera-state currentPhase to be 1, received ${state.currentPhase}`);
-  assert(Array.isArray(state.unresolvedBlockers), 'xelera-state unresolvedBlockers list is missing.');
+  assert(state.currentPhase === 1, `Expected manoa-state currentPhase to be 1, received ${state.currentPhase}`);
+  assert(Array.isArray(state.unresolvedBlockers), 'manoa-state unresolvedBlockers list is missing.');
   assert(workflowSteps.length === 8, `Expected 8 workflow steps, received ${workflowSteps.length}`);
   assert(
     workflowSteps.some((step) => step.id === 'approval-gate' && step.status === 'Blocked'),
@@ -398,7 +398,7 @@ async function main() {
   assert(/\[START_HERE\.md\]\(START_HERE\.md\)/.test(familyRootReadme), 'Family sample README should link to START_HERE.md.');
   assert(/\[QUICKSTART\.md\]\(QUICKSTART\.md\)/.test(familyRootReadme), 'Family sample README should link to QUICKSTART.md.');
   assert(/\[TROUBLESHOOTING\.md\]\(TROUBLESHOOTING\.md\)/.test(familyRootReadme), 'Family sample README should link to TROUBLESHOOTING.md.');
-  assert(/xelera-method-workspace/.test(familyQuickstart), 'Family sample QUICKSTART should use the actual export root folder name.');
+  assert(/manoa-method-workspace/.test(familyQuickstart), 'Family sample QUICKSTART should use the actual export root folder name.');
   assert(!/PATH_TO_THIS_PACKAGE/.test(familyQuickstart), 'Family sample QUICKSTART should not use PATH_TO_THIS_PACKAGE.');
   assert(/blocked/i.test(familyTroubleshooting) && /validate/i.test(familyTroubleshooting), 'Family sample TROUBLESHOOTING should explain blocked and validate failures.');
   assert(/kid|child|parent/i.test(familyProjectBrief), 'Family sample brief should reference the family roles.');
@@ -1227,7 +1227,7 @@ async function main() {
   );
   assert(canExportBuildReady(approvedForBuildBundle) === true, 'Build-ready export should be available once the bundle is approved for build.');
 
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
   const cliResult = await createArtifactPackage({
     input: sample,
     outDir: tempDir,
@@ -1242,20 +1242,20 @@ async function main() {
   assert(fs.existsSync(path.join(cliResult.rootDir, 'CODEX_START_HERE.md')), 'CLI output is missing CODEX_START_HERE.md.');
   assert(fs.existsSync(path.join(cliResult.rootDir, 'CLAUDE_START_HERE.md')), 'CLI output is missing CLAUDE_START_HERE.md.');
   assert(fs.existsSync(path.join(cliResult.rootDir, 'OPENCODE_START_HERE.md')), 'CLI output is missing OPENCODE_START_HERE.md.');
-  assert(fs.existsSync(path.join(cliResult.rootDir, 'repo', 'xelera-state.json')), 'CLI output is missing repo/xelera-state.json.');
+  assert(fs.existsSync(path.join(cliResult.rootDir, 'repo', 'manoa-state.json')), 'CLI output is missing repo/manoa-state.json.');
 
   // Test next-phase behavior
   const testPkgDir = cliResult.rootDir;
 
   // Clear blocked phases for next-phase tests
-  const testStatePath = path.join(testPkgDir, 'repo', 'xelera-state.json');
+  const testStatePath = path.join(testPkgDir, 'repo', 'manoa-state.json');
   const testState = JSON.parse(fs.readFileSync(testStatePath, 'utf8'));
   testState.blockedPhases = [];
   fs.writeFileSync(testStatePath, JSON.stringify(testState, null, 2));
 
   // Test: next-phase without approval/evidence should fail
   try {
-    process.argv = ['node', 'xelera-next-phase.ts', `--package=${testPkgDir}`];
+    process.argv = ['node', 'manoa-next-phase.ts', `--package=${testPkgDir}`];
     runNextPhase();
     assert(false, 'next-phase should refuse to advance without approval/evidence');
   } catch (e) {
@@ -1291,7 +1291,7 @@ async function main() {
   const blockedReport = updateReport(fs.readFileSync(blockedReportPath, 'utf8'), 'fail', 'blocked');
   fs.writeFileSync(blockedReportPath, blockedReport);
   try {
-    process.argv = ['node', 'xelera-next-phase.ts', `--package=${testPkgDir}`, `--evidence=phases/phase-01/VERIFICATION_REPORT.md`];
+    process.argv = ['node', 'manoa-next-phase.ts', `--package=${testPkgDir}`, `--evidence=phases/phase-01/VERIFICATION_REPORT.md`];
     runNextPhase();
     assert(false, 'next-phase should refuse to advance with blocked evidence');
   } catch (e) {
@@ -1305,7 +1305,7 @@ async function main() {
   const reviseReport = updateReport(fs.readFileSync(blockedReportPath, 'utf8'), 'fail', 'revise');
   fs.writeFileSync(blockedReportPath, reviseReport);
   try {
-    process.argv = ['node', 'xelera-next-phase.ts', `--package=${testPkgDir}`, `--evidence=phases/phase-01/VERIFICATION_REPORT.md`];
+    process.argv = ['node', 'manoa-next-phase.ts', `--package=${testPkgDir}`, `--evidence=phases/phase-01/VERIFICATION_REPORT.md`];
     runNextPhase();
     assert(false, 'next-phase should refuse to advance with revise evidence');
   } catch (e) {
@@ -1319,7 +1319,7 @@ async function main() {
   const pendingRecReport = updateReport(fs.readFileSync(blockedReportPath, 'utf8'), 'pass', 'pending');
   fs.writeFileSync(blockedReportPath, pendingRecReport);
   try {
-    process.argv = ['node', 'xelera-next-phase.ts', `--package=${testPkgDir}`, `--evidence=phases/phase-01/VERIFICATION_REPORT.md`];
+    process.argv = ['node', 'manoa-next-phase.ts', `--package=${testPkgDir}`, `--evidence=phases/phase-01/VERIFICATION_REPORT.md`];
     runNextPhase();
     assert(false, 'next-phase should refuse to advance with pending recommendation');
   } catch (e) {
@@ -1333,7 +1333,7 @@ async function main() {
   const pendingResultReport = updateReport(fs.readFileSync(blockedReportPath, 'utf8'), 'pending', 'proceed');
   fs.writeFileSync(blockedReportPath, pendingResultReport);
   try {
-    process.argv = ['node', 'xelera-next-phase.ts', `--package=${testPkgDir}`, `--evidence=phases/phase-01/VERIFICATION_REPORT.md`];
+    process.argv = ['node', 'manoa-next-phase.ts', `--package=${testPkgDir}`, `--evidence=phases/phase-01/VERIFICATION_REPORT.md`];
     runNextPhase();
     assert(false, 'next-phase should refuse to advance with pending result');
   } catch (e) {
@@ -1347,7 +1347,7 @@ async function main() {
   const inconsistentReport = updateReport(fs.readFileSync(blockedReportPath, 'utf8'), 'fail', 'proceed');
   fs.writeFileSync(blockedReportPath, inconsistentReport);
   try {
-    process.argv = ['node', 'xelera-next-phase.ts', `--package=${testPkgDir}`, `--evidence=phases/phase-01/VERIFICATION_REPORT.md`];
+    process.argv = ['node', 'manoa-next-phase.ts', `--package=${testPkgDir}`, `--evidence=phases/phase-01/VERIFICATION_REPORT.md`];
     runNextPhase();
     assert(false, 'next-phase should refuse to advance with inconsistent result/recommendation');
   } catch (e) {
@@ -1358,9 +1358,9 @@ async function main() {
   }
 
   // Test: next-phase rejects generic fake evidence even when the report says pass + proceed
-  const genericEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+  const genericEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
   const genericEvidenceResult = await createArtifactPackage({ input: sample, outDir: genericEvidencePkg, zip: false });
-  const genericEvidenceStatePath = path.join(genericEvidenceResult.rootDir, 'repo', 'xelera-state.json');
+  const genericEvidenceStatePath = path.join(genericEvidenceResult.rootDir, 'repo', 'manoa-state.json');
   const genericEvidenceState = JSON.parse(fs.readFileSync(genericEvidenceStatePath, 'utf8'));
   genericEvidenceState.blockedPhases = [];
   fs.writeFileSync(genericEvidenceStatePath, JSON.stringify(genericEvidenceState, null, 2));
@@ -1372,7 +1372,7 @@ async function main() {
   genericEvidenceReport = replaceEvidenceSection(genericEvidenceReport, ['- notes/generic-evidence.md']);
   fs.writeFileSync(genericEvidenceReportPath, genericEvidenceReport);
   try {
-    process.argv = ['node', 'xelera-next-phase.ts', `--package=${genericEvidenceResult.rootDir}`, '--evidence=phases/phase-01/VERIFICATION_REPORT.md'];
+    process.argv = ['node', 'manoa-next-phase.ts', `--package=${genericEvidenceResult.rootDir}`, '--evidence=phases/phase-01/VERIFICATION_REPORT.md'];
     runNextPhase();
     assert(false, 'next-phase should reject generic fake evidence');
   } catch (e) {
@@ -1380,9 +1380,9 @@ async function main() {
   }
 
   // Test: next-phase rejects pass/proceed headers when the report body still says the phase is blocked
-  const contradictionPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+  const contradictionPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
   const contradictionResult = await createArtifactPackage({ input: sample, outDir: contradictionPkg, zip: false });
-  const contradictionStatePath = path.join(contradictionResult.rootDir, 'repo', 'xelera-state.json');
+  const contradictionStatePath = path.join(contradictionResult.rootDir, 'repo', 'manoa-state.json');
   const contradictionState = JSON.parse(fs.readFileSync(contradictionStatePath, 'utf8'));
   contradictionState.blockedPhases = [];
   fs.writeFileSync(contradictionStatePath, JSON.stringify(contradictionState, null, 2));
@@ -1400,7 +1400,7 @@ async function main() {
   contradictionReport = replaceReportSection(contradictionReport, 'final decision', 'Do not advance. The phase is not ready.');
   fs.writeFileSync(contradictionReportPath, contradictionReport);
   try {
-    process.argv = ['node', 'xelera-next-phase.ts', `--package=${contradictionResult.rootDir}`, '--evidence=phases/phase-01/VERIFICATION_REPORT.md'];
+    process.argv = ['node', 'manoa-next-phase.ts', `--package=${contradictionResult.rootDir}`, '--evidence=phases/phase-01/VERIFICATION_REPORT.md'];
     runNextPhase();
     assert(false, 'next-phase should reject header/body contradictions');
   } catch (e) {
@@ -1408,9 +1408,9 @@ async function main() {
   }
 
   // Test: next-phase accepts meaningful evidence with command output
-  const commandEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+  const commandEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
   const commandEvidenceResult = await createArtifactPackage({ input: sample, outDir: commandEvidencePkg, zip: false });
-  const commandEvidenceStatePath = path.join(commandEvidenceResult.rootDir, 'repo', 'xelera-state.json');
+  const commandEvidenceStatePath = path.join(commandEvidenceResult.rootDir, 'repo', 'manoa-state.json');
   const commandEvidenceState = JSON.parse(fs.readFileSync(commandEvidenceStatePath, 'utf8'));
   commandEvidenceState.blockedPhases = [];
   fs.writeFileSync(commandEvidenceStatePath, JSON.stringify(commandEvidenceState, null, 2));
@@ -1418,22 +1418,22 @@ async function main() {
   fs.mkdirSync(path.dirname(commandEvidenceFile), { recursive: true });
   fs.writeFileSync(
     commandEvidenceFile,
-    'Command run: `npm run typecheck`\nObserved result: PASS, no TypeScript errors in lib/generator.ts or scripts/xelera-package-utils.ts.\nChanged files: lib/generator.ts, scripts/xelera-package-utils.ts.\nDecision made: keep implementation-file assumptions out of planning phases.\n',
+    'Command run: `npm run typecheck`\nObserved result: PASS, no TypeScript errors in lib/generator.ts or scripts/manoa-package-utils.ts.\nChanged files: lib/generator.ts, scripts/manoa-package-utils.ts.\nDecision made: keep implementation-file assumptions out of planning phases.\n',
     'utf8'
   );
   const commandEvidenceReportPath = path.join(commandEvidenceResult.rootDir, 'phases', 'phase-01', 'VERIFICATION_REPORT.md');
   let commandEvidenceReport = updateReport(fs.readFileSync(commandEvidenceReportPath, 'utf8'), 'pass', 'proceed');
   commandEvidenceReport = replaceEvidenceSection(commandEvidenceReport, ['- notes/command-proof.md']);
   fs.writeFileSync(commandEvidenceReportPath, commandEvidenceReport);
-  process.argv = ['node', 'xelera-next-phase.ts', `--package=${commandEvidenceResult.rootDir}`, '--evidence=phases/phase-01/VERIFICATION_REPORT.md'];
+  process.argv = ['node', 'manoa-next-phase.ts', `--package=${commandEvidenceResult.rootDir}`, '--evidence=phases/phase-01/VERIFICATION_REPORT.md'];
   runNextPhase();
-  const commandEvidenceAdvancedState = JSON.parse(fs.readFileSync(path.join(commandEvidenceResult.rootDir, 'repo', 'xelera-state.json'), 'utf8'));
+  const commandEvidenceAdvancedState = JSON.parse(fs.readFileSync(path.join(commandEvidenceResult.rootDir, 'repo', 'manoa-state.json'), 'utf8'));
   assert(commandEvidenceAdvancedState.currentPhase === 2, 'next-phase should accept meaningful evidence with command output.');
 
   // Test: next-phase accepts meaningful evidence with a concrete scenario and observed result
-  const scenarioEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+  const scenarioEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
   const scenarioEvidenceResult = await createArtifactPackage({ input: familySample, outDir: scenarioEvidencePkg, zip: false });
-  const scenarioEvidenceStatePath = path.join(scenarioEvidenceResult.rootDir, 'repo', 'xelera-state.json');
+  const scenarioEvidenceStatePath = path.join(scenarioEvidenceResult.rootDir, 'repo', 'manoa-state.json');
   const scenarioEvidenceState = JSON.parse(fs.readFileSync(scenarioEvidenceStatePath, 'utf8'));
   scenarioEvidenceState.blockedPhases = [];
   fs.writeFileSync(scenarioEvidenceStatePath, JSON.stringify(scenarioEvidenceState, null, 2));
@@ -1448,18 +1448,18 @@ async function main() {
   let scenarioEvidenceReport = updateReport(fs.readFileSync(scenarioEvidenceReportPath, 'utf8'), 'pass', 'proceed');
   scenarioEvidenceReport = replaceEvidenceSection(scenarioEvidenceReport, ['- notes/scenario-proof.md']);
   fs.writeFileSync(scenarioEvidenceReportPath, scenarioEvidenceReport);
-  process.argv = ['node', 'xelera-next-phase.ts', `--package=${scenarioEvidenceResult.rootDir}`, '--evidence=phases/phase-01/VERIFICATION_REPORT.md'];
+  process.argv = ['node', 'manoa-next-phase.ts', `--package=${scenarioEvidenceResult.rootDir}`, '--evidence=phases/phase-01/VERIFICATION_REPORT.md'];
   runNextPhase();
-  const scenarioEvidenceAdvancedState = JSON.parse(fs.readFileSync(path.join(scenarioEvidenceResult.rootDir, 'repo', 'xelera-state.json'), 'utf8'));
+  const scenarioEvidenceAdvancedState = JSON.parse(fs.readFileSync(path.join(scenarioEvidenceResult.rootDir, 'repo', 'manoa-state.json'), 'utf8'));
   assert(scenarioEvidenceAdvancedState.currentPhase === 2, 'next-phase should accept meaningful scenario evidence.');
 
   // Test: next-phase with proceed evidence should succeed
   const proceedReport = updateReport(fs.readFileSync(blockedReportPath, 'utf8'), 'pass', 'proceed');
   fs.writeFileSync(blockedReportPath, proceedReport.replace(/- pending/, '- repo/manifest.json'));
-  process.argv = ['node', 'xelera-next-phase.ts', `--package=${testPkgDir}`, `--evidence=phases/phase-01/VERIFICATION_REPORT.md`, '--handoff=Smoke test handoff'];
+  process.argv = ['node', 'manoa-next-phase.ts', `--package=${testPkgDir}`, `--evidence=phases/phase-01/VERIFICATION_REPORT.md`, '--handoff=Smoke test handoff'];
   runNextPhase();
 
-  const updatedState = JSON.parse(fs.readFileSync(path.join(testPkgDir, 'repo', 'xelera-state.json'), 'utf8'));
+  const updatedState = JSON.parse(fs.readFileSync(path.join(testPkgDir, 'repo', 'manoa-state.json'), 'utf8'));
   assert(updatedState.currentPhase === 2, `Expected currentPhase to advance to 2, received ${updatedState.currentPhase}`);
   assert(updatedState.completedPhases.includes('phase-01'), 'Expected phase-01 to be in completedPhases');
   assert(updatedState.phaseEvidence['phase-01'].approvedToProceed === true, 'Expected phase-01 to be approved to proceed');
@@ -1467,20 +1467,20 @@ async function main() {
   assert(updatedState.lastHandoffSummary === 'Smoke test handoff', 'Expected handoff summary to be recorded');
 
   // Test: next-phase with manual approval should succeed
-  const testPkgDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+  const testPkgDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
   const cliResult2 = await createArtifactPackage({
     input: sample,
     outDir: testPkgDir2,
     zip: false
   });
   // Clear blocked phases for manual approval test
-  const testStatePath2 = path.join(cliResult2.rootDir, 'repo', 'xelera-state.json');
+  const testStatePath2 = path.join(cliResult2.rootDir, 'repo', 'manoa-state.json');
   const testState2 = JSON.parse(fs.readFileSync(testStatePath2, 'utf8'));
   testState2.blockedPhases = [];
   fs.writeFileSync(testStatePath2, JSON.stringify(testState2, null, 2));
-  process.argv = ['node', 'xelera-next-phase.ts', `--package=${cliResult2.rootDir}`, '--approve=true', '--handoff=Manual approval test'];
+  process.argv = ['node', 'manoa-next-phase.ts', `--package=${cliResult2.rootDir}`, '--approve=true', '--handoff=Manual approval test'];
   runNextPhase();
-  const manualState = JSON.parse(fs.readFileSync(path.join(cliResult2.rootDir, 'repo', 'xelera-state.json'), 'utf8'));
+  const manualState = JSON.parse(fs.readFileSync(path.join(cliResult2.rootDir, 'repo', 'manoa-state.json'), 'utf8'));
   assert(manualState.currentPhase === 2, `Expected currentPhase to advance to 2 with manual approval, received ${manualState.currentPhase}`);
   assert(manualState.phaseEvidence['phase-01'].manualApproval === true, 'Expected manualApproval to be recorded');
   assert(manualState.phaseEvidence['phase-01'].approvedToProceed === true, 'Expected approvedToProceed to be true with manual approval');
@@ -1525,7 +1525,7 @@ async function main() {
   );
 
   // Test: validate catches missing evidence file on disk
-  const missingEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+  const missingEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
   const cliResultMissing = await createArtifactPackage({ input: sample, outDir: missingEvidencePkg, zip: false });
   const missingReportPath = path.join(cliResultMissing.rootDir, 'phases', 'phase-01', 'VERIFICATION_REPORT.md');
   let missingReportContent = updateReport(fs.readFileSync(missingReportPath, 'utf8'), 'pass', 'proceed');
@@ -1541,7 +1541,7 @@ async function main() {
   }) as typeof process.exit;
 
   try {
-    process.argv = ['node', 'xelera-validate.ts', `--package=${cliResultMissing.rootDir}`];
+    process.argv = ['node', 'manoa-validate.ts', `--package=${cliResultMissing.rootDir}`];
     try {
       runValidate();
       assert(false, 'validate should catch missing evidence file');
@@ -1550,13 +1550,13 @@ async function main() {
     }
 
     // Test: validate catches pass+proceed with only pending evidence placeholder
-    const noListedEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+    const noListedEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
     const cliResultNoEvidence = await createArtifactPackage({ input: sample, outDir: noListedEvidencePkg, zip: false });
     const noEvidenceReportPath = path.join(cliResultNoEvidence.rootDir, 'phases', 'phase-01', 'VERIFICATION_REPORT.md');
     let noEvidenceReport = updateReport(fs.readFileSync(noEvidenceReportPath, 'utf8'), 'pass', 'proceed');
     fs.writeFileSync(noEvidenceReportPath, noEvidenceReport);
 
-    process.argv = ['node', 'xelera-validate.ts', `--package=${cliResultNoEvidence.rootDir}`];
+    process.argv = ['node', 'manoa-validate.ts', `--package=${cliResultNoEvidence.rootDir}`];
     try {
       runValidate();
       assert(false, 'validate should reject pending-only evidence placeholder');
@@ -1565,14 +1565,14 @@ async function main() {
     }
 
     // Test: validate rejects report sections that still contain only comments or placeholders
-    const commentOnlyEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+    const commentOnlyEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
     const cliResultCommentOnly = await createArtifactPackage({ input: sample, outDir: commentOnlyEvidencePkg, zip: false });
     const commentOnlyReportPath = path.join(cliResultCommentOnly.rootDir, 'phases', 'phase-01', 'VERIFICATION_REPORT.md');
     let commentOnlyReport = updateReport(fs.readFileSync(commentOnlyReportPath, 'utf8'), 'pass', 'proceed');
     commentOnlyReport = replaceEvidenceSection(commentOnlyReport, ['- <!-- reviewed later -->', '- pending']);
     fs.writeFileSync(commentOnlyReportPath, commentOnlyReport);
 
-    process.argv = ['node', 'xelera-validate.ts', `--package=${cliResultCommentOnly.rootDir}`];
+    process.argv = ['node', 'manoa-validate.ts', `--package=${cliResultCommentOnly.rootDir}`];
     try {
       runValidate();
       assert(false, 'validate should reject comment-only evidence entries');
@@ -1581,7 +1581,7 @@ async function main() {
     }
 
     // Test: validate rejects scaffold-only evidence files with template content
-    const scaffoldOnlyEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+    const scaffoldOnlyEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
     const cliResultScaffoldOnly = await createArtifactPackage({ input: sample, outDir: scaffoldOnlyEvidencePkg, zip: false });
     const scaffoldOnlyReportPath = path.join(cliResultScaffoldOnly.rootDir, 'phases', 'phase-01', 'VERIFICATION_REPORT.md');
     let scaffoldOnlyReport = updateReport(fs.readFileSync(scaffoldOnlyReportPath, 'utf8'), 'pass', 'proceed');
@@ -1591,7 +1591,7 @@ async function main() {
     ]);
     fs.writeFileSync(scaffoldOnlyReportPath, scaffoldOnlyReport);
 
-    process.argv = ['node', 'xelera-validate.ts', `--package=${cliResultScaffoldOnly.rootDir}`];
+    process.argv = ['node', 'manoa-validate.ts', `--package=${cliResultScaffoldOnly.rootDir}`];
     try {
       runValidate();
       assert(false, 'validate should reject scaffold-only evidence files that still contain template content');
@@ -1600,7 +1600,7 @@ async function main() {
     }
 
     // Test: validate rejects listed evidence files that contain only comments
-    const commentFileEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+    const commentFileEvidencePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
     const cliResultCommentFile = await createArtifactPackage({ input: sample, outDir: commentFileEvidencePkg, zip: false });
     const commentFilePath = path.join(cliResultCommentFile.rootDir, 'notes', 'comment-only.md');
     fs.mkdirSync(path.dirname(commentFilePath), { recursive: true });
@@ -1610,7 +1610,7 @@ async function main() {
     commentFileReport = replaceEvidenceSection(commentFileReport, ['- notes/comment-only.md']);
     fs.writeFileSync(commentFileReportPath, commentFileReport);
 
-    process.argv = ['node', 'xelera-validate.ts', `--package=${cliResultCommentFile.rootDir}`];
+    process.argv = ['node', 'manoa-validate.ts', `--package=${cliResultCommentFile.rootDir}`];
     try {
       runValidate();
       assert(false, 'validate should reject evidence files that contain only comments or template text');
@@ -1619,7 +1619,7 @@ async function main() {
     }
 
     // Test: validate rejects generic fake evidence
-    const genericValidatePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+    const genericValidatePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
     const genericValidateResult = await createArtifactPackage({ input: sample, outDir: genericValidatePkg, zip: false });
     const genericValidateEvidencePath = path.join(genericValidateResult.rootDir, 'notes', 'generic-evidence.md');
     fs.mkdirSync(path.dirname(genericValidateEvidencePath), { recursive: true });
@@ -1628,7 +1628,7 @@ async function main() {
     let genericValidateReport = updateReport(fs.readFileSync(genericValidateReportPath, 'utf8'), 'pass', 'proceed');
     genericValidateReport = replaceEvidenceSection(genericValidateReport, ['- notes/generic-evidence.md']);
     fs.writeFileSync(genericValidateReportPath, genericValidateReport);
-    process.argv = ['node', 'xelera-validate.ts', `--package=${genericValidateResult.rootDir}`];
+    process.argv = ['node', 'manoa-validate.ts', `--package=${genericValidateResult.rootDir}`];
     try {
       runValidate();
       assert(false, 'validate should reject generic fake evidence');
@@ -1637,7 +1637,7 @@ async function main() {
     }
 
     // Test: validate rejects pass/proceed headers when the body still says blocked
-    const contradictionValidatePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+    const contradictionValidatePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
     const contradictionValidateResult = await createArtifactPackage({ input: sample, outDir: contradictionValidatePkg, zip: false });
     const contradictionValidateEvidencePath = path.join(contradictionValidateResult.rootDir, 'notes', 'scenario-proof.md');
     fs.mkdirSync(path.dirname(contradictionValidateEvidencePath), { recursive: true });
@@ -1652,7 +1652,7 @@ async function main() {
     contradictionValidateReport = replaceReportSection(contradictionValidateReport, 'summary', '- The phase is blocked because the scope is not ready.');
     contradictionValidateReport = replaceReportSection(contradictionValidateReport, 'final decision', 'Do not advance. The package is not ready.');
     fs.writeFileSync(contradictionValidateReportPath, contradictionValidateReport);
-    process.argv = ['node', 'xelera-validate.ts', `--package=${contradictionValidateResult.rootDir}`];
+    process.argv = ['node', 'manoa-validate.ts', `--package=${contradictionValidateResult.rootDir}`];
     try {
       runValidate();
       assert(false, 'validate should reject header/body contradictions');
@@ -1661,7 +1661,7 @@ async function main() {
     }
 
     // Test: validate accepts meaningful evidence with command output
-    const commandValidatePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+    const commandValidatePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
     const commandValidateResult = await createArtifactPackage({ input: sample, outDir: commandValidatePkg, zip: false });
     const commandValidateEvidencePath = path.join(commandValidateResult.rootDir, 'notes', 'command-proof.md');
     fs.mkdirSync(path.dirname(commandValidateEvidencePath), { recursive: true });
@@ -1682,11 +1682,11 @@ async function main() {
         .replace(/## Commands run\n-/, '## Commands run\n- npm run smoke')
         .replace(/## Notes\n-/, '## Notes\n- Smoke test passed with no TypeScript errors.')
     );
-    process.argv = ['node', 'xelera-validate.ts', `--package=${commandValidateResult.rootDir}`];
+    process.argv = ['node', 'manoa-validate.ts', `--package=${commandValidateResult.rootDir}`];
     runValidate();
 
     // Test: validate accepts meaningful evidence with a concrete scenario and observed result
-    const scenarioValidatePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+    const scenarioValidatePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
     const scenarioValidateResult = await createArtifactPackage({ input: familySample, outDir: scenarioValidatePkg, zip: false });
     const scenarioValidateEvidencePath = path.join(scenarioValidateResult.rootDir, 'notes', 'scenario-proof.md');
     fs.mkdirSync(path.dirname(scenarioValidateEvidencePath), { recursive: true });
@@ -1707,14 +1707,14 @@ async function main() {
         .replace(/## Manual checks completed\n-/, '## Manual checks completed\n- Verified child-visible task rules in PHASE_BRIEF.md')
         .replace(/## Notes\n-/, '## Notes\n- Parent approval boundary is explicit and kid dashboard scope is correct.')
     );
-    process.argv = ['node', 'xelera-validate.ts', `--package=${scenarioValidateResult.rootDir}`];
+    process.argv = ['node', 'manoa-validate.ts', `--package=${scenarioValidateResult.rootDir}`];
     runValidate();
 
     // Test: validate rejects missing root testing files
-    const missingTestingFilesPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+    const missingTestingFilesPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
     const cliResultMissingTesting = await createArtifactPackage({ input: sample, outDir: missingTestingFilesPkg, zip: false });
     fs.unlinkSync(path.join(cliResultMissingTesting.rootDir, 'TESTING_STRATEGY.md'));
-    process.argv = ['node', 'xelera-validate.ts', `--package=${cliResultMissingTesting.rootDir}`];
+    process.argv = ['node', 'manoa-validate.ts', `--package=${cliResultMissingTesting.rootDir}`];
     try {
       runValidate();
       assert(false, 'validate should reject missing root testing files');
@@ -1723,10 +1723,10 @@ async function main() {
     }
 
     // Test: validate rejects missing phase TEST_SCRIPT.md
-    const missingTestScriptPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+    const missingTestScriptPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
     const cliResultMissingScript = await createArtifactPackage({ input: sample, outDir: missingTestScriptPkg, zip: false });
     fs.unlinkSync(path.join(cliResultMissingScript.rootDir, 'phases', 'phase-01', 'TEST_SCRIPT.md'));
-    process.argv = ['node', 'xelera-validate.ts', `--package=${cliResultMissingScript.rootDir}`];
+    process.argv = ['node', 'manoa-validate.ts', `--package=${cliResultMissingScript.rootDir}`];
     try {
       runValidate();
       assert(false, 'validate should reject missing phase TEST_SCRIPT.md');
@@ -1735,10 +1735,10 @@ async function main() {
     }
 
     // Test: validate rejects missing phase TEST_RESULTS.md
-    const missingTestResultsPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+    const missingTestResultsPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
     const cliResultMissingResults = await createArtifactPackage({ input: sample, outDir: missingTestResultsPkg, zip: false });
     fs.unlinkSync(path.join(cliResultMissingResults.rootDir, 'phases', 'phase-01', 'TEST_RESULTS.md'));
-    process.argv = ['node', 'xelera-validate.ts', `--package=${cliResultMissingResults.rootDir}`];
+    process.argv = ['node', 'manoa-validate.ts', `--package=${cliResultMissingResults.rootDir}`];
     try {
       runValidate();
       assert(false, 'validate should reject missing phase TEST_RESULTS.md');
@@ -1747,13 +1747,13 @@ async function main() {
     }
 
     // Test: validate rejects TEST_RESULTS.md defaulting to pass
-    const defaultPassResultsPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+    const defaultPassResultsPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
     const cliResultDefaultPass = await createArtifactPackage({ input: sample, outDir: defaultPassResultsPkg, zip: false });
     const defaultPassResultsPath = path.join(cliResultDefaultPass.rootDir, 'phases', 'phase-01', 'TEST_RESULTS.md');
     let defaultPassResults = fs.readFileSync(defaultPassResultsPath, 'utf8');
     defaultPassResults = defaultPassResults.replace(/## Final result: pending/, '## Final result: pass');
     fs.writeFileSync(defaultPassResultsPath, defaultPassResults);
-    process.argv = ['node', 'xelera-validate.ts', `--package=${cliResultDefaultPass.rootDir}`];
+    process.argv = ['node', 'manoa-validate.ts', `--package=${cliResultDefaultPass.rootDir}`];
     try {
       runValidate();
       assert(false, 'validate should reject TEST_RESULTS.md defaulting to pass');
@@ -1762,13 +1762,13 @@ async function main() {
     }
 
     // Test: validate rejects generic fake test evidence in TEST_RESULTS.md
-    const genericTestResultsPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+    const genericTestResultsPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
     const cliResultGenericResults = await createArtifactPackage({ input: sample, outDir: genericTestResultsPkg, zip: false });
     const genericTestResultsPath = path.join(cliResultGenericResults.rootDir, 'phases', 'phase-01', 'TEST_RESULTS.md');
     let genericTestResults = fs.readFileSync(genericTestResultsPath, 'utf8');
     genericTestResults = genericTestResults.replace(/## Notes\n-/, '## Notes\n- Looks good. No issues found.');
     fs.writeFileSync(genericTestResultsPath, genericTestResults);
-    process.argv = ['node', 'xelera-validate.ts', `--package=${cliResultGenericResults.rootDir}`];
+    process.argv = ['node', 'manoa-validate.ts', `--package=${cliResultGenericResults.rootDir}`];
     try {
       runValidate();
       assert(false, 'validate should reject generic fake test evidence');
@@ -1777,13 +1777,13 @@ async function main() {
     }
 
     // Test: validate rejects verification pass while TEST_RESULTS.md is pending
-    const verifyPassTestsPendingPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+    const verifyPassTestsPendingPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
     const cliResultVerifyPassTestsPending = await createArtifactPackage({ input: sample, outDir: verifyPassTestsPendingPkg, zip: false });
     const verifyPassTestsPendingReportPath = path.join(cliResultVerifyPassTestsPending.rootDir, 'phases', 'phase-01', 'VERIFICATION_REPORT.md');
     let verifyPassTestsPendingReport = updateReport(fs.readFileSync(verifyPassTestsPendingReportPath, 'utf8'), 'pass', 'proceed');
     verifyPassTestsPendingReport = verifyPassTestsPendingReport.replace(/- pending/, '- repo/manifest.json');
     fs.writeFileSync(verifyPassTestsPendingReportPath, verifyPassTestsPendingReport);
-    process.argv = ['node', 'xelera-validate.ts', `--package=${cliResultVerifyPassTestsPending.rootDir}`];
+    process.argv = ['node', 'manoa-validate.ts', `--package=${cliResultVerifyPassTestsPending.rootDir}`];
     try {
       runValidate();
       assert(false, 'validate should reject verification pass while TEST_RESULTS.md is pending');
@@ -1792,13 +1792,13 @@ async function main() {
     }
 
     // Test: validate rejects regression results defaulting to pass
-    const regressionDefaultPassPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+    const regressionDefaultPassPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
     const cliResultRegressionDefaultPass = await createArtifactPackage({ input: sample, outDir: regressionDefaultPassPkg, zip: false });
     const regressionDefaultPassPath = path.join(cliResultRegressionDefaultPass.rootDir, 'regression-suite', 'REGRESSION_RESULTS_TEMPLATE.md');
     let regressionDefaultPassContent = fs.readFileSync(regressionDefaultPassPath, 'utf8');
     regressionDefaultPassContent = regressionDefaultPassContent.replace(/## Overall result: pending/, '## Overall result: pass');
     fs.writeFileSync(regressionDefaultPassPath, regressionDefaultPassContent);
-    process.argv = ['node', 'xelera-validate.ts', `--package=${cliResultRegressionDefaultPass.rootDir}`];
+    process.argv = ['node', 'manoa-validate.ts', `--package=${cliResultRegressionDefaultPass.rootDir}`];
     try {
       runValidate();
       assert(false, 'validate should reject regression results defaulting to pass');
@@ -1807,14 +1807,14 @@ async function main() {
     }
 
     // Test: validate catches malformed state
-    const malformedPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+    const malformedPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
     const cliResultMalformed = await createArtifactPackage({ input: sample, outDir: malformedPkg, zip: false });
-    const malformedStatePath = path.join(cliResultMalformed.rootDir, 'repo', 'xelera-state.json');
+    const malformedStatePath = path.join(cliResultMalformed.rootDir, 'repo', 'manoa-state.json');
     const malformedState = JSON.parse(fs.readFileSync(malformedStatePath, 'utf8'));
     malformedState.currentPhase = 999;
     fs.writeFileSync(malformedStatePath, JSON.stringify(malformedState, null, 2));
 
-    process.argv = ['node', 'xelera-validate.ts', `--package=${cliResultMalformed.rootDir}`];
+    process.argv = ['node', 'manoa-validate.ts', `--package=${cliResultMalformed.rootDir}`];
     try {
       runValidate();
       assert(false, 'validate should catch malformed state');
@@ -1826,9 +1826,9 @@ async function main() {
   }
 
   // Test: next-phase with pass+proceed but only pending evidence should fail
-  const noListedEvidenceAdvancePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+  const noListedEvidenceAdvancePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
   const cliResultNoListedAdvance = await createArtifactPackage({ input: sample, outDir: noListedEvidenceAdvancePkg, zip: false });
-  const noListedAdvanceStatePath = path.join(cliResultNoListedAdvance.rootDir, 'repo', 'xelera-state.json');
+  const noListedAdvanceStatePath = path.join(cliResultNoListedAdvance.rootDir, 'repo', 'manoa-state.json');
   const noListedAdvanceState = JSON.parse(fs.readFileSync(noListedAdvanceStatePath, 'utf8'));
   noListedAdvanceState.blockedPhases = [];
   fs.writeFileSync(noListedAdvanceStatePath, JSON.stringify(noListedAdvanceState, null, 2));
@@ -1836,7 +1836,7 @@ async function main() {
   let noListedAdvanceReport = updateReport(fs.readFileSync(noListedAdvanceReportPath, 'utf8'), 'pass', 'proceed');
   fs.writeFileSync(noListedAdvanceReportPath, noListedAdvanceReport);
   try {
-    process.argv = ['node', 'xelera-next-phase.ts', `--package=${cliResultNoListedAdvance.rootDir}`, '--evidence=phases/phase-01/VERIFICATION_REPORT.md'];
+    process.argv = ['node', 'manoa-next-phase.ts', `--package=${cliResultNoListedAdvance.rootDir}`, '--evidence=phases/phase-01/VERIFICATION_REPORT.md'];
     runNextPhase();
     assert(false, 'next-phase should refuse to advance when the report does not list evidence files');
   } catch (e) {
@@ -1847,9 +1847,9 @@ async function main() {
   }
 
   // Test: next-phase rejects scaffold-only evidence files with template content
-  const scaffoldOnlyAdvancePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+  const scaffoldOnlyAdvancePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
   const cliResultScaffoldOnlyAdvance = await createArtifactPackage({ input: sample, outDir: scaffoldOnlyAdvancePkg, zip: false });
-  const scaffoldOnlyAdvanceStatePath = path.join(cliResultScaffoldOnlyAdvance.rootDir, 'repo', 'xelera-state.json');
+  const scaffoldOnlyAdvanceStatePath = path.join(cliResultScaffoldOnlyAdvance.rootDir, 'repo', 'manoa-state.json');
   const scaffoldOnlyAdvanceState = JSON.parse(fs.readFileSync(scaffoldOnlyAdvanceStatePath, 'utf8'));
   scaffoldOnlyAdvanceState.blockedPhases = [];
   fs.writeFileSync(scaffoldOnlyAdvanceStatePath, JSON.stringify(scaffoldOnlyAdvanceState, null, 2));
@@ -1861,7 +1861,7 @@ async function main() {
   ]);
   fs.writeFileSync(scaffoldOnlyAdvanceReportPath, scaffoldOnlyAdvanceReport);
   try {
-    process.argv = ['node', 'xelera-next-phase.ts', `--package=${cliResultScaffoldOnlyAdvance.rootDir}`, '--evidence=phases/phase-01/VERIFICATION_REPORT.md'];
+    process.argv = ['node', 'manoa-next-phase.ts', `--package=${cliResultScaffoldOnlyAdvance.rootDir}`, '--evidence=phases/phase-01/VERIFICATION_REPORT.md'];
     runNextPhase();
     assert(false, 'next-phase should reject scaffold-only evidence files that still contain template content');
   } catch (e) {
@@ -1872,9 +1872,9 @@ async function main() {
   }
 
   // Test: next-phase rejects listed evidence files that contain only comments
-  const commentFileAdvancePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+  const commentFileAdvancePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
   const cliResultCommentFileAdvance = await createArtifactPackage({ input: sample, outDir: commentFileAdvancePkg, zip: false });
-  const commentFileAdvanceStatePath = path.join(cliResultCommentFileAdvance.rootDir, 'repo', 'xelera-state.json');
+  const commentFileAdvanceStatePath = path.join(cliResultCommentFileAdvance.rootDir, 'repo', 'manoa-state.json');
   const commentFileAdvanceState = JSON.parse(fs.readFileSync(commentFileAdvanceStatePath, 'utf8'));
   commentFileAdvanceState.blockedPhases = [];
   fs.writeFileSync(commentFileAdvanceStatePath, JSON.stringify(commentFileAdvanceState, null, 2));
@@ -1886,7 +1886,7 @@ async function main() {
   commentFileAdvanceReport = replaceEvidenceSection(commentFileAdvanceReport, ['- notes/comment-only.md']);
   fs.writeFileSync(commentFileAdvanceReportPath, commentFileAdvanceReport);
   try {
-    process.argv = ['node', 'xelera-next-phase.ts', `--package=${cliResultCommentFileAdvance.rootDir}`, '--evidence=phases/phase-01/VERIFICATION_REPORT.md'];
+    process.argv = ['node', 'manoa-next-phase.ts', `--package=${cliResultCommentFileAdvance.rootDir}`, '--evidence=phases/phase-01/VERIFICATION_REPORT.md'];
     runNextPhase();
     assert(false, 'next-phase should reject evidence files that contain only comments or template text');
   } catch (e) {
@@ -1897,9 +1897,9 @@ async function main() {
   }
 
   // Test: next-phase accepts pass+proceed when the report lists a real existing evidence file
-  const realEvidenceAdvancePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+  const realEvidenceAdvancePkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
   const cliResultRealEvidenceAdvance = await createArtifactPackage({ input: sample, outDir: realEvidenceAdvancePkg, zip: false });
-  const realEvidenceStatePath = path.join(cliResultRealEvidenceAdvance.rootDir, 'repo', 'xelera-state.json');
+  const realEvidenceStatePath = path.join(cliResultRealEvidenceAdvance.rootDir, 'repo', 'manoa-state.json');
   const realEvidenceState = JSON.parse(fs.readFileSync(realEvidenceStatePath, 'utf8'));
   realEvidenceState.blockedPhases = [];
   fs.writeFileSync(realEvidenceStatePath, JSON.stringify(realEvidenceState, null, 2));
@@ -1907,13 +1907,13 @@ async function main() {
   let realEvidenceReport = updateReport(fs.readFileSync(realEvidenceReportPath, 'utf8'), 'pass', 'proceed');
   realEvidenceReport = realEvidenceReport.replace(/- pending/, '- repo/manifest.json');
   fs.writeFileSync(realEvidenceReportPath, realEvidenceReport);
-  process.argv = ['node', 'xelera-next-phase.ts', `--package=${cliResultRealEvidenceAdvance.rootDir}`, '--evidence=phases/phase-01/VERIFICATION_REPORT.md'];
+  process.argv = ['node', 'manoa-next-phase.ts', `--package=${cliResultRealEvidenceAdvance.rootDir}`, '--evidence=phases/phase-01/VERIFICATION_REPORT.md'];
   runNextPhase();
-  const realEvidenceAdvancedState = JSON.parse(fs.readFileSync(path.join(cliResultRealEvidenceAdvance.rootDir, 'repo', 'xelera-state.json'), 'utf8'));
+  const realEvidenceAdvancedState = JSON.parse(fs.readFileSync(path.join(cliResultRealEvidenceAdvance.rootDir, 'repo', 'manoa-state.json'), 'utf8'));
   assert(realEvidenceAdvancedState.currentPhase === 2, 'next-phase should accept real listed evidence files that exist on disk');
 
   function captureStatusOutput(packagePath: string) {
-    process.argv = ['node', 'xelera-status.ts', `--package=${packagePath}`];
+    process.argv = ['node', 'manoa-status.ts', `--package=${packagePath}`];
     const logs: string[] = [];
     console.log = (...args: unknown[]) => logs.push(args.join(' '));
     runStatus();
@@ -1922,12 +1922,12 @@ async function main() {
   }
 
   function runValidateWithoutFailure(packagePath: string) {
-    process.argv = ['node', 'xelera-validate.ts', `--package=${packagePath}`];
+    process.argv = ['node', 'manoa-validate.ts', `--package=${packagePath}`];
     runValidate();
   }
 
   // Test: fresh package shows scaffold evidence separately from report-listed evidence
-  const freshStatusPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+  const freshStatusPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
   const freshStatusResult = await createArtifactPackage({ input: sample, outDir: freshStatusPkg, zip: false });
   const originalLog = console.log;
   const freshStatusOutput = captureStatusOutput(freshStatusResult.rootDir);
@@ -1942,7 +1942,7 @@ async function main() {
   );
 
   // Test: status explains that verification can pass while lifecycle blockers still stop advancement
-  const blockedVerifiedPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+  const blockedVerifiedPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
   const blockedVerifiedResult = await createArtifactPackage({ input: sample, outDir: blockedVerifiedPkg, zip: false });
   const blockedVerifiedReportPath = path.join(blockedVerifiedResult.rootDir, 'phases', 'phase-01', 'VERIFICATION_REPORT.md');
   let blockedVerifiedReport = updateReport(fs.readFileSync(blockedVerifiedReportPath, 'utf8'), 'pass', 'proceed');
@@ -1955,7 +1955,7 @@ async function main() {
   );
 
   // Test: status clearly reports when no evidence files are listed in the verification report
-  const noEvidenceStatusPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+  const noEvidenceStatusPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
   const noEvidenceStatusResult = await createArtifactPackage({ input: sample, outDir: noEvidenceStatusPkg, zip: false });
   const noEvidenceStatusReportPath = path.join(noEvidenceStatusResult.rootDir, 'phases', 'phase-01', 'VERIFICATION_REPORT.md');
   let noEvidenceStatusReport = fs.readFileSync(noEvidenceStatusReportPath, 'utf8');
@@ -1974,7 +1974,7 @@ async function main() {
   );
 
   // Test: status clearly reports when listed evidence files exist
-  const citedEvidenceStatusPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+  const citedEvidenceStatusPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
   const citedEvidenceStatusResult = await createArtifactPackage({ input: sample, outDir: citedEvidenceStatusPkg, zip: false });
   const citedEvidenceReportPath = path.join(citedEvidenceStatusResult.rootDir, 'phases', 'phase-01', 'VERIFICATION_REPORT.md');
   let citedEvidenceReport = fs.readFileSync(citedEvidenceReportPath, 'utf8');
@@ -1987,7 +1987,7 @@ async function main() {
   );
 
   // Test: status clearly reports when a listed evidence file is missing
-  const missingEvidenceStatusPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-'));
+  const missingEvidenceStatusPkg = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-'));
   const missingEvidenceStatusResult = await createArtifactPackage({ input: sample, outDir: missingEvidenceStatusPkg, zip: false });
   const missingEvidenceStatusReportPath = path.join(missingEvidenceStatusResult.rootDir, 'phases', 'phase-01', 'VERIFICATION_REPORT.md');
   let missingEvidenceStatusReport = fs.readFileSync(missingEvidenceStatusReportPath, 'utf8');
@@ -2016,7 +2016,7 @@ async function main() {
 
   // Test: manual approval is visible in status
   // Rewind current phase to 1 so status shows the manually approved phase
-  const manualStatusStatePath = path.join(cliResult2.rootDir, 'repo', 'xelera-state.json');
+  const manualStatusStatePath = path.join(cliResult2.rootDir, 'repo', 'manoa-state.json');
   const manualStatusState = JSON.parse(fs.readFileSync(manualStatusStatePath, 'utf8'));
   const savedCurrentPhase = manualStatusState.currentPhase;
   manualStatusState.currentPhase = 1;
@@ -2031,11 +2031,11 @@ async function main() {
   fs.writeFileSync(manualStatusStatePath, JSON.stringify(manualStatusState, null, 2));
 
   // Test: family example can be generated, validated, and inspected with status immediately after creation
-  const familyPkgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'xelera-smoke-family-'));
+  const familyPkgDir = fs.mkdtempSync(path.join(os.tmpdir(), 'manoa-smoke-family-'));
   const familyCliResult = await createArtifactPackage({ input: familySample, outDir: familyPkgDir, zip: false });
   runValidateWithoutFailure(familyCliResult.rootDir);
   const familyStatusOutput = captureStatusOutput(familyCliResult.rootDir);
-  assert(/Xelera Method Package Status/.test(familyStatusOutput), 'Family sample status should render successfully.');
+  assert(/Manoa Method Package Status/.test(familyStatusOutput), 'Family sample status should render successfully.');
   assert(/Family Task Board/i.test(familyStatusOutput), 'Family sample status should reference Family Task Board.');
   assert(/Current phase:/i.test(familyStatusOutput), 'Family sample status should show the current phase.');
 

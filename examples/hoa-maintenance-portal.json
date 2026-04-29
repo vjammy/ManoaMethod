@@ -14,7 +14,7 @@
   "successMetrics": "A reviewer can trace a request from submission through triage to vendor completion and resident notification.",
   "nonGoals": "No payment processing, no legal document storage, no resident voting in v1.",
   "timeline": "Plan a realistic first release that proves the request workflow works before adding richer features.",
-  "teamContext": "An HOA board member uses Xelera Method to prepare the portal plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
+  "teamContext": "An HOA board member uses Manoa Method to prepare the portal plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
   "questionnaireAnswers": {
     "north-star": "The first release must prove that residents can submit requests, board members can triage and assign vendors, and residents can track status.",
     "primary-workflow": "A resident submits a maintenance request, a board member triages it, assigns a vendor, the vendor updates status, and the resident receives notifications at key stages.",

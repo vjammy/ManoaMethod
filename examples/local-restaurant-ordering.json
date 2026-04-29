@@ -14,7 +14,7 @@
   "successMetrics": "A reviewer can understand how an order moves from creation to kitchen acknowledgment to pickup and what evidence proves failure handling.",
   "nonGoals": "No delivery, no loyalty program, no marketplace integrations.",
   "timeline": "Plan a realistic first release that proves the pickup workflow works before adding delivery or loyalty features.",
-  "teamContext": "A restaurant owner uses Xelera Method to prepare the ordering app plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
+  "teamContext": "A restaurant owner uses Manoa Method to prepare the ordering app plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
   "questionnaireAnswers": {
     "north-star": "The release must prove that pickup ordering and kitchen handoff are clear and reviewable.",
     "primary-workflow": "A customer places a pickup order, staff confirm it, the kitchen acknowledges it, the order moves to ready state, and the customer picks it up.",

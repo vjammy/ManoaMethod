@@ -17,8 +17,8 @@ import {
   resolveEvidencePath,
   resolvePackageRoot,
   writeJsonFile
-} from './xelera-package-utils';
-import type { XeleraState } from '../lib/types';
+} from './manoa-package-utils';
+import type { ManoaState } from '../lib/types';
 
 export function runNextPhase() {
   const packageRoot = resolvePackageRoot(getArg('package'));
@@ -125,14 +125,14 @@ export function runNextPhase() {
   const nextSlug = getPhaseSlug(nextPhaseNumber);
   const handoff = getArg('handoff') || state.lastHandoffSummary;
 
-  const nextState: XeleraState = {
+  const nextState: ManoaState = {
     ...state,
     completedPhases: state.completedPhases.includes(currentSlug)
       ? state.completedPhases
       : state.completedPhases.concat(currentSlug),
     currentPhase: nextPhaseNumber,
     lastHandoffSummary: handoff,
-    lifecycleStatus: manifest.lifecycleStatus as XeleraState['lifecycleStatus'],
+    lifecycleStatus: manifest.lifecycleStatus as ManoaState['lifecycleStatus'],
     blockedPhases: state.currentPhase >= manifest.phaseCount ? state.blockedPhases : [],
     phaseEvidence: {
       ...state.phaseEvidence,
@@ -151,13 +151,13 @@ export function runNextPhase() {
     }
   };
 
-  writeJsonFile(path.join(packageRoot, 'repo', 'xelera-state.json'), nextState);
+  writeJsonFile(path.join(packageRoot, 'repo', 'manoa-state.json'), nextState);
   writeJsonFile(path.join(packageRoot, 'repo', 'manifest.json'), {
     ...manifest,
     currentPhase: nextState.currentPhase,
     blockedPhases: nextState.blockedPhases
   });
-  console.log(`Moved package to ${nextSlug}. Updated repo/xelera-state.json with verification evidence.`);
+  console.log(`Moved package to ${nextSlug}. Updated repo/manoa-state.json with verification evidence.`);
 }
 
 const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

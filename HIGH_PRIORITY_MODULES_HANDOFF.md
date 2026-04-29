@@ -14,7 +14,7 @@
 
 ## Files changed
 - `lib/generator.ts`
-- `scripts/xelera-validate.ts`
+- `scripts/manoa-validate.ts`
 - `scripts/smoke-test.ts`
 - `scripts/test-quality-regression.ts`
 

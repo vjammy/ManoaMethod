@@ -1,6 +1,6 @@
 # AGENTS
 
-## Xelera Method agent rules
+## Manoa Method agent rules
 - Work one phase at a time.
 - Read the current phase packet before editing anything.
 - Do not skip entry gates.
@@ -17,15 +17,15 @@
 - OpenCode
 
 ## Agent files
-- `.opencode/agents/xelera-planner.md` — planning and scoping
-- `.opencode/agents/xelera-gatekeeper.md` — gate review and blocker management
-- `.opencode/agents/xelera-builder.md` — implementation
-- `.opencode/agents/xelera-reviewer.md` — verification and review
+- `.opencode/agents/manoa-planner.md` — planning and scoping
+- `.opencode/agents/manoa-gatekeeper.md` — gate review and blocker management
+- `.opencode/agents/manoa-builder.md` — implementation
+- `.opencode/agents/manoa-reviewer.md` — verification and review
 
 ## Commands
-- `/xelera-plan` — create or update the planning package
-- `/xelera-validate` — inspect lifecycle status and blockers
-- `/xelera-phase` — load the current phase packet
-- `/xelera-verify` — review implementation against criteria
-- `/xelera-handoff` — create a compact handoff summary
-- `/xelera-next` — move to the next phase with evidence
+- `/manoa-plan` — create or update the planning package
+- `/manoa-validate` — inspect lifecycle status and blockers
+- `/manoa-phase` — load the current phase packet
+- `/manoa-verify` — review implementation against criteria
+- `/manoa-handoff` — create a compact handoff summary
+- `/manoa-next` — move to the next phase with evidence

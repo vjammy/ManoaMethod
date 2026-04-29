@@ -21,8 +21,8 @@ npm run create-project -- --input=examples/family-task-app.json --out=.tmp-famil
 
 What you should see:
 
-- `.tmp-family-task-app/xelera-method-workspace`
-- `.tmp-family-task-app/xelera-method-workspace.zip`
+- `.tmp-family-task-app/manoa-method-workspace`
+- `.tmp-family-task-app/manoa-method-workspace.zip`
 
 ## 3. Open These Files First
 
@@ -38,7 +38,7 @@ Inside the generated workspace, open:
 ## 4. Validate the New Package
 
 ```bash
-npm run validate -- --package=.tmp-family-task-app/xelera-method-workspace
+npm run validate -- --package=.tmp-family-task-app/manoa-method-workspace
 ```
 
 What you should see:
@@ -49,7 +49,7 @@ What you should see:
 ## 5. Check Status
 
 ```bash
-npm run status -- --package=.tmp-family-task-app/xelera-method-workspace
+npm run status -- --package=.tmp-family-task-app/manoa-method-workspace
 ```
 
 What you should see:
@@ -108,11 +108,11 @@ Only advance after:
 Command:
 
 ```bash
-npm run next-phase -- --package=.tmp-family-task-app/xelera-method-workspace --evidence=phases/phase-01/VERIFICATION_REPORT.md
+npm run next-phase -- --package=.tmp-family-task-app/manoa-method-workspace --evidence=phases/phase-01/VERIFICATION_REPORT.md
 ```
 
 ## 10. Useful Next Reads
 
-- [NOVICE_GUIDE.md](C:\AI\XeleraMethod\docs\NOVICE_GUIDE.md)
-- [TROUBLESHOOTING.md](C:\AI\XeleraMethod\docs\TROUBLESHOOTING.md)
-- [EXAMPLE_FAMILY_TASK_APP.md](C:\AI\XeleraMethod\docs\EXAMPLE_FAMILY_TASK_APP.md)
+- [NOVICE_GUIDE.md](C:\AI\ManoaMethod\docs\NOVICE_GUIDE.md)
+- [TROUBLESHOOTING.md](C:\AI\ManoaMethod\docs\TROUBLESHOOTING.md)
+- [EXAMPLE_FAMILY_TASK_APP.md](C:\AI\ManoaMethod\docs\EXAMPLE_FAMILY_TASK_APP.md)

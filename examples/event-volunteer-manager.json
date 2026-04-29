@@ -14,7 +14,7 @@
   "successMetrics": "A reviewer can trace shift creation, volunteer signup, check-in flow, and no-show response without hidden assumptions.",
   "nonGoals": "No payment to volunteers, no complex skill certification, no multi-event analytics in v1.",
   "timeline": "Plan a realistic first release that proves the volunteer coordination workflow works before adding richer features.",
-  "teamContext": "An event organizer uses Xelera Method to prepare the volunteer manager plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
+  "teamContext": "An event organizer uses Manoa Method to prepare the volunteer manager plan and then hands the workspace to Codex, Claude Code, OpenCode, or a development team for phased implementation.",
   "questionnaireAnswers": {
     "north-star": "The first release must prove that organizers can create shifts, volunteers can sign up, and check-in status is tracked.",
     "primary-workflow": "An organizer creates event shifts, volunteers browse and sign up, the organizer sees signup status, and volunteers check in on the day of the event.",
