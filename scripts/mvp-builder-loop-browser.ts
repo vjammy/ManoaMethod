@@ -36,6 +36,7 @@ type ReqCoverageResult = {
   notes: string[];
   consoleErrors: string[];
   textMatches: string[];
+  testResultsVerified: boolean;
 };
 
 type BrowserLoopOutcome = {
@@ -55,6 +56,7 @@ type BrowserLoopOutcome = {
   evidenceReportPath: string;
   playwrightAvailable: boolean;
   playwrightInstallHint?: string;
+  verifiedReqIds: string[];
 };
 
 function parseRuntimeTarget(packageRoot: string): RuntimeTarget {
@@ -121,6 +123,33 @@ function parseEntityFixtures(packageRoot: string): EntityFixture[] {
     });
   }
   return fixtures;
+}
+
+function loadVerifiedReqIds(packageRoot: string): Set<string> {
+  const verified = new Set<string>();
+  const phasesDir = path.join(packageRoot, 'phases');
+  if (!fileExists(phasesDir)) return verified;
+  const phaseSlugs = fs.readdirSync(phasesDir).filter((entry) => /^phase-\d+$/.test(entry));
+  for (const slug of phaseSlugs) {
+    const resultsPath = path.join(phasesDir, slug, 'TEST_RESULTS.md');
+    if (!fileExists(resultsPath)) continue;
+    const content = readTextFile(resultsPath);
+    const finalResult = (content.match(/##\s*Final result:\s*(.+)/i)?.[1] || '').trim().toLowerCase();
+    if (finalResult !== 'pass' && finalResult !== 'passed') continue;
+    // Look for "Scenario evidence: REQ-N" markers with at least one non-template line of body content.
+    const sectionMatcher = /Scenario evidence:\s*(REQ-\d+)([\s\S]*?)(?=Scenario evidence:|\n##\s|$)/gi;
+    let sectionMatch: RegExpExecArray | null;
+    while ((sectionMatch = sectionMatcher.exec(content)) !== null) {
+      const reqId = sectionMatch[1].toUpperCase();
+      const body = sectionMatch[2] || '';
+      const meaningfulLines = body
+        .split('\n')
+        .map((line) => line.trim())
+        .filter((line) => line && line !== '-' && line.toLowerCase() !== 'pending' && !/^allowed:/i.test(line));
+      if (meaningfulLines.length >= 1) verified.add(reqId);
+    }
+  }
+  return verified;
 }
 
 function parseRequirementRecords(packageRoot: string): RequirementRecord[] {
@@ -240,8 +269,9 @@ async function runReqCoverage(args: {
   fixtures: EntityFixture[];
   requirements: RequirementRecord[];
   evidenceDir: string;
+  verifiedReqs: Set<string>;
 }): Promise<ReqCoverageResult[]> {
-  const { page, baseUrl, fixtures, requirements, evidenceDir } = args;
+  const { page, baseUrl, fixtures, requirements, evidenceDir, verifiedReqs } = args;
   const results: ReqCoverageResult[] = [];
   const fixtureByEntity = new Map(fixtures.map((fixture) => [fixture.entityName, fixture]));
 
@@ -266,6 +296,8 @@ async function runReqCoverage(args: {
     const errorsBefore = consoleErrors.length;
     const textMatches: string[] = [];
 
+    const testResultsVerified = verifiedReqs.has(requirement.reqId);
+
     if (!fixture || !fixture.happyPath) {
       notes.push('No SAMPLE_DATA.md fixture matched this requirement.');
       results.push({
@@ -275,7 +307,8 @@ async function runReqCoverage(args: {
         evidencePaths,
         notes,
         consoleErrors: [],
-        textMatches
+        textMatches,
+        testResultsVerified
       });
       continue;
     }
@@ -287,9 +320,12 @@ async function runReqCoverage(args: {
     }
 
     let status: ReqCoverageResult['status'];
-    if (textMatches.length >= 2) {
+    if (textMatches.length >= 2 && testResultsVerified) {
       status = 'covered';
-      notes.push('Entity name and at least one happy-path field appeared on the rendered page.');
+      notes.push('Entity name and a happy-path field rendered on the page AND TEST_RESULTS.md records pass evidence for this REQ.');
+    } else if (textMatches.length >= 2 && !testResultsVerified) {
+      status = 'partially-covered';
+      notes.push('Tokens render on the page but TEST_RESULTS.md does not record pass evidence for this REQ. Run TEST_SCRIPT.md and paste the happy-path + negative-path observations under "Scenario evidence: ' + requirement.reqId + '" in the owning phase TEST_RESULTS.md to upgrade to covered.');
     } else if (textMatches.length === 1) {
       status = 'partially-covered';
       notes.push('Only one happy-path token appeared on the rendered page. Drive the actual workflow to fully cover this requirement.');
@@ -309,7 +345,8 @@ async function runReqCoverage(args: {
       evidencePaths,
       notes,
       consoleErrors: consoleErrors.slice(errorsBefore),
-      textMatches
+      textMatches,
+      testResultsVerified
     });
   }
 
@@ -350,15 +387,23 @@ function renderEvidenceReport(outcome: BrowserLoopOutcome): string {
     }
     lines.push('');
   } else {
-    lines.push('| REQ-ID | Entity | Status | Text matches | Console errors | Notes |');
-    lines.push('| --- | --- | --- | --- | --- | --- |');
+    lines.push('| REQ-ID | Entity | Status | TEST_RESULTS.md verified | Text matches | Console errors | Notes |');
+    lines.push('| --- | --- | --- | --- | --- | --- | --- |');
     for (const result of outcome.reqResults) {
       lines.push(
-        `| ${result.reqId} | ${result.entityName || '_unknown_'} | ${result.status} | ${result.textMatches.join(', ').replace(/\|/g, '\\|') || '_none_'} | ${result.consoleErrors.length} | ${result.notes.join(' ').replace(/\|/g, '\\|')} |`
+        `| ${result.reqId} | ${result.entityName || '_unknown_'} | ${result.status} | ${result.testResultsVerified ? 'yes' : 'no'} | ${result.textMatches.join(', ').replace(/\|/g, '\\|') || '_none_'} | ${result.consoleErrors.length} | ${result.notes.join(' ').replace(/\|/g, '\\|')} |`
       );
     }
     lines.push('');
   }
+  lines.push(`## TEST_RESULTS.md verification summary`);
+  lines.push(`- REQs verified by phase TEST_RESULTS.md: ${outcome.verifiedReqIds.length}/${outcome.totalRequirements}`);
+  if (outcome.verifiedReqIds.length) {
+    lines.push(`- Verified: ${outcome.verifiedReqIds.join(', ')}`);
+  } else {
+    lines.push('- No REQs are verified by TEST_RESULTS.md yet. Run TEST_SCRIPT.md and paste evidence under "Scenario evidence: REQ-N" in the owning phase TEST_RESULTS.md.');
+  }
+  lines.push('');
   lines.push('## Probe notes');
   for (const note of outcome.probeNotes) lines.push(`- ${note}`);
   lines.push('');
@@ -377,6 +422,7 @@ export async function runBrowserLoop(): Promise<BrowserLoopOutcome> {
   const target = parseRuntimeTarget(packageRoot);
   const fixtures = parseEntityFixtures(packageRoot);
   const requirements = parseRequirementRecords(packageRoot);
+  const verifiedReqs = loadVerifiedReqIds(packageRoot);
   const startedAt = new Date().toISOString();
   const evidenceDir = path.join(packageRoot, 'evidence', 'runtime', 'browser', startedAt.replace(/[:.]/g, '-'));
   fs.mkdirSync(evidenceDir, { recursive: true });
@@ -412,7 +458,8 @@ export async function runBrowserLoop(): Promise<BrowserLoopOutcome> {
           baseUrl: target.url,
           fixtures,
           requirements,
-          evidenceDir
+          evidenceDir,
+          verifiedReqs
         });
         probePassed = reqResults.length > 0 && reqResults.some((result) => result.status !== 'uncovered');
         if (reqResults.length === 0) {
@@ -454,7 +501,8 @@ export async function runBrowserLoop(): Promise<BrowserLoopOutcome> {
     evidenceDir: path.relative(packageRoot, evidenceDir).replace(/\\/g, '/'),
     evidenceReportPath: '',
     playwrightAvailable,
-    playwrightInstallHint: playwrightAvailable ? undefined : 'npm install --save-dev playwright && npx playwright install chromium'
+    playwrightInstallHint: playwrightAvailable ? undefined : 'npm install --save-dev playwright && npx playwright install chromium',
+    verifiedReqIds: Array.from(verifiedReqs).sort()
   };
 
   const reportPath = path.join(evidenceDir, 'BROWSER_LOOP_REPORT.md');
