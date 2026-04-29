@@ -1,4 +1,6 @@
-import { reconcileScoreWithLifecycle, scoreProject } from './scoring';
+import { reconcileScoreWithLifecycle, scoreProject, withSemanticFit } from './scoring';
+import { detectArchetype, type ArchetypeDetection } from './archetype-detection';
+import { computeSemanticFit, type SemanticFit } from './semantic-fit';
 import { buildQuestionPrompts, CORE_AGENT_OPERATING_RULES, getProfileConfig, slugify } from './templates';
 import {
   buildDomainOntology,
@@ -81,6 +83,7 @@ type ProjectContext = {
   acceptanceAnchor: string;
   inferredAssumptions: string[];
   domainArchetype: DomainArchetype;
+  archetypeDetection: ArchetypeDetection;
   domainSignals: string[];
   riskFlags: RiskFlag[];
   uiRelevant: boolean;
@@ -724,23 +727,9 @@ function detectRiskFlags(input: ProjectInput): ProjectContext['riskFlags'] {
   return unique(flags);
 }
 
-function detectDomainArchetype(input: ProjectInput): ProjectContext['domainArchetype'] {
-  const source = [input.productName, input.productIdea, input.targetAudience, input.mustHaveFeatures, input.risks]
-    .join(' ')
-    .toLowerCase();
-
-  if (/(task board|chore|household task|family workspace)/i.test(source)) return 'family-task';
-  if (/(readiness|legal vault|emergency mode|family readiness|privvy)/i.test(source)) return 'family-readiness';
-  if (/(restaurant|ordering|pickup|kitchen|menu|order state)/i.test(source)) return 'restaurant-ordering';
-  if (/(budget|household budget|planner|spending)/i.test(source)) return 'budget-planner';
-  if (/(inventory|stock|threshold|adjustment|purchase)/i.test(source)) return 'inventory';
-  if (/(clinic|medical|patient|healthcare|physician|doctor|nurse|appointment)/i.test(source)) return 'clinic-scheduler';
-  if (/(hoa|maintenance|vendor|resident)/i.test(source)) return 'hoa-maintenance';
-  if (/(school club|student|club|advisor|event sign)/i.test(source)) return 'school-club';
-  if (/(volunteer|shift|check-in|no-show)/i.test(source)) return 'volunteer-manager';
-  if (/\b(sdr|crm|sales rep|sales team|sales pipeline|sales qualification|lead scoring|lead qualification|prospecting|quota)\b/i.test(source)) return 'sdr-sales';
-  return 'general';
-}
+// Archetype detection moved to lib/archetype-detection.ts. Detection results are
+// surfaced into ProjectContext.archetypeDetection so manifests and scorecards can
+// explain which archetype was picked, why, and with what confidence.
 
 function detectUiRelevance(input: ProjectInput, domainArchetype: ProjectContext['domainArchetype']) {
   if (domainArchetype !== 'general') return true;
@@ -901,7 +890,8 @@ function buildContext(input: ProjectInput): ProjectContext {
   const answers = input.questionnaireAnswers;
   const keywords = extractKeywords(input);
   const riskFlags = detectRiskFlags(input);
-  const domainArchetype = detectDomainArchetype(input);
+  const archetypeDetection = detectArchetype(input);
+  const domainArchetype = archetypeDetection.archetype;
   const domainSignals = getDomainSignals(input, riskFlags);
   const uiRelevant = detectUiRelevance(input, domainArchetype);
   const ontology = buildDomainOntology(input, {
@@ -949,6 +939,7 @@ function buildContext(input: ProjectInput): ProjectContext {
     acceptanceAnchor: truncateText(answers.acceptance || input.successMetrics, 12),
     inferredAssumptions,
     domainArchetype,
+    archetypeDetection,
     domainSignals,
     riskFlags,
     uiRelevant,
@@ -7629,24 +7620,83 @@ function buildFinalGateReport() {
 `;
 }
 
-function buildFinalScorecard() {
-  return `# FINAL_SCORECARD
+function buildFinalScorecard(bundle?: ProjectBundle) {
+  if (!bundle) {
+    return `# FINAL_SCORECARD
 
 ## Final score
 - pending
 
 ## Category breakdown
-- Objective fit: pending
-- Functional correctness: pending
-- Tests and regression: pending
-- Gates: pending
-- Artifacts: pending
-- Beginner usability: pending
-- Handoff and recovery: pending
-- Local-first or architecture compliance: pending
+- pending
 
 ## Hard caps
 - pending
+`;
+  }
+  const det = bundle.archetypeDetection;
+  const fit = bundle.semanticFit;
+  const categoryLines = bundle.score.categories
+    .map((c) => `| ${c.label} | ${c.bucket} | ${c.score}/${c.max} |`)
+    .join('\n');
+  const adjustmentLines =
+    bundle.score.adjustments.length === 0
+      ? '- none'
+      : bundle.score.adjustments.map((a) => `- ${a}`).join('\n');
+  return `# FINAL_SCORECARD
+
+## Headline
+
+- Build readiness: **${bundle.score.buildReadiness}/100**
+- Product fit: **${bundle.score.productFit}/100**
+- Combined: **${bundle.score.total}/100**
+- Rating: **${bundle.score.rating}**
+- Lifecycle: ${bundle.lifecycleStatus}
+
+## Why two scores
+
+Build readiness measures whether the workspace is structurally complete and well-formed (problem framing, audience clarity, workflow detail, constraints, implementation readiness, handoff completeness). Product fit measures whether the workspace actually describes the right product (risk coverage, acceptance quality, testability, semantic fit between brief and generated requirements). High build readiness with low product fit means the workspace looks polished but may have been generated against the wrong domain archetype.
+
+## Domain archetype detection
+
+- Archetype picked: **${det.archetype}**
+- Method: ${det.method}
+- Confidence: ${det.confidence.toFixed(2)}
+${det.matchedKeyword ? `- Matched keyword: \`${det.matchedKeyword}\`` : ''}
+${det.antiMatched ? `- Anti-matched (vetoed): \`${det.antiMatched}\`` : ''}
+- Rationale: ${det.rationale}
+
+If the archetype above is wrong for this product, the generated phases, requirements, and entities are likely wrong. Adjust the brief or pick a closer example before regenerating.
+
+## Semantic fit between brief and generated requirements
+
+- Jaccard score: **${fit.score.toFixed(2)}** (${fit.verdict})
+- Input tokens: ${fit.inputTokenCount}
+- Output tokens: ${fit.outputTokenCount}
+- Overlap tokens: ${fit.overlapTokenCount}
+
+The verdict combines this Jaccard score with the archetype-detection confidence above. The framework's templated requirements echo the must-have feature names verbatim, which gives every workspace a baseline overlap regardless of archetype, so Jaccard alone cannot separate "right archetype" from "wrong archetype" — it has to be paired with archetype confidence.
+
+- \`high\` — archetype confidence and overlap together suggest the requirements describe the same product as the brief.
+- \`low\` — Jaccard < 0.13 and archetype confidence < 0.6: the generated requirements may describe a related-but-different product.
+- \`critical\` — Jaccard < 0.10 and archetype confidence < 0.4: archetype routing likely failed; regenerate after fixing the brief or archetype.
+
+## Category breakdown
+
+| Category | Bucket | Score |
+|---|---|---|
+${categoryLines}
+
+## Score adjustments applied
+
+${adjustmentLines}
+
+## Hard caps in effect
+
+- Build readiness capped at 71 if lifecycle is Blocked.
+- Product fit capped at 71 if semantic-fit verdict is \`low\`.
+- Product fit capped at 30 if semantic-fit verdict is \`critical\`.
+- "Strong handoff" rating requires build readiness ≥ 88, product fit ≥ 88, and zero blockers.
 `;
 }
 
@@ -8744,7 +8794,7 @@ function createGeneratedFiles(bundle: ProjectBundle, input: ProjectInput, contex
   add('FINAL_RELEASE_REPORT.md', buildFinalReleaseReport());
   add('FINAL_HANDOFF.md', buildFinalHandoff());
   add('FINAL_GATE_REPORT.md', buildFinalGateReport());
-  add('FINAL_SCORECARD.md', buildFinalScorecard());
+  add('FINAL_SCORECARD.md', buildFinalScorecard(bundle));
   add('FINAL_RECOVERY_SUMMARY.md', buildFinalRecoverySummary());
   add('FINAL_DEPLOYMENT_STATUS.md', buildFinalDeploymentStatus());
   add('QUICKSTART.md', buildPackageQuickstart(bundle, input));
@@ -9089,7 +9139,18 @@ ${listToBullets(bundle.unresolvedWarnings.map((warning) => `[${warning.severity}
         exportRoot: bundle.exportRoot,
         profile: bundle.profile.key,
         readinessScore: bundle.score.total,
+        buildReadiness: bundle.score.buildReadiness,
+        productFit: bundle.score.productFit,
         rating: bundle.score.rating,
+        archetypeDetection: bundle.archetypeDetection,
+        semanticFit: {
+          score: bundle.semanticFit.score,
+          verdict: bundle.semanticFit.verdict,
+          inputTokenCount: bundle.semanticFit.inputTokenCount,
+          outputTokenCount: bundle.semanticFit.outputTokenCount,
+          overlapTokenCount: bundle.semanticFit.overlapTokenCount
+        },
+        scoreAdjustments: bundle.score.adjustments,
         lifecycleStatus: bundle.lifecycleStatus,
         phaseCount: bundle.phases.length,
         primaryAudience: context.primaryAudience,
@@ -9221,15 +9282,83 @@ export function generateProjectBundle(input: ProjectInput): ProjectBundle {
   const context = buildContext(input);
   const critique = buildCritique(input, questionnaire, context);
   const phases = buildPhasePlan(input, context, critique);
-  const rawScore = scoreProject(input, questionnaire, critique);
+  const baseScore = scoreProject(input, questionnaire, critique);
+
+  // Compute semantic fit between the brief and the requirements body the generator
+  // would render. We do this before warnings are built so a critical drift can become
+  // a blocker that influences lifecycle.
+  const requirementsBody = buildFunctionalRequirements(input, context);
+  const semanticFit = computeSemanticFit(input, requirementsBody, context.archetypeDetection.confidence);
+  const rawScore = withSemanticFit(baseScore, semanticFit);
+
   const warnings = buildWarnings(input, questionnaire, critique, context, rawScore);
+  if (semanticFit.verdict !== 'high') {
+    const severity = semanticFit.verdict === 'critical' ? 'blocker' : 'warning';
+    const id = `semantic-fit-${semanticFit.verdict}`;
+    if (!warnings.some((w) => w.id === id)) {
+      warnings.push({
+        id,
+        severity,
+        title:
+          semanticFit.verdict === 'critical'
+            ? 'Generated requirements describe a different product'
+            : 'Generated requirements drift from brief',
+        message: `Semantic fit between the brief and the generated FUNCTIONAL_REQUIREMENTS.md is ${semanticFit.score.toFixed(2)} (Jaccard token overlap). The picked archetype may be wrong for this product.`,
+        action:
+          'Review repo/manifest.json#archetypeDetection. If the archetype is wrong, adjust the brief (or override) and regenerate before treating the package as build-capable.',
+        source: 'generator',
+        openQuestion: 'Is the picked domain archetype actually the right one for this product?',
+        assumption: `Archetype detected: ${context.archetypeDetection.archetype} (${context.archetypeDetection.method}, confidence ${context.archetypeDetection.confidence.toFixed(2)}).`
+      });
+    }
+  }
+  // Only emit the low-confidence warning when semantic-fit didn't already raise the alarm,
+  // to avoid double-counting the same underlying signal.
+  if (
+    context.archetypeDetection.confidence < 0.4 &&
+    context.archetypeDetection.method === 'keyword' &&
+    semanticFit.verdict === 'high'
+  ) {
+    const id = 'archetype-low-confidence';
+    if (!warnings.some((w) => w.id === id)) {
+      warnings.push({
+        id,
+        severity: 'warning',
+        title: 'Domain archetype low confidence',
+        message: `Picked ${context.archetypeDetection.archetype} on keyword "${context.archetypeDetection.matchedKeyword ?? 'n/a'}" with confidence ${context.archetypeDetection.confidence.toFixed(2)}.`,
+        action:
+          'Confirm the domain archetype before approving the package. If wrong, edit the brief or pick the closest matching example before regenerating.',
+        source: 'generator',
+        openQuestion: 'Does this archetype match the actual product?',
+        assumption: context.archetypeDetection.rationale
+      });
+    }
+  }
+  if (context.archetypeDetection.archetype === 'general') {
+    const id = 'archetype-general-fallback';
+    if (!warnings.some((w) => w.id === id)) {
+      warnings.push({
+        id,
+        severity: 'info',
+        title: 'Domain archetype is general (no specialized template)',
+        message:
+          'No domain archetype anchored against this brief. Generated requirements, entities, and sample data will use generic placeholders rather than domain-specific terms.',
+        action:
+          'Either accept the generic baseline and refine the requirements/entities by hand, or edit the brief to match a closer archetype keyword before regenerating.',
+        source: 'generator',
+        openQuestion: 'Is the generic baseline acceptable, or should the brief be revised to anchor a specific archetype?',
+        assumption: context.archetypeDetection.rationale
+      });
+    }
+  }
+
   const { approvalRequired, approvedForBuild } = getApprovalFlags(input);
   const lifecycleStatus = deriveLifecycleStatus({
     warnings,
     scoreTotal: rawScore.total,
     approvedForBuild
   });
-  const score = reconcileScoreWithLifecycle(rawScore, lifecycleStatus, warnings);
+  const score = reconcileScoreWithLifecycle(rawScore, lifecycleStatus, warnings, semanticFit);
   const warningCounts: Record<WarningSeverity, number> = {
     info: warnings.filter((warning) => warning.severity === 'info').length,
     warning: warnings.filter((warning) => warning.severity === 'warning').length,
@@ -9251,7 +9380,9 @@ export function generateProjectBundle(input: ProjectInput): ProjectBundle {
     blockingWarnings,
     approvalRequired,
     approvedForBuild,
-    files: []
+    files: [],
+    archetypeDetection: context.archetypeDetection,
+    semanticFit
   };
 
   bundle.files = createGeneratedFiles(bundle, input, context);

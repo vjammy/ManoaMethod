@@ -4,9 +4,11 @@ import type {
   ProjectInput,
   QuestionnaireItem,
   ScoreBreakdown,
+  ScoreBucket,
   ScoreCategory,
   WarningItem
 } from './types';
+import type { SemanticFit } from './semantic-fit';
 
 function splitItems(value: string) {
   return value
@@ -30,6 +32,7 @@ function countAnswered(questionnaire: QuestionnaireItem[], answers: Record<strin
 
 function scoreCategory(config: {
   key: ScoreCategory['key'];
+  bucket: ScoreBucket;
   label: string;
   max: number;
   checks: Array<{ ok: boolean; points: number; reasonLost: string; improvement: string }>;
@@ -49,12 +52,22 @@ function scoreCategory(config: {
 
   return {
     key: config.key,
+    bucket: config.bucket,
     label: config.label,
     score: Math.min(config.max, score),
     max: config.max,
     reasonsLost,
     improvements
   };
+}
+
+function bucketSubtotal(categories: ScoreCategory[], bucket: ScoreBucket): number {
+  const subset = categories.filter((c) => c.bucket === bucket);
+  if (subset.length === 0) return 0;
+  const earned = subset.reduce((sum, c) => sum + c.score, 0);
+  const max = subset.reduce((sum, c) => sum + c.max, 0);
+  if (max === 0) return 0;
+  return Math.round((earned / max) * 100);
 }
 
 export function scoreProject(
@@ -74,6 +87,7 @@ export function scoreProject(
   const categories: ScoreCategory[] = [
     scoreCategory({
       key: 'problem-clarity',
+      bucket: 'build-readiness',
       label: 'Problem clarity',
       max: 12,
       checks: [
@@ -99,6 +113,7 @@ export function scoreProject(
     }),
     scoreCategory({
       key: 'target-user-clarity',
+      bucket: 'build-readiness',
       label: 'Target user clarity',
       max: 12,
       checks: [
@@ -124,6 +139,7 @@ export function scoreProject(
     }),
     scoreCategory({
       key: 'workflow-clarity',
+      bucket: 'build-readiness',
       label: 'Workflow clarity',
       max: 12,
       checks: [
@@ -149,6 +165,7 @@ export function scoreProject(
     }),
     scoreCategory({
       key: 'constraint-clarity',
+      bucket: 'build-readiness',
       label: 'Constraint clarity',
       max: 10,
       checks: [
@@ -174,6 +191,7 @@ export function scoreProject(
     }),
     scoreCategory({
       key: 'risk-coverage',
+      bucket: 'product-fit',
       label: 'Risk coverage',
       max: 12,
       checks: [
@@ -202,6 +220,7 @@ export function scoreProject(
     }),
     scoreCategory({
       key: 'acceptance-quality',
+      bucket: 'product-fit',
       label: 'Acceptance criteria quality',
       max: 12,
       checks: [
@@ -230,6 +249,7 @@ export function scoreProject(
     }),
     scoreCategory({
       key: 'implementation-readiness',
+      bucket: 'build-readiness',
       label: 'Implementation readiness',
       max: 12,
       checks: [
@@ -255,6 +275,7 @@ export function scoreProject(
     }),
     scoreCategory({
       key: 'testability',
+      bucket: 'product-fit',
       label: 'Testability',
       max: 10,
       checks: [
@@ -283,6 +304,7 @@ export function scoreProject(
     }),
     scoreCategory({
       key: 'handoff-completeness',
+      bucket: 'build-readiness',
       label: 'Handoff completeness',
       max: 8,
       checks: [
@@ -308,7 +330,9 @@ export function scoreProject(
     })
   ];
 
-  const total = categories.reduce((sum, category) => sum + category.score, 0);
+  const buildReadiness = bucketSubtotal(categories, 'build-readiness');
+  const productFit = bucketSubtotal(categories, 'product-fit');
+  const total = Math.round((buildReadiness + productFit) / 2);
   const blockers: string[] = [];
   const recommendations = Array.from(
     new Set(categories.flatMap((category) => category.improvements).concat(critique.map((item) => item.followUpQuestion)))
@@ -328,7 +352,7 @@ export function scoreProject(
   }
 
   const rating =
-    total >= 88 && blockers.length === 0
+    total >= 88 && buildReadiness >= 88 && productFit >= 88 && blockers.length === 0
       ? 'Strong handoff'
       : total >= 72 && blockers.length <= 1
         ? 'Build ready'
@@ -339,6 +363,8 @@ export function scoreProject(
   return {
     categories,
     total,
+    buildReadiness,
+    productFit,
     rating,
     blockers,
     recommendations,
@@ -346,13 +372,64 @@ export function scoreProject(
   };
 }
 
+const SEMANTIC_FIT_MAX = 10;
+
+function deriveSemanticFitCategory(fit: SemanticFit): ScoreCategory {
+  // The category score reflects the verdict (which already factors in archetype
+  // confidence), not the raw Jaccard. A 'high' verdict gets full marks even when
+  // raw Jaccard is low because the must-have echo gives every workspace a baseline
+  // overlap regardless of archetype.
+  const score = fit.verdict === 'high' ? SEMANTIC_FIT_MAX : fit.verdict === 'low' ? 4 : 0;
+  const reasonsLost: string[] = [];
+  const improvements: string[] = [];
+  if (fit.verdict !== 'high') {
+    reasonsLost.push(
+      `Generated requirements share only ${fit.overlapTokenCount} of ${fit.inputTokenCount} input tokens (Jaccard ${fit.score.toFixed(2)}).`
+    );
+    improvements.push(
+      'Confirm the generated requirements describe the same product as the brief; rerun generation after fixing archetype routing if not.'
+    );
+  }
+  return {
+    key: 'semantic-fit',
+    bucket: 'product-fit',
+    label: 'Semantic fit (input vs generated requirements)',
+    score,
+    max: SEMANTIC_FIT_MAX,
+    reasonsLost,
+    improvements
+  };
+}
+
+export function withSemanticFit(score: ScoreBreakdown, fit: SemanticFit): ScoreBreakdown {
+  const fitCategory = deriveSemanticFitCategory(fit);
+  const filtered = score.categories.filter((c) => c.key !== 'semantic-fit');
+  const categories = [...filtered, fitCategory];
+  const buildReadiness = bucketSubtotal(categories, 'build-readiness');
+  const productFit = bucketSubtotal(categories, 'product-fit');
+  // Total is the average of normalized sub-scores so it stays in [0,100] regardless
+  // of how many categories exist or what max each one has. Previously the raw
+  // category-sum could exceed 100 once we appended the semantic-fit category.
+  const total = Math.round((buildReadiness + productFit) / 2);
+  return {
+    ...score,
+    categories,
+    total,
+    buildReadiness,
+    productFit
+  };
+}
+
 export function reconcileScoreWithLifecycle(
   score: ScoreBreakdown,
   lifecycleStatus: LifecycleStatus,
-  warnings: WarningItem[]
+  warnings: WarningItem[],
+  semanticFit?: SemanticFit
 ): ScoreBreakdown {
   const hasBlockers = warnings.some((warning) => warning.severity === 'blocker');
   let total = score.total;
+  let buildReadiness = score.buildReadiness;
+  let productFit = score.productFit;
   let rating = score.rating;
   const adjustments = [...score.adjustments];
 
@@ -361,9 +438,39 @@ export function reconcileScoreWithLifecycle(
       total = 71;
       adjustments.push('Score capped at 71 because the package lifecycle is Blocked.');
     }
+    if (buildReadiness > 71) {
+      buildReadiness = 71;
+      adjustments.push('Build readiness capped at 71 because the package lifecycle is Blocked.');
+    }
     if (rating === 'Build ready' || rating === 'Strong handoff') {
       rating = total >= 52 ? 'Needs work' : 'Not ready';
       adjustments.push('Rating downgraded because blocked packages cannot claim build readiness.');
+    }
+  }
+
+  if (semanticFit) {
+    if (semanticFit.verdict === 'critical') {
+      if (productFit > 30) {
+        productFit = 30;
+        adjustments.push(
+          `Product fit capped at 30 because semantic fit between brief and generated requirements is critically low (Jaccard ${semanticFit.score.toFixed(2)}).`
+        );
+      }
+      if (rating === 'Build ready' || rating === 'Strong handoff') {
+        rating = 'Needs work';
+        adjustments.push('Rating downgraded because the generated requirements describe a different product than the brief.');
+      }
+    } else if (semanticFit.verdict === 'low') {
+      if (productFit > 71) {
+        productFit = 71;
+        adjustments.push(
+          `Product fit capped at 71 because semantic fit between brief and generated requirements is low (Jaccard ${semanticFit.score.toFixed(2)}).`
+        );
+      }
+      if (rating === 'Strong handoff') {
+        rating = 'Build ready';
+        adjustments.push('Rating downgraded from Strong handoff because semantic fit is low.');
+      }
     }
   }
 
@@ -382,9 +489,17 @@ export function reconcileScoreWithLifecycle(
     adjustments.push('Rating downgraded because unresolved blockers outweigh the raw score.');
   }
 
+  // Recompute total to reflect any capped sub-score adjustments
+  if (buildReadiness !== score.buildReadiness || productFit !== score.productFit) {
+    total = Math.round((buildReadiness + productFit) / 2);
+    adjustments.push(`Total recomputed as average of build readiness (${buildReadiness}) and product fit (${productFit}).`);
+  }
+
   return {
     ...score,
     total,
+    buildReadiness,
+    productFit,
     rating,
     adjustments: Array.from(new Set(adjustments))
   };

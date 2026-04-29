@@ -143,17 +143,23 @@ export type PhasePlan = {
   requirementIds?: string[];
 };
 
+export type ScoreCategoryKey =
+  | 'problem-clarity'
+  | 'target-user-clarity'
+  | 'workflow-clarity'
+  | 'constraint-clarity'
+  | 'risk-coverage'
+  | 'acceptance-quality'
+  | 'implementation-readiness'
+  | 'testability'
+  | 'handoff-completeness'
+  | 'semantic-fit';
+
+export type ScoreBucket = 'build-readiness' | 'product-fit';
+
 export type ScoreCategory = {
-  key:
-    | 'problem-clarity'
-    | 'target-user-clarity'
-    | 'workflow-clarity'
-    | 'constraint-clarity'
-    | 'risk-coverage'
-    | 'acceptance-quality'
-    | 'implementation-readiness'
-    | 'testability'
-    | 'handoff-completeness';
+  key: ScoreCategoryKey;
+  bucket: ScoreBucket;
   label: string;
   score: number;
   max: number;
@@ -164,6 +170,8 @@ export type ScoreCategory = {
 export type ScoreBreakdown = {
   categories: ScoreCategory[];
   total: number;
+  buildReadiness: number;
+  productFit: number;
   rating: 'Not ready' | 'Needs work' | 'Build ready' | 'Strong handoff';
   blockers: string[];
   recommendations: string[];
@@ -188,6 +196,27 @@ export type ProfileConfig = {
   minimumPhaseCount: number;
 };
 
+export type ArchetypeDetectionSummary = {
+  archetype: string;
+  confidence: number;
+  method: 'keyword' | 'llm' | 'fallback';
+  matchedKeyword?: string;
+  rationale: string;
+  antiMatched?: string;
+  candidateScores: Array<{ archetype: string; score: number; topKeyword?: string }>;
+};
+
+export type SemanticFitSummary = {
+  score: number;
+  verdict: 'high' | 'low' | 'critical';
+  inputTokenCount: number;
+  outputTokenCount: number;
+  overlapTokenCount: number;
+  overlapTokens: string[];
+  inputOnlyTokens: string[];
+  outputOnlyTokens: string[];
+};
+
 export type ProjectBundle = {
   exportRoot: string;
   profile: ProfileConfig;
@@ -203,4 +232,6 @@ export type ProjectBundle = {
   approvalRequired: boolean;
   approvedForBuild: boolean;
   files: GeneratedFile[];
+  archetypeDetection: ArchetypeDetectionSummary;
+  semanticFit: SemanticFitSummary;
 };
