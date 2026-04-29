@@ -1,4 +1,4 @@
-# MVP Builderology
+# MVP Builder Methodology
 
 ## What MVP Builder Is
 

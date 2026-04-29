@@ -2,7 +2,7 @@
 
 ## What This Guide Is For
 
-Use this guide if you want to run a MVP Builder workspace with OpenCode.
+Use this guide if you want to run an MVP Builder workspace with OpenCode.
 
 OpenCode is a first-class workflow alongside Codex and Claude Code. The generated workspace stays the same across all three.
 

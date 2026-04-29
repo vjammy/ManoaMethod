@@ -2,7 +2,7 @@
 
 ## What This Guide Is For
 
-Use this guide if you want to run a MVP Builder workspace with Codex.
+Use this guide if you want to run an MVP Builder workspace with Codex.
 
 Codex is one of three supported agent flows. The project package stays the same even if you later switch to Claude Code or OpenCode.
 

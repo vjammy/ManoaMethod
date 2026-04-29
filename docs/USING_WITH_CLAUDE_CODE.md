@@ -2,7 +2,7 @@
 
 ## What This Guide Is For
 
-Use this guide if you want to run a MVP Builder workspace with Claude Code.
+Use this guide if you want to run an MVP Builder workspace with Claude Code.
 
 Claude Code uses the same generated package as Codex and OpenCode. Only the startup instructions and prompt file change.
 

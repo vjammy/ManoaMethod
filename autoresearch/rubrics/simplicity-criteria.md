@@ -44,7 +44,7 @@ The rubric and cap recognize negative contexts; positive recommendations or assu
 
 ## What "simple" means in practice
 
-For a MVP Builder-generated package, simple means:
+For an MVP Builder-generated package, simple means:
 
 - Local-first: runs from a folder of markdown plus a small script harness.
 - Markdown-first: planning, gates, evidence, and handoff are markdown files, not a database.
