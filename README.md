@@ -6,6 +6,86 @@ It helps you turn a rough idea into a reusable workspace of markdown files befor
 
 Manoa Method is not a hosted app, project manager, or quality guarantee. It gives you structure, but you still need human review and good judgment.
 
+## Documentation Map
+
+If you want the full documentation set, start here:
+
+- Documentation index: [docs/README.md](docs/README.md)
+- Method overview: [docs/METHODOLOGY.md](docs/METHODOLOGY.md)
+- Best practices: [docs/BEST_PRACTICES.md](docs/BEST_PRACTICES.md)
+- Business user workflow: [docs/BUSINESS_USER_WORKFLOW.md](docs/BUSINESS_USER_WORKFLOW.md)
+- Technical builder workflow: [docs/TECHNICAL_BUILDER_WORKFLOW.md](docs/TECHNICAL_BUILDER_WORKFLOW.md)
+- Build from attached requirements: [docs/BUILD_FROM_REQUIREMENTS.md](docs/BUILD_FROM_REQUIREMENTS.md)
+
+## What Manoa Method Tries To Do
+
+Manoa Method tries to solve a specific problem:
+
+- teams want to use AI coding tools
+- requirements are often incomplete or trapped in chat
+- scope drifts
+- builders skip verification
+- handoffs become unreliable
+
+The method addresses that by turning requirements into a local, phase-based workspace with:
+
+- structured context
+- phase packets
+- gates
+- verification files
+- evidence requirements
+- state tracking
+- handoff documentation
+
+## The Method In One Page
+
+At a high level, Manoa Method works like this:
+
+1. Capture the project brief and mode.
+2. Force business and technical questions into the open.
+3. Critique the plan for ambiguity, contradictions, and missing decisions.
+4. Score readiness.
+5. Generate a markdown workspace.
+6. Work one phase at a time.
+7. Verify each phase with evidence before advancing.
+8. Leave a handoff that another builder or agent can trust.
+
+For the detailed explanation, read [docs/METHODOLOGY.md](docs/METHODOLOGY.md).
+
+## Best Practices Behind The Method
+
+The repo is opinionated about several practices:
+
+- one source of truth
+- separation of business guidance and technical execution
+- explicit scope cuts
+- required gates
+- mandatory evidence
+- explicit pass/fail language
+- honest handoff state
+
+The detailed mapping from practice to implementation is in [docs/BEST_PRACTICES.md](docs/BEST_PRACTICES.md).
+
+## How To Use It With Attached Requirements
+
+If you already have a requirements document and want an AI agent to build from it, use the guide here:
+
+- [docs/BUILD_FROM_REQUIREMENTS.md](docs/BUILD_FROM_REQUIREMENTS.md)
+
+The short version is:
+
+- give the agent the requirements
+- tell it to pull `https://github.com/vjammy/manoa-method`
+- tell it to build in the repo root
+- require it to follow the Manoa phase, gate, validation, and handoff workflow
+
+## Audience-Specific Guides
+
+- Business users: [docs/BUSINESS_USER_WORKFLOW.md](docs/BUSINESS_USER_WORKFLOW.md)
+- Technical builders: [docs/TECHNICAL_BUILDER_WORKFLOW.md](docs/TECHNICAL_BUILDER_WORKFLOW.md)
+- Beginner guide: [docs/NOVICE_GUIDE.md](docs/NOVICE_GUIDE.md)
+- Quick commands: [docs/QUICKSTART.md](docs/QUICKSTART.md)
+
 ## Manoa Orchestrator
 
 The repo now includes Manoa Orchestrator, a local-first orchestrator that can read a generated workspace or repo, derive objective criteria, generate focused prompt packets, run local commands, enforce gates, score the build from 0 to 100, and write recovery plans when something fails.
@@ -40,7 +120,7 @@ Manoa Method now includes a reusable production-build prompt and production-rele
 
 Use the reusable production prompt here:
 
-- [docs/MANOA_PRODUCTION_BUILD_PROMPT.md](C:\AI\ManoaMethod\docs\MANOA_PRODUCTION_BUILD_PROMPT.md)
+- [docs/MANOA_PRODUCTION_BUILD_PROMPT.md](docs/MANOA_PRODUCTION_BUILD_PROMPT.md)
 
 Generated workspaces now also include production-oriented files such as:
 
@@ -191,9 +271,9 @@ The simplest rule is:
 
 Start here for each agent:
 
-- Codex: [docs/USING_WITH_CODEX.md](C:\AI\ManoaMethod\docs\USING_WITH_CODEX.md)
-- Claude Code: [docs/USING_WITH_CLAUDE_CODE.md](C:\AI\ManoaMethod\docs\USING_WITH_CLAUDE_CODE.md)
-- OpenCode: [docs/USING_WITH_OPENCODE.md](C:\AI\ManoaMethod\docs\USING_WITH_OPENCODE.md)
+- Codex: [docs/USING_WITH_CODEX.md](docs/USING_WITH_CODEX.md)
+- Claude Code: [docs/USING_WITH_CLAUDE_CODE.md](docs/USING_WITH_CLAUDE_CODE.md)
+- OpenCode: [docs/USING_WITH_OPENCODE.md](docs/USING_WITH_OPENCODE.md)
 
 ## Verify The Phase
 
@@ -292,12 +372,12 @@ The normal lifecycle loop is:
 
 ## Where To Read Next
 
-- Beginner manual: [docs/NOVICE_GUIDE.md](C:\AI\ManoaMethod\docs\NOVICE_GUIDE.md)
-- Quick commands: [docs/QUICKSTART.md](C:\AI\ManoaMethod\docs\QUICKSTART.md)
-- Troubleshooting: [docs/TROUBLESHOOTING.md](C:\AI\ManoaMethod\docs\TROUBLESHOOTING.md)
-- Glossary: [docs/GLOSSARY.md](C:\AI\ManoaMethod\docs\GLOSSARY.md)
-- Family task example: [docs/EXAMPLE_FAMILY_TASK_APP.md](C:\AI\ManoaMethod\docs\EXAMPLE_FAMILY_TASK_APP.md)
-- Orchestrator guide: [docs/ORCHESTRATOR.md](C:\AI\ManoaMethod\docs\ORCHESTRATOR.md)
+- Beginner manual: [docs/NOVICE_GUIDE.md](docs/NOVICE_GUIDE.md)
+- Quick commands: [docs/QUICKSTART.md](docs/QUICKSTART.md)
+- Troubleshooting: [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)
+- Glossary: [docs/GLOSSARY.md](docs/GLOSSARY.md)
+- Family task example: [docs/EXAMPLE_FAMILY_TASK_APP.md](docs/EXAMPLE_FAMILY_TASK_APP.md)
+- Orchestrator guide: [docs/ORCHESTRATOR.md](docs/ORCHESTRATOR.md)
 
 ## Exported Workspace Contents
 
