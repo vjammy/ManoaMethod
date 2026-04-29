@@ -1566,7 +1566,7 @@ function buildNonFunctionalRequirements(input: ProjectInput, context: ProjectCon
 `;
 }
 
-function buildAcceptanceCriteria(input: ProjectInput, context: ProjectContext) {
+function buildAcceptanceCriteria(input: ProjectInput, context: ProjectContext, phases?: PhasePlan[]) {
   const scenarios: OntologyFeatureScenario[] = context.ontology.featureScenarios.length
     ? context.ontology.featureScenarios
     : [
@@ -1596,8 +1596,12 @@ ${scenarios
         const values = inferScenarioValues(safeScenario);
         const entityName = values?.entityName || fallbackEntityName(safeScenario.feature);
         const sampleSummary = values?.entitySampleSummary || 'realistic local data';
+        const phaseSlug = phases && phases.length
+          ? getRequirementPhaseSlug(index, phases)
+          : `phase-${String(Math.min(index + 1, 9)).padStart(2, '0')}`;
         return `## ${index + 1}. ${sentenceCase(safeScenario.feature)}
 
+- Requirement ID: REQ-${index + 1}
 - Clear pass/fail check: ${safeScenario.testableOutcome}
 - Given: ${values?.actorExample || context.primaryAudience} has ${entityName} data prepared with ${sampleSummary}.
 - When: ${safeScenario.userAction}
@@ -1605,8 +1609,9 @@ ${scenarios
 - Negative case: ${safeScenario.failureCase}
 - Verification method: ${pattern?.verificationMethod || 'Verify the stored record, resulting state, and visible outcome together.'}
 - Test or manual verification method: ${pattern?.verificationMethod || 'Verify the stored record, resulting state, and visible outcome together.'}
+- Sample data: see SAMPLE_DATA.md "${entityName}" section. Inline reference: ${sampleSummary}.
 - Evidence required: Capture one happy-path observation and one negative-path observation for ${safeScenario.feature} that mention ${entityName} data such as ${sampleSummary}.
-- Related files: FUNCTIONAL_REQUIREMENTS.md, phases/phase-${String(Math.min(index + 1, 9)).padStart(2, '0')}/PHASE_BRIEF.md`;
+- Related files: FUNCTIONAL_REQUIREMENTS.md, SAMPLE_DATA.md, phases/${phaseSlug}/PHASE_BRIEF.md, phases/${phaseSlug}/TEST_SCRIPT.md`;
       }
     )
     .join('\n\n')}
@@ -3309,14 +3314,53 @@ function buildPhaseContent(
     implementationPromptPlaceholder:
       `Ask your coding AI to draft an implementation prompt for "${blueprint.name}" using this package's constraints, must-have scope, and acceptance criteria.`,
     reviewPromptPlaceholder:
-      `Ask your coding AI to draft a review or testing prompt for "${blueprint.name}" using the current risks, failure paths, and exit criteria.`
+      `Ask your coding AI to draft a review or testing prompt for "${blueprint.name}" using the current risks, failure paths, and exit criteria.`,
+    requirementIds: []
   };
 }
 
 function buildPhasePlan(input: ProjectInput, context: ProjectContext, critique: CritiqueItem[]) {
-  return buildPhaseBlueprints(input, context, critique).map((blueprint, index) =>
+  const phases = buildPhaseBlueprints(input, context, critique).map((blueprint, index) =>
     buildPhaseContent(blueprint, index + 1, input, context, critique)
   );
+  assignRequirementsToPhases(phases, context.ontology.featureScenarios);
+  return phases;
+}
+
+function assignRequirementsToPhases(phases: PhasePlan[], scenarios: OntologyFeatureScenario[]) {
+  phases.forEach((phase) => {
+    phase.requirementIds = [];
+  });
+  if (!scenarios.length || !phases.length) return;
+
+  const ownerPhases = phases.filter(
+    (phase) => phase.phaseType === 'implementation' || phase.phaseType === 'design'
+  );
+  const verificationPhases = phases.filter((phase) => phase.phaseType === 'verification');
+  const eligible = ownerPhases.length
+    ? ownerPhases
+    : phases.filter((phase) => phase.phaseType !== 'planning' && phase.phaseType !== 'finalization');
+  const distributionTargets = eligible.length ? eligible : phases;
+
+  scenarios.forEach((_, idx) => {
+    const reqId = `REQ-${idx + 1}`;
+    const target = distributionTargets[idx % distributionTargets.length];
+    target.requirementIds = (target.requirementIds || []).concat(reqId);
+  });
+
+  if (verificationPhases.length) {
+    const allReqIds = scenarios.map((_, idx) => `REQ-${idx + 1}`);
+    verificationPhases.forEach((phase) => {
+      phase.requirementIds = unique((phase.requirementIds || []).concat(allReqIds));
+    });
+  }
+}
+
+function getRequirementPhaseSlug(reqIndex: number, phases: PhasePlan[]): string {
+  const reqId = `REQ-${reqIndex + 1}`;
+  const owner = phases.find((phase) => (phase.requirementIds || []).includes(reqId));
+  if (owner) return owner.slug;
+  return phases[Math.min(reqIndex, phases.length - 1)]?.slug || 'phase-01';
 }
 
 function renderQuestionnaireMarkdown(questionnaire: QuestionnaireItem[], input: ProjectInput) {
@@ -3371,6 +3415,7 @@ function renderPhasePlanMarkdown(phases: PhasePlan[]) {
 - Focus summary: ${phase.focusSummary}
 - Gate file pair: /gates/gate-${String(phase.index).padStart(2, '0')}-entry.md and /gates/gate-${String(phase.index).padStart(2, '0')}-exit.md
 - Phase folder: /phases/${phase.slug}/
+- Requirement IDs: ${(phase.requirementIds && phase.requirementIds.length) ? phase.requirementIds.join(', ') : 'none'}
 `
     )
     .join('\n');
@@ -6659,6 +6704,37 @@ function buildMvpBuilderState(bundle: ProjectBundle): MvpBuilderState {
 function buildPhaseTestScript(phase: PhasePlan, input: ProjectInput, context: ProjectContext) {
   const commands = getPhaseTestProcedures(phase, input, context);
   const specificChecks = getPhaseTypeSpecificChecks(phase, context, input);
+  const requirementScenarios = getPhaseRequirementScenarios(phase, context);
+  const executableBlock = getExecutableTestBlockForPhase(phase);
+
+  const requirementSection = requirementScenarios.length
+    ? `## Requirement-driven scenario tests
+These scenarios exist because the phase owns the listed REQ-IDs from requirements/ACCEPTANCE_CRITERIA.md. Use the matching entity sample in SAMPLE_DATA.md as input. Each scenario must be exercised once with the happy-path sample and once with the negative-path sample before this phase can pass.
+
+${requirementScenarios.map((entry, i) => {
+      const scenario = entry.scenario;
+      const values = inferScenarioValues(scenario);
+      const entityName = values?.entityName || fallbackEntityName(scenario.feature);
+      const sampleSummary = values?.entitySampleSummary || 'realistic local data';
+      const pattern = findAcceptancePattern(context.ontology, scenario.scenarioType);
+      return `### Scenario ${i + 1} — ${entry.reqId}: ${sentenceCase(scenario.feature)}
+Requirement: ${entry.reqId} (see requirements/ACCEPTANCE_CRITERIA.md)
+Sample data file: SAMPLE_DATA.md, "${entityName}" section
+Happy-path input summary: ${sampleSummary}
+Actor: ${values?.actorExample || scenario.actor.name}
+Given: ${values?.actorExample || scenario.actor.name} has ${entityName} data prepared with ${sampleSummary}.
+When: ${scenario.userAction}
+Then: ${scenario.systemResponse}
+Negative case to also exercise: ${scenario.failureCase}
+Verification method: ${pattern?.verificationMethod || 'Verify the stored record, resulting state, and visible outcome together.'}
+Pass criteria: Both the happy-path and negative-path runs produce the expected stored records, role-appropriate visibility, and reviewer-readable outcome.
+Fail criteria: The happy path is blocked by valid input, OR the negative path is accepted, OR the outcome is not reviewable.
+Evidence to capture: One observation from the happy run and one from the negative run, naming the entity sample fields used (e.g. ${sampleSummary}).
+Where to record: phases/${phase.slug}/TEST_RESULTS.md under "Scenario evidence: ${entry.reqId}".
+Regression risk if skipped: ${(scenario.risks[0]?.verification || scenario.failureCase)} would not be caught before release.`;
+    }).join('\n\n')}`
+    : `## Requirement-driven scenario tests
+This phase has no requirement IDs assigned in PHASE_PLAN.md, so no acceptance scenarios are exercised here. If this is wrong, update PHASE_PLAN.md to add a "Requirement IDs:" line for this phase and re-run \`npm run create-project\` (or hand-edit the phase plan). Always exercise the relevant happy-path and negative-path samples from SAMPLE_DATA.md when implementation phases borrow requirements from later phases.`;
 
   return `# TEST_SCRIPT for ${phase.name}
 
@@ -6667,6 +6743,12 @@ This file provides the concrete test steps for ${phase.name}. Run or follow thes
 
 ## Phase
 ${phase.name}
+
+## Phase requirement coverage
+- Phase type: ${phase.phaseType}
+- Requirement IDs owned by this phase: ${(phase.requirementIds && phase.requirementIds.length) ? phase.requirementIds.join(', ') : 'none'}
+- Sample data source: SAMPLE_DATA.md (root of workspace)
+- Acceptance criteria source: requirements/ACCEPTANCE_CRITERIA.md
 
 ## Commands or manual procedures
 ${commands.map((c, i) => `### Step ${i + 1}
@@ -6681,6 +6763,8 @@ Regression risk this protects against: ${c.regressionRisk}
 Domain-specific reviewer question: ${c.reviewerQuestion}
 Where to record: phases/${phase.slug}/TEST_RESULTS.md
 What to do if this fails: Record the failure in TEST_RESULTS.md and revise the phase before advancing.`).join('\n\n')}
+
+${requirementSection}
 
 ## Manual review checks
 ${specificChecks.map((c, i) => `### Manual check ${i + 1}
@@ -6703,30 +6787,143 @@ Fail criteria: The criterion is not met or has no supporting evidence.
 Where to record: phases/${phase.slug}/VERIFICATION_REPORT.md`).join('\n\n')}
 
 ## Executable verification
-The MVP Builder loop runner extracts shell commands from the fenced bash block below and runs each one in the package root. Add safe, deterministic commands that prove this phase works. The runner skips destructive commands automatically.
+The MVP Builder loop runner extracts shell commands from the fenced bash block below and runs each one in the package root. Add safe, deterministic commands that prove this phase works. The runner skips destructive commands automatically. Commands below are tuned for ${phase.phaseType} phases.
 
 \`\`\`bash
-npm run typecheck
-npm run validate -- --package=.
+${executableBlock}
 \`\`\`
 
 If this phase produces or depends on a running application, also append \`npm run probe -- --package=.\` to the block above so the loop has runtime evidence.
 
 ## Pass/fail criteria
-- PASS: All commands or manual procedures succeed, all manual checks pass, and exit gate criteria are met with evidence.
-- FAIL: Any command, manual check, or exit gate criterion fails or lacks evidence.
+- PASS: All commands or manual procedures succeed, all manual checks pass, every requirement-driven scenario produces happy-path and negative-path evidence, and exit gate criteria are met.
+- FAIL: Any command, manual check, requirement scenario, or exit gate criterion fails or lacks evidence.
 
 ## Failure handling
-- Record the specific failure in TEST_RESULTS.md.
+- Record the specific failure in TEST_RESULTS.md, naming the failing REQ-ID and the entity sample used.
 - Do not advance to the next phase.
 - Revise the phase work and re-run this script.
 - If the failure cannot be resolved, record it as a blocker in HANDOFF_SUMMARY.md and VERIFICATION_REPORT.md.
 
 ## Evidence recording
 - Record all results in phases/${phase.slug}/TEST_RESULTS.md.
+- For each REQ-ID exercised above, paste the happy-path and negative-path observation under a "Scenario evidence: REQ-XX" heading.
 - Attach or reference real command output, scenario notes, or changed file paths.
 - Do not fabricate or pre-fill results.
 `;
+}
+
+function buildSampleData(input: ProjectInput, context: ProjectContext, phases: PhasePlan[]) {
+  const entities = context.ontology.entityTypes;
+  const scenarios = context.ontology.featureScenarios;
+  const reqIndexByEntity = new Map<string, number[]>();
+  scenarios.forEach((scenario, idx) => {
+    const main = scenario.entities[0];
+    if (!main) return;
+    const list = reqIndexByEntity.get(main.name) || [];
+    list.push(idx);
+    reqIndexByEntity.set(main.name, list);
+  });
+
+  const renderEntityBlock = (entity: typeof entities[number]) => {
+    const sampleJson = JSON.stringify(entity.sample, null, 2);
+    const negativeSample = { ...entity.sample } as Record<string, string | number | boolean | null>;
+    const firstStringField = entity.fields.find((field) => field.type === 'string');
+    const firstIdField = entity.fields.find((field) => field.type === 'id');
+    if (firstStringField) negativeSample[firstStringField.name] = '';
+    if (firstIdField) negativeSample[firstIdField.name] = null;
+    const negativeJson = JSON.stringify(negativeSample, null, 2);
+    const reqIds = (reqIndexByEntity.get(entity.name) || []).map((idx) => `REQ-${idx + 1}`);
+    const reqLine = reqIds.length ? reqIds.join(', ') : 'No direct requirement reference yet.';
+    const owningPhases = unique(
+      (reqIndexByEntity.get(entity.name) || []).map((idx) => getRequirementPhaseSlug(idx, phases))
+    );
+    const phasesLine = owningPhases.length ? owningPhases.join(', ') : 'no phase has assigned this entity yet';
+
+    return `## ${entity.name}
+
+- Purpose: ${entity.description}
+- Used by requirements: ${reqLine}
+- Owning phases: ${phasesLine}
+- Validation rules: ${entity.fields.slice(0, 3).map((field) => `${field.name} is required`).join('; ') || 'none recorded'}.
+- Risks if sample is misused: ${context.ontology.riskTypes.filter((risk) => entity.riskTypes.includes(risk.name)).map((risk) => risk.description).join(' ') || 'data leakage, missing validation, or stale records.'}
+
+### Happy-path sample (use as the realistic input in tests)
+\`\`\`json
+${sampleJson}
+\`\`\`
+
+### Negative-path sample (use to prove the system rejects invalid input)
+\`\`\`json
+${negativeJson}
+\`\`\`
+`;
+  };
+
+  return `# SAMPLE_DATA for ${input.productName}
+
+## What this file is for
+This is the single source of truth for sample data used by tests and demos in this package. Every TEST_SCRIPT.md, ACCEPTANCE_CRITERIA.md, and demo prompt should reference these records instead of inventing values.
+
+## How to use this file
+- For each requirement, find the entity it touches (see "Used by requirements" below).
+- Copy the happy-path sample into your test as the realistic input.
+- Copy the negative-path sample to prove the system rejects invalid or unauthorized data.
+- Do not edit this file mid-test. If a sample is wrong, revise here and re-run the affected tests.
+
+## Naming and traceability
+- Each entity below maps to one or more REQ-IDs declared in requirements/ACCEPTANCE_CRITERIA.md and FUNCTIONAL_REQUIREMENTS.md.
+- The "Owning phases" line tells you which phase folder owns the test for this entity.
+
+${entities.map(renderEntityBlock).join('\n')}
+
+## What this file is NOT
+- Not a production seed file.
+- Not a substitute for live integration data once a service is approved.
+- Not a place to store secrets, real personal data, or production identifiers.
+
+## Update rules
+- Add a new section here when you introduce a new entity in DATA_MODEL.md.
+- Keep field names identical to DATA_MODEL.md.
+- Keep at least one happy-path and one negative-path sample per entity.
+`;
+}
+
+function getPhaseRequirementScenarios(phase: PhasePlan, context: ProjectContext) {
+  const reqIds = phase.requirementIds || [];
+  if (!reqIds.length) return [] as Array<{ reqId: string; index: number; scenario: OntologyFeatureScenario }>;
+  return reqIds
+    .map((reqId) => {
+      const match = reqId.match(/^REQ-(\d+)$/i);
+      if (!match) return null;
+      const idx = Number.parseInt(match[1], 10) - 1;
+      const scenario = context.ontology.featureScenarios[idx];
+      if (!scenario) return null;
+      return { reqId, index: idx, scenario };
+    })
+    .filter((entry): entry is { reqId: string; index: number; scenario: OntologyFeatureScenario } => entry !== null);
+}
+
+function getExecutableTestBlockForPhase(phase: PhasePlan): string {
+  if (phase.phaseType === 'implementation') {
+    return `npm run typecheck
+npm run build
+npm run smoke
+npm run validate -- --package=.`;
+  }
+  if (phase.phaseType === 'verification') {
+    return `npm run typecheck
+npm run validate -- --package=.
+npm run traceability -- --package=.`;
+  }
+  if (phase.phaseType === 'finalization') {
+    return `npm run typecheck
+npm run validate -- --package=.
+npm run traceability -- --package=.
+npm run status -- --package=.`;
+  }
+  return `npm run typecheck
+npm run validate -- --package=.`;
 }
 
 function buildPhaseTestResults(phase: PhasePlan) {
@@ -7498,11 +7695,22 @@ function buildTestScriptIndex(bundle: ProjectBundle) {
 ## What this file is for
 This file lists all generated phase test scripts, when to run each, and what each proves.
 
+## Shared inputs for every phase test script
+- Acceptance criteria: requirements/ACCEPTANCE_CRITERIA.md (each criterion is tagged with REQ-IDs)
+- Sample data fixtures: SAMPLE_DATA.md (happy-path and negative-path samples per entity)
+- Requirement-to-phase matrix: regenerate with \`npm run traceability -- --package=.\` and inspect repo/TRACEABILITY.md
+
+## Automated regression entry points
+- \`npm run loop -- --package=.\` runs the HTTP probe + TEST_SCRIPT.md bash blocks.
+- \`npm run loop:browser -- --package=.\` drives Playwright against RUNTIME_TARGET.md, exercises every REQ-ID with SAMPLE_DATA.md fixtures, and scores requirement coverage.
+- \`npm run auto-regression -- --package=.\` is the step-9 wrapper: build → loop → loop:browser, iterating until the combined score meets the target. Fix prompts land in \`evidence/runtime/AUTO_REGRESSION_FIX_PROMPT_*.md\`.
+
 ## Generated phase test scripts
 ${phaseEntries.map((entry) => `### Phase ${String(entry.index).padStart(2, '0')}: ${entry.name}
 - Script: ${entry.scriptPath}
+- Requirement IDs owned: ${(bundle.phases[entry.index - 1].requirementIds || []).join(', ') || 'none'}
 - When to run: After completing phase ${String(entry.index).padStart(2, '0')} implementation and before VERIFICATION_REPORT.md.
-- What it proves: Phase deliverables meet the exit gate criteria with real evidence.
+- What it proves: Phase deliverables meet the exit gate criteria, and every owned REQ-ID is exercised with happy-path and negative-path samples from SAMPLE_DATA.md.
 - Where to paste results: ${entry.resultsPath}
 - Gate supported: Entry gate at gates/gate-${String(entry.index).padStart(2, '0')}-entry.md, exit gate at gates/gate-${String(entry.index).padStart(2, '0')}-exit.md`).join('\n\n')}
 
@@ -8446,6 +8654,18 @@ Run all of these against ${target.url} and the routes listed in RUNTIME_TARGET.m
 ## How this plugs into the convergence loop
 \`npm run loop\` reads the latest probe outcome plus any browser-automation evidence in evidence/runtime/. If the loop finds a UI failure with no browser evidence, it writes a fix prompt that names this guide and asks the agent to run a real browser pass before the next iteration.
 
+## Automated browser coverage: \`npm run loop:browser\`
+- Drives Playwright (chromium, headless) against the URL declared in RUNTIME_TARGET.md.
+- Walks every requirement in requirements/ACCEPTANCE_CRITERIA.md, looks up the matching entity in SAMPLE_DATA.md, and checks that the happy-path tokens render on the page.
+- Captures full-page screenshots and console errors per scenario into \`evidence/runtime/browser/<timestamp>/\`.
+- Scores 0-100 as: probe (max 30) + requirement coverage (max 70).
+- Playwright is loaded via dynamic import. If it is not installed, the score reflects probe-only and the report includes the install hint.
+- Install command: \`npm install --save-dev playwright && npx playwright install chromium\`.
+
+## Full auto-regression: \`npm run auto-regression\`
+- Step 9 of the meta-method workflow. Runs build, then \`npm run loop\` (HTTP + TEST_SCRIPT.md), then \`npm run loop:browser\`, combines into a single 0-100 score, and iterates up to \`--max-iterations\` (default 3) until the target (default 90) is met.
+- Each failing iteration writes \`evidence/runtime/AUTO_REGRESSION_FIX_PROMPT_iteration-NN.md\` with a concrete punch list of failing REQ-IDs, console errors, and uncovered scenarios.
+
 ## Why two options instead of one
 Forcing Playwright as a hard dependency would bloat MVP Builder itself with browser binaries. Forcing chrome-devtools MCP would exclude agents that do not have it. Documenting both keeps the harness portable, and the assertion checklist above is identical regardless of tooling.
 `;
@@ -8558,7 +8778,8 @@ function createGeneratedFiles(bundle: ProjectBundle, input: ProjectInput, contex
   add('requirements/REQUIREMENTS_START_HERE.md', buildRequirementsStartHere(input, context));
   add('requirements/FUNCTIONAL_REQUIREMENTS.md', buildFunctionalRequirements(input, context));
   add('requirements/NON_FUNCTIONAL_REQUIREMENTS.md', buildNonFunctionalRequirements(input, context));
-  add('requirements/ACCEPTANCE_CRITERIA.md', buildAcceptanceCriteria(input, context));
+  add('requirements/ACCEPTANCE_CRITERIA.md', buildAcceptanceCriteria(input, context, bundle.phases));
+  add('SAMPLE_DATA.md', buildSampleData(input, context, bundle.phases));
   add('requirements/OPEN_QUESTIONS.md', buildOpenQuestions(input, context));
   add('requirements/REQUIREMENTS_RISK_REVIEW.md', buildRequirementsRiskReview(input, context));
   add('requirements/REQUIREMENTS_GATE.md', buildRequirementsGate());

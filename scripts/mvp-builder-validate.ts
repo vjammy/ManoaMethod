@@ -283,6 +283,7 @@ export function runValidate() {
     '00_APPROVAL_GATE.md',
     'PROJECT_BRIEF.md',
     'PHASE_PLAN.md',
+    'SAMPLE_DATA.md',
     'repo/manifest.json',
     'repo/mvp-builder-state.json'
   ];
@@ -648,6 +649,32 @@ export function runValidate() {
     issues.push('Beginner-facing docs should stay plain-English and remind the user they do not need to open every folder.');
   }
 
+  // SAMPLE_DATA.md sanity checks
+  const sampleDataPath = path.join(packageRoot, 'SAMPLE_DATA.md');
+  if (fs.existsSync(sampleDataPath)) {
+    const sampleDataContent = fs.readFileSync(sampleDataPath, 'utf8');
+    if (
+      !/Happy-path sample/i.test(sampleDataContent) ||
+      !/Negative-path sample/i.test(sampleDataContent) ||
+      !/Used by requirements/i.test(sampleDataContent)
+    ) {
+      issues.push(
+        'SAMPLE_DATA.md is missing required sections (Happy-path sample, Negative-path sample, Used by requirements).'
+      );
+    }
+  }
+
+  // PHASE_PLAN.md must emit Requirement IDs lines so traceability has data
+  const phasePlanPath = path.join(packageRoot, 'PHASE_PLAN.md');
+  if (fs.existsSync(phasePlanPath)) {
+    const phasePlanContent = fs.readFileSync(phasePlanPath, 'utf8');
+    if (!/-\s+Requirement IDs:/i.test(phasePlanContent)) {
+      issues.push(
+        'PHASE_PLAN.md must include "- Requirement IDs:" lines per phase so npm run traceability can build the matrix.'
+      );
+    }
+  }
+
   // Phase-level validation
   for (let index = 1; index <= manifest.phaseCount; index += 1) {
     const slug = getPhaseSlug(index);
@@ -682,7 +709,9 @@ export function runValidate() {
       const testScriptContent = fs.readFileSync(testScriptPath, 'utf8');
       const requiredSections = [
         '## What this file is for',
+        '## Phase requirement coverage',
         '## Commands or manual procedures',
+        '## Requirement-driven scenario tests',
         '## Manual review checks',
         '## Pass/fail criteria',
         '## Failure handling',

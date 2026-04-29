@@ -8,7 +8,8 @@ export type WorkflowStepId =
   | 'risk-review'
   | 'phase-plan'
   | 'approval-gate'
-  | 'export-package';
+  | 'export-package'
+  | 'auto-regression';
 
 export type WorkflowStepStatus = 'Complete' | 'Needs attention' | 'Blocked';
 
@@ -29,7 +30,8 @@ const STEP_ORDER: WorkflowStepId[] = [
   'risk-review',
   'phase-plan',
   'approval-gate',
-  'export-package'
+  'export-package',
+  'auto-regression'
 ];
 
 const STEP_META: Record<WorkflowStepId, { title: string; description: string }> = {
@@ -64,6 +66,10 @@ const STEP_META: Record<WorkflowStepId, { title: string; description: string }> 
   'export-package': {
     title: 'Export Package',
     description: 'Export the draft package any time, and only export build-ready after approval.'
+  },
+  'auto-regression': {
+    title: 'Auto-Regression Loop',
+    description: 'After export, run build/test/probe iteratively until the requirement-coverage score meets the target. Includes browser coverage via npm run loop:browser when Playwright is available.'
   }
 };
 
@@ -292,6 +298,11 @@ export function buildWorkflowSteps(input: ProjectInput, bundle: ProjectBundle): 
       nextAction = canExportBuildReady(bundle)
         ? 'Export the approved-for-build package and hand it to the builder.'
         : 'Export the draft package for review now, then finish approval before requesting a build-ready export.';
+    } else if (id === 'auto-regression') {
+      fallbackNeedsAttention = !canExportBuildReady(bundle);
+      nextAction = canExportBuildReady(bundle)
+        ? 'Run `npm run auto-regression -- --package=<exported-workspace>` to drive build, test scripts, HTTP probe, and (if Playwright is installed) browser coverage. The loop iterates until the score meets the target or stalls.'
+        : 'Auto-regression cannot start until the package is exported. Finish step 8 first.';
     }
 
     const status =
@@ -299,7 +310,9 @@ export function buildWorkflowSteps(input: ProjectInput, bundle: ProjectBundle): 
         ? ('Blocked' as WorkflowStepStatus)
         : id === 'export-package' && canExportBuildReady(bundle)
           ? ('Complete' as WorkflowStepStatus)
-          : getStepStatus(warnings, fallbackNeedsAttention);
+          : id === 'auto-regression' && !canExportBuildReady(bundle)
+            ? ('Blocked' as WorkflowStepStatus)
+            : getStepStatus(warnings, fallbackNeedsAttention);
 
     return {
       id,
