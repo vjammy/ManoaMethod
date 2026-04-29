@@ -139,6 +139,15 @@ export function runStatus() {
 
   const hasBlockers = manifest.warningCounts.blocker > 0 || state.blockedPhases.length > 0;
   const entryGateSatisfied = !state.blockedPhases.includes(currentSlug) && !hasBlockers;
+  const finalPhaseComplete =
+    state.currentPhase === manifest.phaseCount &&
+    state.completedPhases.includes(currentSlug) &&
+    currentEvidence?.approvedToProceed;
+  const lifecycleComplete =
+    manifest.approvedForBuild &&
+    state.lifecycleStatus === 'ApprovedForBuild' &&
+    !hasBlockers &&
+    finalPhaseComplete;
 
   if (hasBlockers && resultText === 'pass' && recommendationText === 'proceed') {
     evidenceReadiness =
@@ -147,7 +156,10 @@ export function runStatus() {
 
   // Next action
   let nextAction = '';
-  if (hasBlockers) {
+  if (lifecycleComplete) {
+    nextAction =
+      'Lifecycle complete. Maintain release evidence, keep CURRENT_STATUS.md and final reports synchronized, and use FINAL_HANDOFF.md for the next operator handoff.';
+  } else if (hasBlockers) {
     nextAction = 'Resolve blocker warnings before continuing. Review SCORECARD.md and 00_APPROVAL_GATE.md.';
   } else if (state.currentPhase > 1 && !state.completedPhases.includes(getPhaseSlug(state.currentPhase - 1))) {
     nextAction = `Previous phase (${getPhaseSlug(state.currentPhase - 1)}) is not marked complete. Verify and advance it first.`;
@@ -165,13 +177,16 @@ export function runStatus() {
     nextAction = `Revise the work in ${currentSlug} based on the review feedback, then re-verify.`;
   } else if (verificationStatus === 'malformed-report') {
     nextAction = `Fix the verification report for ${currentSlug}. Use valid values: result must be pass|fail|pending, recommendation must be proceed|revise|blocked|pending.`;
+  } else if (verificationStatus === 'passed' && state.currentPhase === manifest.phaseCount) {
+    nextAction =
+      'Final phase verification is complete. Record final approval artifacts, confirm lifecycle state, and keep the release handoff synchronized before closing the package.';
   } else if (verificationStatus === 'passed') {
     nextAction = `Advance to the next phase with: npm run next-phase -- --package=${packageRoot} --evidence=${currentEvidence?.verificationReportPath || `phases/${currentSlug}/VERIFICATION_REPORT.md`}`;
   } else {
     nextAction = 'Review the current phase and verification report to determine the next step.';
   }
 
-  if (currentEvidence?.manualApproval) {
+  if (currentEvidence?.manualApproval && !lifecycleComplete) {
     nextAction = `This phase was manually approved. You may still advance with: npm run next-phase -- --package=${packageRoot} --approve=true`;
   }
 

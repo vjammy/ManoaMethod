@@ -9,6 +9,7 @@ import { runNextPhase } from './xelera-next-phase';
 import { runValidate } from './xelera-validate';
 import { runStatus } from './xelera-status';
 import { parseExitGateResult, parseVerificationEvidenceFiles, parseVerificationRecommendation } from './xelera-package-utils';
+import { runOrchestratorRegressionChecks } from './orchestrator-test-utils';
 import type { ProjectInput } from '../lib/types';
 
 function assert(condition: unknown, message: string) {
@@ -127,6 +128,11 @@ async function main() {
   assert(bundle.files.some((file) => file.path === 'TESTING_STRATEGY.md'), 'Missing TESTING_STRATEGY.md');
   assert(bundle.files.some((file) => file.path === 'REGRESSION_TEST_PLAN.md'), 'Missing REGRESSION_TEST_PLAN.md');
   assert(bundle.files.some((file) => file.path === 'TEST_SCRIPT_INDEX.md'), 'Missing TEST_SCRIPT_INDEX.md');
+  assert(bundle.files.some((file) => file.path === 'auto-improve/PROGRAM.md'), 'Missing auto-improve/PROGRAM.md');
+  assert(bundle.files.some((file) => file.path === 'auto-improve/QUALITY_RUBRIC.md'), 'Missing auto-improve/QUALITY_RUBRIC.md');
+  assert(bundle.files.some((file) => file.path === 'auto-improve/SCORECARD.md'), 'Missing auto-improve/SCORECARD.md');
+  assert(bundle.files.some((file) => file.path === 'auto-improve/RUN_LOOP.md'), 'Missing auto-improve/RUN_LOOP.md');
+  assert(bundle.files.some((file) => file.path === 'auto-improve/results.tsv'), 'Missing auto-improve/results.tsv');
   assert(bundle.files.some((file) => file.path === 'ui-ux/UI_UX_START_HERE.md'), 'Missing ui-ux/UI_UX_START_HERE.md');
   assert(bundle.files.some((file) => file.path === 'ui-ux/USER_WORKFLOWS.md'), 'Missing ui-ux/USER_WORKFLOWS.md');
   assert(bundle.files.some((file) => file.path === 'ui-ux/SCREEN_INVENTORY.md'), 'Missing ui-ux/SCREEN_INVENTORY.md');
@@ -147,6 +153,7 @@ async function main() {
   assert(bundle.files.some((file) => file.path === 'recursive-test/RECURSIVE_FIX_GUIDE.md'), 'Missing recursive-test/RECURSIVE_FIX_GUIDE.md');
   assert(bundle.files.some((file) => file.path === 'recursive-test/REGRESSION_RECHECK_GUIDE.md'), 'Missing recursive-test/REGRESSION_RECHECK_GUIDE.md');
   assert(bundle.files.some((file) => file.path === 'recursive-test/FINAL_QUALITY_GATE.md'), 'Missing recursive-test/FINAL_QUALITY_GATE.md');
+  assert(bundle.files.some((file) => file.path === 'ORCHESTRATOR_GUIDE.md'), 'Missing ORCHESTRATOR_GUIDE.md');
   const requiredHighPriorityModuleFiles = [
     'product-strategy/PRODUCT_STRATEGY_START_HERE.md',
     'product-strategy/PRODUCT_NORTH_STAR.md',
@@ -210,6 +217,14 @@ async function main() {
   assert(fs.existsSync(path.resolve('docs/GLOSSARY.md')), 'Missing docs/GLOSSARY.md');
   assert(fs.existsSync(path.resolve('docs/TROUBLESHOOTING.md')), 'Missing docs/TROUBLESHOOTING.md');
   assert(fs.existsSync(path.resolve('docs/EXAMPLE_FAMILY_TASK_APP.md')), 'Missing docs/EXAMPLE_FAMILY_TASK_APP.md');
+  assert(fs.existsSync(path.resolve('docs/ORCHESTRATOR.md')), 'Missing docs/ORCHESTRATOR.md');
+  assert(fs.existsSync(path.resolve('autoresearch/XELERA_AUTORESEARCH_PROGRAM.md')), 'Missing autoresearch/XELERA_AUTORESEARCH_PROGRAM.md');
+  assert(fs.existsSync(path.resolve('autoresearch/README.md')), 'Missing autoresearch/README.md');
+  assert(fs.existsSync(path.resolve('autoresearch/results.tsv')), 'Missing autoresearch/results.tsv');
+  assert(fs.existsSync(path.resolve('autoresearch/benchmarks/10-use-case-benchmark.md')), 'Missing autoresearch benchmark file');
+  assert(fs.existsSync(path.resolve('autoresearch/rubrics/quality-score-rubric.md')), 'Missing autoresearch quality rubric');
+  assert(fs.existsSync(path.resolve('autoresearch/rubrics/hard-caps.md')), 'Missing autoresearch hard caps');
+  assert(fs.existsSync(path.resolve('autoresearch/rubrics/simplicity-criteria.md')), 'Missing autoresearch simplicity criteria');
   assert(/family-task-app\.json/i.test(readme) || /Family Task Board/i.test(readme), 'README.md should reference the family task app example.');
 
   assert(
@@ -239,6 +254,8 @@ async function main() {
   const recursivePrompt = getFile(bundle, 'recursive-test/RECURSIVE_TEST_PROMPT.md');
   const recursiveRubric = getFile(bundle, 'recursive-test/SCORING_RUBRIC.md');
   const recursiveReport = getFile(bundle, 'recursive-test/RECURSIVE_TEST_REPORT.md');
+  const autoImproveProgram = getFile(bundle, 'auto-improve/PROGRAM.md');
+  const autoImproveResults = getFile(bundle, 'auto-improve/results.tsv');
   const phaseBrief = getFile(bundle, 'phases/phase-01/PHASE_BRIEF.md');
   const verifyPrompt = getFile(bundle, 'phases/phase-01/VERIFY_PROMPT.md');
   const generatedReadme = getFile(bundle, 'README.md');
@@ -310,6 +327,11 @@ async function main() {
   assert(/5 iterations/i.test(recursiveStart) || /max iterations/i.test(recursivePrompt), 'Recursive testing module should include max iteration guidance.');
   assert(/## Score cap rules/i.test(recursiveRubric) && /max score 69/i.test(recursiveRubric), 'SCORING_RUBRIC.md should include score caps.');
   assert(/## Per-use-case scores/i.test(recursiveReport), 'RECURSIVE_TEST_REPORT.md should include per-use-case scores.');
+  assert(/## Editable files/i.test(autoImproveProgram) && /## Fixed files/i.test(autoImproveProgram), 'auto-improve/PROGRAM.md must define editable and fixed file boundaries.');
+  assert(/keep the changes and commit them/i.test(autoImproveProgram) && /discard your own edits/i.test(autoImproveProgram), 'auto-improve/PROGRAM.md must include keep and discard rules.');
+  assert(/## Simplicity criterion/i.test(autoImproveProgram), 'auto-improve/PROGRAM.md must include the simplicity criterion.');
+  assert(/Never weaken the rubric/i.test(autoImproveProgram), 'auto-improve/PROGRAM.md must forbid weakening the rubric or evaluator.');
+  assert(/^timestamp\titeration\toverall_score\thard_cap\tdecision\tcommands_run\tchanged_files\tnotes/i.test(autoImproveResults), 'auto-improve/results.tsv must include the required header.');
   assert(/What prompt to paste/i.test(guide) && /What file gets updated/i.test(guide) && /What evidence is required/i.test(guide), 'STEP_BY_STEP_BUILD_GUIDE.md should include the required beginner stage details.');
   assert(bundle.lifecycleStatus === 'Blocked', `Expected sample bundle lifecycle status to be Blocked, received ${bundle.lifecycleStatus}`);
   assert(bundle.score.total < 72, `Blocked package score should stay below build-ready threshold, received ${bundle.score.total}.`);
@@ -2017,8 +2039,10 @@ async function main() {
   assert(/Family Task Board/i.test(familyStatusOutput), 'Family sample status should reference Family Task Board.');
   assert(/Current phase:/i.test(familyStatusOutput), 'Family sample status should show the current phase.');
 
+  await runOrchestratorRegressionChecks();
+
   console.log(
-    `Smoke test passed with ${bundle.files.length} files in ${bundle.phases.length} phases and verified Codex, Claude Code, and OpenCode packets, verification files, state files, lifecycle, warnings, next-phase behavior, parser consistency, validate, status, and CLI parity.`
+    `Smoke test passed with ${bundle.files.length} files in ${bundle.phases.length} phases and verified Codex, Claude Code, and OpenCode packets, verification files, state files, lifecycle, warnings, next-phase behavior, parser consistency, validate, status, CLI parity, and the orchestrator repo-scan/gate/score/recovery loop.`
   );
 }
 

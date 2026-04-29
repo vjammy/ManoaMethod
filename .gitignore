@@ -6,3 +6,84 @@ node_modules
 *.tsbuildinfo
 .tmp-*
 .temp/
+
+# Generated workspace artifacts
+# These are output of `npm run create-project` and the orchestrator.
+# They normally land in .tmp-*/ but can accumulate at the repo root during
+# self-tests. See README "Exported Workspace Contents" for the canonical list.
+
+# Generated workspace root files
+/00_APPROVAL_GATE.md
+/00_PROJECT_CONTEXT.md
+/01_CONTEXT_RULES.md
+/02_HOW_TO_USE_WITH_CODEX.md
+/03_HOW_TO_USE_WITH_CLAUDE_CODE.md
+/04_HOW_TO_USE_WITH_OPENCODE.md
+/AGENTS.md
+/APP_OBJECTIVE.md
+/AUTORESEARCH_*.md
+/BUILD_TARGET.md
+/BUSINESS_USER_*.md
+/CLAUDE_HANDOFF_PROMPT.md
+/CLAUDE_START_HERE.md
+/CODEX_HANDOFF_PROMPT.md
+/CODEX_START_HERE.md
+/COPY_PASTE_PROMPTS.md
+/CURRENT_STATUS.md
+/DATA_MODEL.md
+/DEPLOYMENT_PLAN.md
+/ENVIRONMENT_SETUP.md
+/FINAL_*.md
+/HANDOFF.md
+/INCIDENT_RESPONSE_GUIDE.md
+/MODULE_MAP.md
+/OPENCODE_HANDOFF_PROMPT.md
+/OPENCODE_START_HERE.md
+/OPERATIONS_RUNBOOK.md
+/ORCHESTRATOR_DEEP_AUDIT_REPORT.md
+/ORCHESTRATOR_GUIDE.md
+/ORCHESTRATOR_IMPLEMENTATION_REPORT.md
+/PERFORMANCE_PLAN.md
+/PHASE_PLAN.md
+/PLAN_CRITIQUE.md
+/PRODUCTION_GATE.md
+/PRODUCTION_READINESS_CHECKLIST.md
+/PRODUCTION_SCOPE.md
+/PROJECT_BRIEF.md
+/QUESTIONNAIRE.md
+/QUICKSTART.md
+/REGRESSION_TEST_PLAN.md
+/RELEASE_CHECKLIST.md
+/ROLLBACK_PLAN.md
+/SCORECARD.md
+/SECURITY_REVIEW.md
+/START_HERE.md
+/STEP_BY_STEP_BUILD_GUIDE.md
+/TESTING_STRATEGY.md
+/TEST_SCRIPT_INDEX.md
+/TROUBLESHOOTING.md
+/UI_UX_AND_RECURSIVE_TEST_MODULE_HANDOFF.md
+/WHAT_TO_IGNORE_FOR_NOW.md
+
+# Generated workspace directories
+/architecture/
+/auto-improve/
+/autoresearch/
+/gates/
+/integrations/
+/orchestrator/
+/phases/
+/product-strategy/
+/recursive-test/
+/regression-suite/
+/requirements/
+/security-risk/
+/ui-ux/
+/repo/
+
+# Swarm test output
+/swarm-builds/
+
+# Test fixtures / run input
+/test-inv-input.json
+/xelera_kimi_1050_swarm_test_cases.md

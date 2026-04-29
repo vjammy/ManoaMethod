@@ -1,10 +1,12 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { generateProjectBundle } from '../lib/generator';
 import { baseProjectInput } from '../lib/templates';
 import { createArtifactPackage } from './xelera-create-project';
 import { runValidate } from './xelera-validate';
+import { runOrchestratorRegressionChecks } from './orchestrator-test-utils';
 import type { ProjectInput } from '../lib/types';
 
 function buildAnsweredInput(overrides: Partial<ProjectInput> = {}): ProjectInput {
@@ -46,7 +48,7 @@ function extractBulletValues(content: string, prefix: string) {
   return Array.from(content.matchAll(new RegExp(`- ${prefix}: (.+)`, 'g'))).map((match) => match[1].trim());
 }
 
-const USE_CASES = [
+export const USE_CASES = [
   {
     name: 'Family Task Board',
     key: 'fta',
@@ -406,7 +408,7 @@ const USE_CASES = [
       dataAndIntegrations:
         'Inventory items, stock counts, threshold values, adjustment history, purchase-plan notes.',
       risks:
-        'Low-stock thresholds may be unclear, adjustments may not be trustworthy, and the package could drift into irrelevant finance or clinic concerns.',
+        'Low-stock thresholds may be unclear, adjustments may not be trustworthy, and the package could drift into irrelevant finance or unrelated domain concerns.',
       successMetrics:
         'A reviewer can trace low-stock, adjustment, and deferred purchase planning behavior with clear evidence.',
       nonGoals: 'No accounting suite, no POS integrations, no warehouse robotics.',
@@ -457,6 +459,8 @@ async function main() {
     const recursivePrompt = getFile(bundle, 'recursive-test/RECURSIVE_TEST_PROMPT.md');
     const scoringRubric = getFile(bundle, 'recursive-test/SCORING_RUBRIC.md');
     const recursiveReport = getFile(bundle, 'recursive-test/RECURSIVE_TEST_REPORT.md');
+    const autoImproveProgram = getFile(bundle, 'auto-improve/PROGRAM.md');
+    const autoImproveResults = getFile(bundle, 'auto-improve/results.tsv');
     const productNorthStar = getFile(bundle, 'product-strategy/PRODUCT_NORTH_STAR.md');
     const mvpScope = getFile(bundle, 'product-strategy/MVP_SCOPE.md');
     const functionalRequirements = getFile(bundle, 'requirements/FUNCTIONAL_REQUIREMENTS.md');
@@ -717,7 +721,12 @@ async function main() {
       'recursive-test/RECURSIVE_TEST_REPORT.md',
       'recursive-test/RECURSIVE_FIX_GUIDE.md',
       'recursive-test/REGRESSION_RECHECK_GUIDE.md',
-      'recursive-test/FINAL_QUALITY_GATE.md'
+      'recursive-test/FINAL_QUALITY_GATE.md',
+      'auto-improve/PROGRAM.md',
+      'auto-improve/QUALITY_RUBRIC.md',
+      'auto-improve/SCORECARD.md',
+      'auto-improve/RUN_LOOP.md',
+      'auto-improve/results.tsv'
     ];
     for (const filePath of requiredModuleFiles) {
       if (!bundle.files.some((file) => file.path === filePath)) {
@@ -816,6 +825,26 @@ async function main() {
     }
     if (!/## Per-use-case scores/i.test(recursiveReport)) {
       console.error(`  FAIL: ${useCase.name} RECURSIVE_TEST_REPORT.md is missing per-use-case scores.`);
+      failures++;
+    }
+    if (!/## Editable files/i.test(autoImproveProgram) || !/## Fixed files/i.test(autoImproveProgram)) {
+      console.error(`  FAIL: ${useCase.name} auto-improve/PROGRAM.md is missing editable or fixed file boundaries.`);
+      failures++;
+    }
+    if (!/keep the changes and commit them/i.test(autoImproveProgram) || !/discard your own edits/i.test(autoImproveProgram)) {
+      console.error(`  FAIL: ${useCase.name} auto-improve/PROGRAM.md is missing keep or discard rules.`);
+      failures++;
+    }
+    if (!/## Simplicity criterion/i.test(autoImproveProgram)) {
+      console.error(`  FAIL: ${useCase.name} auto-improve/PROGRAM.md is missing the simplicity criterion.`);
+      failures++;
+    }
+    if (!/Never weaken the rubric/i.test(autoImproveProgram)) {
+      console.error(`  FAIL: ${useCase.name} auto-improve/PROGRAM.md does not forbid weakening the rubric or evaluator.`);
+      failures++;
+    }
+    if (!/^timestamp\titeration\toverall_score\thard_cap\tdecision\tcommands_run\tchanged_files\tnotes/i.test(autoImproveResults)) {
+      console.error(`  FAIL: ${useCase.name} auto-improve/results.tsv is missing the required header.`);
       failures++;
     }
     if (!/Plain-English product goal/i.test(productNorthStar) || !/What success looks like/i.test(productNorthStar) || !/What failure looks like/i.test(productNorthStar)) {
@@ -937,6 +966,8 @@ async function main() {
     process.exit = originalExit;
   }
 
+  await runOrchestratorRegressionChecks();
+
   // Summary
   console.log('========================================');
   if (failures === 0) {
@@ -948,7 +979,11 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isDirectRun) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
