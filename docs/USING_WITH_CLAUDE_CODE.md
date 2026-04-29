@@ -1,88 +1,38 @@
-# USING_WITH_CLAUDE_CODE
+# Using with Claude Code
 
-## What This Guide Is For
+Claude Code-specific entry points. The universal rules and per-phase loop are in [AGENTS.md](AGENTS.md) — read that first.
 
-Use this guide if you want to run an MVP Builder workspace with Claude Code.
+## Inside a generated workspace
 
-Claude Code uses the same generated package as Codex and OpenCode. Only the startup instructions and prompt file change.
+| File | When to use |
+|---|---|
+| `CLAUDE_START_HERE.md` | Read first; lists the read-order |
+| `CLAUDE_HANDOFF_PROMPT.md` | Paste as the first message of a Claude Code session |
+| `phases/phase-NN/CLAUDE_BUILD_PROMPT.md` | Hand to Claude Code when starting that phase |
+| `03_HOW_TO_USE_WITH_CLAUDE_CODE.md` | Claude Code-specific operating notes |
 
-## Fastest Example
+## Recommended flow
 
-Create the family task app workspace:
+1. Run Claude Code from the workspace root so it has full file access.
+2. Paste `CLAUDE_HANDOFF_PROMPT.md` as the first message.
+3. Reference `phases/phase-NN/CLAUDE_BUILD_PROMPT.md` when starting a phase.
+4. Claude Code can run `npm run validate`, `npm run loop`, and `npm run auto-regression` directly — let it.
 
-```bash
-npm run create-project -- --input=examples/family-task-app.json --out=.tmp-family-task-app --zip=true
-```
+## With chrome-devtools MCP
 
-Then open:
+If your Claude Code session has the chrome-devtools MCP server connected, Claude can navigate the running app, capture snapshots, and check console errors directly. That replaces the need to install Playwright in the workspace for ad-hoc UI checks.
 
-- `.tmp-family-task-app/mvp-builder-workspace/CLAUDE_START_HERE.md`
+For the canonical 0–100 score, you still want `npm run loop:browser` (which uses Playwright). They serve different purposes:
 
-## What To Open First
+- **chrome-devtools MCP**: agent-driven exploration, ad-hoc checks.
+- **`loop:browser`**: deterministic scoring against `requirements/ACCEPTANCE_CRITERIA.md` and `SAMPLE_DATA.md`.
 
-Read:
+## After implementation phases ship
 
-1. `START_HERE.md`
-2. `00_PROJECT_CONTEXT.md`
-3. `01_CONTEXT_RULES.md`
-4. `00_APPROVAL_GATE.md`
-5. `PROJECT_BRIEF.md`
-6. `PHASE_PLAN.md`
-7. `CLAUDE_START_HERE.md`
+Run `npm run auto-regression` to score the build 0–100 and let any failures flow back into specific phase folders for rework. See [AUTO_REGRESSION.md](AUTO_REGRESSION.md).
 
-## What To Paste Into Claude Code
+## See also
 
-Open:
-
-- `CLAUDE_HANDOFF_PROMPT.md`
-
-Paste that prompt into Claude Code and give it the listed files.
-
-For the current phase, the most useful files are usually:
-
-- `PHASE_BRIEF.md`
-- `ENTRY_GATE.md`
-- `CLAUDE_BUILD_PROMPT.md`
-- `TEST_PLAN.md`
-- `HANDOFF_SUMMARY.md`
-- `NEXT_PHASE_CONTEXT.md`
-
-## Beginner-Friendly Flow
-
-1. Generate the workspace.
-2. Run `status`.
-3. Open `CLAUDE_START_HERE.md`.
-4. Paste `CLAUDE_HANDOFF_PROMPT.md`.
-5. Keep Claude Code focused on the current phase only.
-6. Review the output yourself.
-7. Fill `VERIFICATION_REPORT.md`.
-8. Run `validate`.
-9. Run `status`.
-10. Advance only if the current phase really passed.
-
-## Exact Commands
-
-Validate:
-
-```bash
-npm run validate -- --package=.tmp-family-task-app/mvp-builder-workspace
-```
-
-Status:
-
-```bash
-npm run status -- --package=.tmp-family-task-app/mvp-builder-workspace
-```
-
-Advance:
-
-```bash
-npm run next-phase -- --package=.tmp-family-task-app/mvp-builder-workspace --evidence=phases/phase-01/VERIFICATION_REPORT.md
-```
-
-## Important Rules
-
-- Work one phase at a time.
-- Keep the phase packet small and relevant.
-- Do not assume Claude Code remembers old context unless you provide the files again.
-- Do not skip verification and evidence.
+- [AGENTS.md](AGENTS.md) — universal agent rules.
+- [WORKSPACE.md](WORKSPACE.md) — every file in a generated workspace.
+- [WORKFLOW.md](WORKFLOW.md) — the 9 steps end-to-end.

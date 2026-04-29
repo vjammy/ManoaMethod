@@ -1,179 +1,102 @@
-# TROUBLESHOOTING
+# Troubleshooting
 
-## I do not know which file to open first
+Symptom → cause → fix. Most issues fall into one of these buckets.
 
-Open the generated workspace and start with:
+## Generation
 
-1. `START_HERE.md`
-2. `00_PROJECT_CONTEXT.md`
-3. `01_CONTEXT_RULES.md`
-4. `00_APPROVAL_GATE.md`
-5. `PROJECT_BRIEF.md`
-6. `PHASE_PLAN.md`
+### `npm run create-project` fails with a JSON error
+The input file does not parse. Open `examples/family-task-app.json` and compare structure. Required top-level fields: `productName`, `level`, `track`, `productIdea`, `targetAudience`, `problemStatement`, `mustHaveFeatures`, `desiredOutput`. Plus a `questionnaireAnswers` object.
 
-## validate failed
+### Generation completes but `npm run validate` lists missing files
+You probably edited generated files. Regenerate with `--out=` pointing at a fresh directory; do not patch by hand.
 
-Run:
+### Validation says PHASE_PLAN.md is missing `Requirement IDs:`
+You're running an older generated workspace. Regenerate. Newer workspaces always emit `- Requirement IDs:` per phase.
 
-```bash
-npm run validate -- --package=YOUR_PACKAGE_PATH
-```
+## Status / advancement
 
-Then read the listed problems one by one. Common causes:
+### `npm run next-phase` refuses to advance
+Open the verification report named in the error. Required for advancement:
 
-- a required file is missing
-- `VERIFICATION_REPORT.md` uses the wrong result value
-- `VERIFICATION_REPORT.md` uses the wrong recommendation value
-- a listed evidence file does not exist
-- `repo/mvp-builder-state.json` is malformed
+- `## result: pass`
+- `## recommendation: proceed`
+- `## evidence files` lists at least one file that exists on disk and is not `- pending`.
 
-Fix the listed file, then run `validate` again.
+### Status says lifecycle is `Blocked`
+There are blocker warnings. Open `00_APPROVAL_GATE.md` for the list. Resolve them in the source files (PROJECT_BRIEF.md, the questionnaire) and regenerate.
 
-## status says pending
+### Status says lifecycle is `InRework`
+Auto-regression rolled state back. Open `phases/phase-NN/REWORK_PROMPT_auto-regression-*.md` in the named phase folder. Fix the failures, record evidence, re-run `npm run auto-regression`.
 
-This usually means the current phase has not been fully reviewed yet.
+## HTTP loop / probe
 
-Do this:
+### Probe always fails — runtime never starts
+Check `RUNTIME_TARGET.md` in the workspace:
 
-1. open `VERIFY_PROMPT.md`
-2. open `EVIDENCE_CHECKLIST.md`
-3. complete `VERIFICATION_REPORT.md`
-4. run `status` again
+- `Base URL` is reachable from the package root.
+- `Command` is the actual start command (e.g. `npm run dev`, `next dev`).
+- `Smoke routes` exist on the running app.
 
-## status says missing evidence
+If the project doesn't run on a URL (CLI, library, batch process), set `Base URL: none` in `RUNTIME_TARGET.md` and `npm run loop:browser` will skip the probe.
 
-This means `VERIFICATION_REPORT.md` lists evidence files that do not exist, or only contains placeholder evidence.
+### TEST_SCRIPT.md commands are skipped
+The forbidden-pattern list (rm -rf, sudo, force push, npm publish, etc.) blocks dangerous commands. If a legitimate command was caught, rewrite the bash block to use a deterministic, safe variant. Do not whitelist destructive commands.
 
-Check:
+## Browser loop
 
-- `## evidence files`
-- whether each listed file exists on disk
-- whether `- pending` was replaced with real paths
+### Score stays at 0 even though pages render
+Two likely causes:
 
-## next-phase will not advance
+1. **Playwright not installed** in the workspace. Install: `npm install --save-dev playwright && npx playwright install chromium`.
+2. **Runtime didn't start.** Check `evidence/runtime/browser/<timestamp>/BROWSER_LOOP_REPORT.md` → "Probe notes". If it says the runtime never responded, fix `RUNTIME_TARGET.md`.
 
-Common reasons:
+### REQs render on the page but stay `partially-covered`
+By design. Coverage requires both DOM tokens AND `phases/phase-NN/TEST_RESULTS.md` showing `## Final result: pass` with a `Scenario evidence: REQ-N` block. Run the phase test script and paste evidence. See [AUTO_REGRESSION.md](AUTO_REGRESSION.md).
 
-- `result` is not `pass`
-- `recommendation` is not `proceed`
-- evidence files are missing
-- the package is still blocked
-- the evidence file path passed to `--evidence=` is wrong
+### Console errors capture but don't change the score
+By current design — they're recorded as evidence only. If you want them to dock points, that's a generator change.
 
-Use:
+## Auto-regression
 
-```bash
-npm run status -- --package=YOUR_PACKAGE_PATH
-```
+### Iteration 1 reports build failed but the build works manually
+Auto-regression runs the build in the workspace root. If your `npm run build` lives in a subdirectory, pass `--build-command="cd app && npm run build"` (or whatever the correct command is).
 
-It usually tells you the next action.
+### Loop converges but combined score is suspiciously high without Playwright
+Without Playwright, `combined = HTTP loop score`. The browser-coverage gate is bypassed. Install Playwright before trusting a score above 75.
 
-## VERIFICATION_REPORT.md is malformed
+### State rolled back but I don't see new REWORK_PROMPT files
+Check the failing phase folder. Filename pattern: `phases/phase-NN/REWORK_PROMPT_auto-regression-iteration-NN_attempt-MM.md`. The "earliest failing phase" is whichever phase index is lowest among the affected phases.
 
-Use these exact headers:
+## Validation
 
-```md
-## result: pending
-## recommendation: pending
-## evidence files
-- pending
-```
+### "TEST_SCRIPT.md missing required section: ## Phase requirement coverage"
+The workspace was generated by an older build. Regenerate.
 
-Allowed result values:
+### "TEST_RESULTS.md defaults to pass"
+You marked the file as pass without recording real evidence. Validation rejects template-shaped evidence. Add real observations under `Scenario evidence: REQ-N` blocks before re-validating.
 
-- `pass`
-- `fail`
-- `pending`
+### "SAMPLE_DATA.md is missing required sections"
+Regenerate the workspace. Required sections: `Happy-path sample`, `Negative-path sample`, `Used by requirements`.
 
-Allowed recommendation values:
+## Orchestrator
 
-- `proceed`
-- `revise`
-- `blocked`
-- `pending`
+### Score is capped below 80 even though gates pass
+The hard caps in `lib/orchestrator/score.ts` apply when:
 
-## I used the wrong result or recommendation value
+- Tests were not run (cap 79)
+- Build fails (cap 69)
+- Verification claims pass but body says blocked/fail (cap 59)
+- Generated artifacts are mostly generic templates (cap 74)
+- Phase gates are bypassed (cap 69)
+- Fake evidence is present (cap 49)
 
-Replace it with one of the allowed values above, save the file, and run `validate` again.
+Open `orchestrator/reports/OBJECTIVE_SCORECARD.md` — the `capReason` field tells you which cap is active.
 
-## I deleted a required file
+### Orchestrator regression test fails on a clean tree
+Pre-existing repo issue unrelated to auto-regression. The smoke and quality-regression suites both terminate at this same point. It does not block normal use of `create-project`, `validate`, `loop`, or `auto-regression`.
 
-The easiest fix is usually to regenerate the package:
+## Common confusion
 
-```bash
-npm run create-project -- --input=examples/family-task-app.json --out=.tmp-family-task-app --zip=true
-```
-
-If you need to preserve work, copy your changed phase notes out first, regenerate, then re-apply your edits carefully.
-
-## I want to resume after a few days
-
-Open:
-
-1. `START_HERE.md`
-2. `repo/mvp-builder-state.json`
-3. `phases/phase-XX/HANDOFF_SUMMARY.md`
-4. `phases/phase-XX/NEXT_PHASE_CONTEXT.md`
-
-Then run:
-
-```bash
-npm run status -- --package=YOUR_PACKAGE_PATH
-```
-
-## Codex, Claude, or OpenCode lost context
-
-Re-ground the agent with:
-
-- the root context files
-- the current phase packet
-- the matching `*_START_HERE.md`
-- the matching `*_HANDOFF_PROMPT.md`
-
-Do not rely on old chat memory alone.
-
-## I do not know what evidence to list
-
-List the real files you reviewed to justify your decision. Good examples:
-
-- `phases/phase-01/EVIDENCE_CHECKLIST.md`
-- `phases/phase-01/HANDOFF_SUMMARY.md`
-- `repo/manifest.json`
-- changed markdown files relevant to the phase
-
-Do not list:
-
-- `- pending`
-- vague notes
-- chat history
-
-## I am not technical enough to understand a file
-
-Start with the plain-language docs:
-
-- [NOVICE_GUIDE.md](C:\AI\MvpBuilder\docs\NOVICE_GUIDE.md)
-- [GLOSSARY.md](C:\AI\MvpBuilder\docs\GLOSSARY.md)
-
-Then ask your coding agent to explain one file at a time in plain English.
-
-## The project has too many files
-
-Focus only on:
-
-- the root starter files
-- the current phase folder
-- `status`
-
-You do not need to read every file at once.
-
-## I want to restart a phase
-
-There is no special reset command right now.
-
-Practical restart options:
-
-1. keep the same workspace, revise the phase files, and update verification
-2. regenerate a fresh workspace from the example JSON
-3. copy over only the notes you still want
-
-If you are unsure, the safest path is usually to regenerate and compare.
+- **Two different scores.** The `SCORECARD.md` inside a generated workspace is the planning-readiness score (0–100, from `lib/scoring.ts`). The auto-regression score is build-correctness (0–100, from `lib/orchestrator/score.ts` plus loop layers). They measure different things.
+- **Two different states.** `repo/mvp-builder-state.json` tracks the build (currentPhase, phaseEvidence). `repo/mvp-builder-loop-*.json` tracks the most recent loop runs. Auto-regression writes both.
+- **`framework/*` directories** in the source repo are placeholders; the real implementation is in `lib/generator.ts`. Ignore them.

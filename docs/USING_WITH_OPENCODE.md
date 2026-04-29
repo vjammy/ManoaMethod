@@ -1,99 +1,29 @@
-# USING_WITH_OPENCODE
+# Using with OpenCode
 
-## What This Guide Is For
+OpenCode-specific entry points. The universal rules and per-phase loop are in [AGENTS.md](AGENTS.md) — read that first.
 
-Use this guide if you want to run an MVP Builder workspace with OpenCode.
+## Inside a generated workspace
 
-OpenCode is a first-class workflow alongside Codex and Claude Code. The generated workspace stays the same across all three.
+| File | When to use |
+|---|---|
+| `OPENCODE_START_HERE.md` | Read first; lists the read-order |
+| `OPENCODE_HANDOFF_PROMPT.md` | Paste as the first message of an OpenCode session |
+| `phases/phase-NN/OPENCODE_BUILD_PROMPT.md` | Hand to OpenCode when starting that phase |
+| `04_HOW_TO_USE_WITH_OPENCODE.md` | OpenCode-specific operating notes |
 
-## Fastest Example
+## Recommended flow
 
-Create the family task app workspace:
+1. Open `OPENCODE_START_HERE.md` for the read-order list.
+2. Paste `OPENCODE_HANDOFF_PROMPT.md` to start a session.
+3. Drive each phase using the matching `OPENCODE_BUILD_PROMPT.md`.
+4. Use `npm run validate` and `npm run next-phase` between phases.
 
-```bash
-npm run create-project -- --input=examples/family-task-app.json --out=.tmp-family-task-app --zip=true
-```
+## After implementation phases ship
 
-Then open:
+Run `npm run auto-regression` to score the build 0–100 and let any failures flow back into specific phase folders for rework. See [AUTO_REGRESSION.md](AUTO_REGRESSION.md).
 
-- `.tmp-family-task-app/mvp-builder-workspace/OPENCODE_START_HERE.md`
+## See also
 
-## What To Open First
-
-Read:
-
-1. `START_HERE.md`
-2. `00_PROJECT_CONTEXT.md`
-3. `01_CONTEXT_RULES.md`
-4. `00_APPROVAL_GATE.md`
-5. `PROJECT_BRIEF.md`
-6. `PHASE_PLAN.md`
-7. `AGENTS.md`
-8. `OPENCODE_START_HERE.md`
-
-## What To Paste Into OpenCode
-
-Open:
-
-- `OPENCODE_HANDOFF_PROMPT.md`
-
-Paste that prompt into OpenCode and give it the matching current phase files.
-
-For the current phase, the usual packet is:
-
-- `PHASE_BRIEF.md`
-- `ENTRY_GATE.md`
-- `OPENCODE_BUILD_PROMPT.md`
-- `TEST_PLAN.md`
-- `HANDOFF_SUMMARY.md`
-- `NEXT_PHASE_CONTEXT.md`
-
-## If You Use the OpenCode Config Pack
-
-This repo also includes an OpenCode config pack under:
-
-`dist-addons/opencode/mvp-builder/`
-
-If your OpenCode setup supports local commands or agents, copy those files into the location where you keep them.
-
-## Beginner-Friendly Flow
-
-1. Generate the workspace.
-2. Run `status`.
-3. Open `OPENCODE_START_HERE.md`.
-4. Paste `OPENCODE_HANDOFF_PROMPT.md`.
-5. Keep OpenCode focused on one phase only.
-6. Review the results yourself.
-7. Fill `VERIFICATION_REPORT.md`.
-8. Run `validate`.
-9. Run `status`.
-10. Advance only after the package is truly ready.
-
-## Verification Workflow
-
-After phase work, update `VERIFICATION_REPORT.md` with:
-
-- `## result: pass`, `fail`, or `pending`
-- `## recommendation: proceed`, `revise`, `blocked`, or `pending`
-- real files under `## evidence files`
-
-Then use:
-
-```bash
-npm run validate -- --package=.tmp-family-task-app/mvp-builder-workspace
-npm run status -- --package=.tmp-family-task-app/mvp-builder-workspace
-```
-
-Advance with:
-
-```bash
-npm run next-phase -- --package=.tmp-family-task-app/mvp-builder-workspace --evidence=phases/phase-01/VERIFICATION_REPORT.md
-```
-
-## Important Rules
-
-- Read `AGENTS.md`.
-- Do not skip entry gates.
-- Do not silently mark phases complete.
-- Do not rely on hidden context.
-- Do not use placeholder evidence when trying to advance.
+- [AGENTS.md](AGENTS.md) — universal agent rules.
+- [WORKSPACE.md](WORKSPACE.md) — every file in a generated workspace.
+- [WORKFLOW.md](WORKFLOW.md) — the 9 steps end-to-end.

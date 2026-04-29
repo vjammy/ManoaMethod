@@ -1,118 +1,97 @@
-# QUICKSTART
+# Quickstart
 
-## 1. Install Dependencies
+A linear 5-minute tour. Each step has a command, what to expect, and what to do next.
 
-```bash
-npm install
-```
+## Prerequisites
 
-Optional checks:
+- Node 20 or newer.
+- `npm install` from the repo root.
+- `npm run typecheck` to confirm the install is healthy.
 
-```bash
-npm run typecheck
-npm run build
-```
-
-## 2. Create the Family Task App Example
+## 1. Generate a sample workspace
 
 ```bash
-npm run create-project -- --input=examples/family-task-app.json --out=.tmp-family-task-app --zip=true
+npm run create-project -- --input=examples/family-task-app.json --out=.tmp-demo
 ```
 
-What you should see:
+**You should see:** `Created artifact package at .tmp-demo/mvp-builder-workspace`.
 
-- `.tmp-family-task-app/mvp-builder-workspace`
-- `.tmp-family-task-app/mvp-builder-workspace.zip`
+A folder appears at `.tmp-demo/mvp-builder-workspace/` with phase folders, support folders (requirements, architecture, security, integrations, ui-ux), and root-level guides.
 
-## 3. Open These Files First
-
-Inside the generated workspace, open:
-
-1. `START_HERE.md`
-2. `00_PROJECT_CONTEXT.md`
-3. `01_CONTEXT_RULES.md`
-4. `00_APPROVAL_GATE.md`
-5. `PROJECT_BRIEF.md`
-6. `PHASE_PLAN.md`
-
-## 4. Validate the New Package
+## 2. Validate the package
 
 ```bash
-npm run validate -- --package=.tmp-family-task-app/mvp-builder-workspace
+npm run validate -- --package=.tmp-demo/mvp-builder-workspace
 ```
 
-What you should see:
+**You should see:** `File structure and verification fields are valid. Lifecycle=ReviewReady, phases=12, blockerWarnings=0, currentPhase=1.`
 
-- a validation success message
-- or specific fix instructions if something is wrong
+If validation reports issues, regenerate the workspace — do not edit generated files by hand at this stage.
 
-## 5. Check Status
+## 3. Check status
 
 ```bash
-npm run status -- --package=.tmp-family-task-app/mvp-builder-workspace
+npm run status -- --package=.tmp-demo/mvp-builder-workspace
 ```
 
-What you should see:
+**You should see:** the current phase, lifecycle status, evidence state, and the next recommended action.
 
-- current phase
-- lifecycle status
-- evidence state
-- next recommended action
+## 4. Open these files in order
 
-## 6. Choose an Agent
+Inside the generated workspace:
 
-Open one of:
+1. `START_HERE.md` — the master entry point.
+2. `00_PROJECT_CONTEXT.md` and `01_CONTEXT_RULES.md` — read-first context for any agent.
+3. `PROJECT_BRIEF.md` — what is being built and why.
+4. `PHASE_PLAN.md` — the phase sequence with `Requirement IDs:` per phase.
+5. `SAMPLE_DATA.md` — happy-path and negative-path fixtures per entity, keyed to REQ-IDs.
+6. `requirements/ACCEPTANCE_CRITERIA.md` — Given/When/Then per REQ-ID, linked to entity samples.
 
-- `CODEX_START_HERE.md`
-- `CLAUDE_START_HERE.md`
-- `OPENCODE_START_HERE.md`
+## 5. Drive a phase with an AI agent
 
-Then open the matching prompt:
+For phase 1, the agent needs:
 
-- `CODEX_HANDOFF_PROMPT.md`
-- `CLAUDE_HANDOFF_PROMPT.md`
-- `OPENCODE_HANDOFF_PROMPT.md`
+- `phases/phase-01/PHASE_BRIEF.md`
+- `phases/phase-01/ENTRY_GATE.md`
+- The matching build prompt: `phases/phase-01/CODEX_BUILD_PROMPT.md` (or `CLAUDE_BUILD_PROMPT.md` / `OPENCODE_BUILD_PROMPT.md`)
+- `phases/phase-01/TEST_SCRIPT.md`
+- `phases/phase-01/HANDOFF_SUMMARY.md`
+- `phases/phase-01/NEXT_PHASE_CONTEXT.md`
 
-## 7. What To Paste Into an Agent
+See [AGENTS.md](AGENTS.md) for the agent-specific handoff prompts.
 
-Paste the matching handoff prompt and give the agent:
+## 6. Verify the phase
 
-- the root context files listed in the start file
-- the current phase files listed in the build prompt
+After the agent finishes:
 
-At minimum for the current phase, open:
+1. Open `phases/phase-01/VERIFY_PROMPT.md` and follow it.
+2. Run or follow `phases/phase-01/TEST_SCRIPT.md`. Each REQ scenario points to `SAMPLE_DATA.md` for inputs.
+3. Record results in `phases/phase-01/TEST_RESULTS.md` under `## Final result:` (must become `pass` for the phase's REQ-IDs to count as covered).
+4. Fill in `phases/phase-01/VERIFICATION_REPORT.md` with `result`, `recommendation`, and `## evidence files`.
 
-- `PHASE_BRIEF.md`
-- `ENTRY_GATE.md`
-- the matching `*_BUILD_PROMPT.md`
-- `TEST_PLAN.md`
-- `HANDOFF_SUMMARY.md`
-- `NEXT_PHASE_CONTEXT.md`
-
-## 8. After the Agent Finishes
-
-Open and complete:
-
-- `VERIFY_PROMPT.md`
-- `EVIDENCE_CHECKLIST.md`
-- `VERIFICATION_REPORT.md`
-
-## 9. Advance After Verification
-
-Only advance after:
-
-- `result` is `pass`
-- `recommendation` is `proceed`
-- `## evidence files` lists at least one real file that exists
-
-Command:
+## 7. Advance
 
 ```bash
-npm run next-phase -- --package=.tmp-family-task-app/mvp-builder-workspace --evidence=phases/phase-01/VERIFICATION_REPORT.md
+npm run next-phase -- --package=.tmp-demo/mvp-builder-workspace --evidence=phases/phase-01/VERIFICATION_REPORT.md
 ```
 
-## 10. Useful Next Reads
+Only advances when result=pass, recommendation=proceed, and evidence files exist on disk.
 
-- [NOVICE_GUIDE.md](C:\AI\MvpBuilder\docs\NOVICE_GUIDE.md)
-- [TROUBLESHOOTING.md](C:\AI\MvpBuilder\docs\TROUBLESHOOTING.md)
-- [EXAMPLE_FAMILY_TASK_APP.md](C:\AI\MvpBuilder\docs\EXAMPLE_FAMILY_TASK_APP.md)
+## 8. After the build, run auto-regression
+
+Once any implementation phase has produced runnable code:
+
+```bash
+npm run auto-regression -- --package=.tmp-demo/mvp-builder-workspace
+```
+
+This builds the app, runs HTTP probes against `RUNTIME_TARGET.md`, runs every phase's `TEST_SCRIPT.md`, drives Playwright if installed, and produces a 0–100 score. Failing iterations write `evidence/runtime/AUTO_REGRESSION_FIX_PROMPT_iteration-NN.md` and per-phase `phases/phase-NN/REWORK_PROMPT_*.md`.
+
+Full scoring rules are in [AUTO_REGRESSION.md](AUTO_REGRESSION.md).
+
+## What to read next
+
+- [WORKFLOW.md](WORKFLOW.md) — the 9 steps in detail.
+- [COMMANDS.md](COMMANDS.md) — every npm command with arguments and outputs.
+- [WORKSPACE.md](WORKSPACE.md) — every file in a generated workspace.
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md) — symptom → fix table.

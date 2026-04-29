@@ -1,196 +1,62 @@
-# Build From Attached Requirements
+# Build from Attached Requirements
 
-## Purpose
+How to use MVP Builder when you already have a requirements document (PDF, Notion, Confluence, README, ticket dump, etc.) and want an AI agent to build the actual solution.
 
-This guide explains how to use MVP Builder when you already have requirements and want a coding agent to build the actual solution from them.
+## High-level flow
 
-This is the workflow behind prompts like:
+1. Hand the agent the requirements doc and the URL to this repo.
+2. Ask the agent to use MVP Builder to plan the project before coding.
+3. The agent translates your requirements into a `ProjectInput` JSON, runs `npm run create-project`, and starts walking phases.
+4. Once anything is buildable, the agent runs `npm run auto-regression` to score the build against the requirements.
 
-"Requirements attached. Pull repo https://github.com/vjammy/mvp-builder and use the MVP Builder workflow to build the production-ready application in the repo root."
+## What to give the agent
 
-The important clarification is this:
+- The requirements (attach the file, paste the contents, or link to it).
+- This repo URL: `https://github.com/vjammy/mvp-builder`.
+- These instructions:
 
-- the agent is not just reviewing the requirements
-- the agent is not just generating planning notes
-- the agent is building the real application
+> Use MVP Builder to turn the attached requirements into a robust production-ready application. Build in the repo root. Follow the MVP Builder phase, gate, validation, and handoff workflow. Use `npm run auto-regression` to score the result.
 
-MVP Builder is the workflow used to take the project from raw requirements to a robust production-ready end state.
+## What the agent should do
 
-## Where The Requirements May Live
+1. **Translate the requirements into a `ProjectInput` JSON.** Format matches `examples/family-task-app.json`. Required fields: `productName`, `level`, `track`, `productIdea`, `targetAudience`, `problemStatement`, `mustHaveFeatures`, `desiredOutput`, `questionnaireAnswers`.
+2. **Generate the workspace:** `npm run create-project -- --input=<file> --out=<dir>`.
+3. **Validate it:** `npm run validate -- --package=<dir>/mvp-builder-workspace`.
+4. **Walk the phases sequentially** per [AGENTS.md](AGENTS.md). For each phase: read brief, build, run `TEST_SCRIPT.md`, record evidence in `TEST_RESULTS.md`, advance.
+5. **Run auto-regression** once any implementation phase produces runnable code. See [AUTO_REGRESSION.md](AUTO_REGRESSION.md).
+6. **On rework:** read `phases/phase-NN/REWORK_PROMPT_*.md` and the appended "Auto-regression failures" block in `TEST_RESULTS.md`. Fix the code, re-record evidence, re-run.
 
-The requirements may be provided in any of these places:
+## Translating loose requirements
 
-- attached in the conversation
-- written directly in the prompt
-- stored in the repo root
-- stored in another folder in the repository
+Requirements docs vary. Map them like this:
 
-The first job of the builder is to locate those requirements and treat them as the source input for the build.
+| Source content | Goes into ProjectInput field |
+|---|---|
+| Project name / title | `productName` |
+| One-line elevator pitch | `productIdea` |
+| Background / context | `problemStatement` |
+| Stakeholders, personas | `targetAudience` |
+| MVP scope | `mustHaveFeatures` |
+| Deferred / future scope | `niceToHaveFeatures` |
+| Out of scope | `nonGoals` |
+| Constraints / non-functional | `constraints` |
+| Risks | `risks` |
+| Success criteria / KPIs | `successMetrics` |
+| Ship date / phasing | `timeline` |
+| Team setup | `teamContext` |
 
-## Recommended Operator Workflow
+If something doesn't map cleanly, stash it in `questionnaireAnswers` under the matching key (`north-star`, `primary-workflow`, `data-boundaries`, etc.). See `lib/templates.ts > buildQuestionPrompts` for the full set of question IDs.
 
-### 1. Prepare the input
+## When the requirements are vague
 
-Bring one or more of the following:
+Ask the user for clarification before generating the workspace. The generator will produce a usable plan even from sparse input, but vague briefs trigger blocker warnings and the package will land in `lifecycleStatus: Blocked`. That's a feature — vague input shouldn't silently produce a confident plan.
 
-- product requirements document
-- brief
-- user stories
-- scope notes
-- constraints
-- acceptance criteria
+## Production target
 
-The clearer the input, the stronger the build.
+Set `BUILD_TARGET.md` to `Production application` if the requirements imply a live deployment. The generator emits `PRODUCTION_SCOPE.md`, `DEPLOYMENT_PLAN.md`, `OPERATIONS_RUNBOOK.md`, `INCIDENT_RESPONSE_GUIDE.md`, `ROLLBACK_PLAN.md`, `RELEASE_CHECKLIST.md`, and `PRODUCTION_GATE.md` — all part of the same workspace. See `MVP_BUILDER_PRODUCTION_BUILD_PROMPT.md` for the reusable production prompt.
 
-### 2. Give the agent the repo and the requirements
+## See also
 
-The agent should:
-
-- pull `https://github.com/vjammy/mvp-builder`
-- locate the requirements wherever they were provided
-- treat those requirements as the source of truth for the solution
-- read the repo guidance
-- build directly in the repo root
-
-### 3. Require method compliance
-
-The agent should not:
-
-- skip the step-by-step workflow
-- jump ahead across phases
-- ignore gates
-- rely on hidden chat context
-- mark phases complete without evidence
-
-### 4. Require a final handoff
-
-The final output should state:
-
-- what was built
-- what passed
-- what is deferred
-- what the next action should be
-
-## The End State
-
-The intended end state is:
-
-- the requirements are implemented
-- the application is robust
-- the application is production-ready
-- the repo contains accurate phase, verification, and handoff records
-
-The method is not the end product. The production-ready application is the end product. The method is how the team gets there with discipline.
-
-## Strong Default Prompt
-
-Use this when you are attaching requirements to Codex, Claude Code, or OpenCode:
-
-```text
-You are building the real solution, not just reviewing requirements or producing planning notes.
-
-The product requirements are either:
-- attached in this conversation
-- written directly in this prompt
-- or stored in the repo root or another folder in the repository
-
-Your first job is to find and read those requirements.
-
-Repository:
-https://github.com/vjammy/mvp-builder
-
-Goal:
-Build a robust production-ready application in the repo root based on those requirements.
-
-Method:
-Use the MVP Builder workflow in this repository to get from requirements to the finished application. Use the method as the delivery system for the build, not as a separate documentation exercise.
-
-Instructions:
-1. Locate and read the requirements wherever they were provided.
-2. Treat those requirements as the source of truth for what must be built.
-3. Read the repo start files and current-status guidance first.
-4. Use the MVP Builder to clarify scope, plan phases, enforce gates, verify progress, and maintain handoff quality.
-5. Build the actual application directly in the repo root.
-6. Work phase by phase. Do not skip entry gates, exit gates, validation, testing, regression checks, or handoff updates.
-7. Keep the markdown workflow files updated as you go so project state stays explicit and reusable.
-8. Do not rely on hidden chat context. Put important decisions, blockers, scope changes, and verification results into the repo's documented workflow.
-9. Finish with a final handoff summary that clearly states what was built, what passed, what remains deferred, and the next recommended action.
-
-Definition of success:
-- the requirements are implemented
-- the application is production-ready
-- the build is validated and tested
-- the repo reflects real phase progress and evidence
-- the final handoff clearly states what was built, what passed, what remains deferred, and the next recommended action
-```
-
-## Shorter Business-Friendly Prompt
-
-Use this when the operator wants something simpler:
-
-```text
-You are building the actual solution.
-
-The requirements are either attached here, written in this prompt, or stored somewhere in the repository.
-
-Pull repo: https://github.com/vjammy/mvp-builder
-
-Find the requirements first, then use the MVP Builder workflow in the repo to build a production-ready application in the repo root. Follow the phase workflow, do not skip gates, and keep the markdown files updated so the handoff is clear.
-```
-
-## Why This Prompt Shape Works Better
-
-This wording is stronger because it makes five things explicit:
-
-1. the agent is expected to build the real product
-2. the agent must first locate the requirements
-3. the requirements may live in several places
-4. the desired outcome is a production-ready application
-5. MVP Builder is the workflow for reaching that end state
-
-## What The Agent Should Read First
-
-Inside the repo or generated workspace, the agent should start with:
-
-1. `README.md`
-2. `START_HERE.md` or the generated workspace start file
-3. `CURRENT_STATUS.md`
-4. `STEP_BY_STEP_BUILD_GUIDE.md`
-5. `PROJECT_BRIEF.md`
-6. `PHASE_PLAN.md`
-7. the current phase packet
-
-## What A Good Run Looks Like
-
-A good agent run:
-
-- identifies where the requirements actually live
-- restates the problem and scope clearly
-- explains that it is building the real application
-- names blockers early
-- follows the current phase
-- keeps evidence updated
-- explains what changed
-- leaves the repo easier for the next builder to trust
-
-## What A Bad Run Looks Like
-
-A bad agent run:
-
-- fails to identify where the real requirements live
-- treats the task like a documentation exercise only
-- starts coding without clarifying whether the requirements are in the prompt, attachments, root, or another folder
-- ignores the package structure
-- spreads changes across unrelated areas
-- claims completion without proof
-- leaves no usable handoff
-
-## Notes For Teams
-
-If you are rolling this out across a team:
-
-- keep the strong default prompt as the standard starting instruction
-- require the final handoff summary in every build session
-- ask reviewers to inspect evidence quality, not just output quality
-
-That keeps the method from degrading into "prompt once and hope."
+- [WORKFLOW.md](WORKFLOW.md) — the 9 steps end-to-end.
+- [AGENTS.md](AGENTS.md) — driving Codex / Claude Code / OpenCode.
+- [MVP_BUILDER_PRODUCTION_BUILD_PROMPT.md](MVP_BUILDER_PRODUCTION_BUILD_PROMPT.md) — full production prompt.

@@ -1,52 +1,47 @@
-# Documentation Guide
+# Documentation
 
-This folder explains MVP Builder from three angles:
+Pick the doc that matches your goal.
 
-- what the method is
-- why the method uses gates, evidence, and handoffs
-- how business users and technical builders should actually run it
+## I want to try it
 
-## Start Here
+- **[QUICKSTART.md](QUICKSTART.md)** — 5-minute linear tour ending in a passing workspace.
+- **[NOVICE_GUIDE.md](NOVICE_GUIDE.md)** — beginner-paced version of the same flow.
+- **[EXAMPLE_FAMILY_TASK_APP.md](EXAMPLE_FAMILY_TASK_APP.md)** — what a fully generated example looks like.
 
-If you are new to the repo, read these files in order:
+## I want to understand the method
 
-1. [README.md](../README.md)
-2. [METHODOLOGY.md](./METHODOLOGY.md)
-3. [BEST_PRACTICES.md](./BEST_PRACTICES.md)
-4. [BUILD_FROM_REQUIREMENTS.md](./BUILD_FROM_REQUIREMENTS.md)
+- **[WORKFLOW.md](WORKFLOW.md)** — the 9 steps from project brief to converged auto-regression score.
+- **[WORKSPACE.md](WORKSPACE.md)** — every file in a generated workspace.
+- **[AUTO_REGRESSION.md](AUTO_REGRESSION.md)** — step 9 in detail: scoring formulas, browser loop, rework rollback.
+- **[GLOSSARY.md](GLOSSARY.md)** — terms and lifecycle states.
 
-## Pick Your Lane
+## I want to drive an agent
 
-- Business users: [BUSINESS_USER_WORKFLOW.md](./BUSINESS_USER_WORKFLOW.md)
-- Technical builders: [TECHNICAL_BUILDER_WORKFLOW.md](./TECHNICAL_BUILDER_WORKFLOW.md)
-- Codex: [USING_WITH_CODEX.md](./USING_WITH_CODEX.md)
-- Claude Code: [USING_WITH_CLAUDE_CODE.md](./USING_WITH_CLAUDE_CODE.md)
-- OpenCode: [USING_WITH_OPENCODE.md](./USING_WITH_OPENCODE.md)
+- **[AGENTS.md](AGENTS.md)** — universal rules + agent-specific entry files.
+- **[USING_WITH_CODEX.md](USING_WITH_CODEX.md)** — Codex specifics.
+- **[USING_WITH_CLAUDE_CODE.md](USING_WITH_CLAUDE_CODE.md)** — Claude Code specifics.
+- **[USING_WITH_OPENCODE.md](USING_WITH_OPENCODE.md)** — OpenCode specifics.
 
-## Core Concepts
+## I want to run a command
 
-- Method overview: [METHODOLOGY.md](./METHODOLOGY.md)
-- Best practices: [BEST_PRACTICES.md](./BEST_PRACTICES.md)
-- Orchestrator: [ORCHESTRATOR.md](./ORCHESTRATOR.md)
-- Beginner guide: [NOVICE_GUIDE.md](./NOVICE_GUIDE.md)
-- Quick commands: [QUICKSTART.md](./QUICKSTART.md)
-- Troubleshooting: [TROUBLESHOOTING.md](./TROUBLESHOOTING.md)
-- Glossary: [GLOSSARY.md](./GLOSSARY.md)
+- **[COMMANDS.md](COMMANDS.md)** — every npm script with args, outputs, and when to use it.
 
-## Recommended Reading Order For Teams
+## I want to build from existing requirements
 
-1. Product owner or business lead reads [BUSINESS_USER_WORKFLOW.md](./BUSINESS_USER_WORKFLOW.md).
-2. Technical lead reads [TECHNICAL_BUILDER_WORKFLOW.md](./TECHNICAL_BUILDER_WORKFLOW.md).
-3. Both read [BEST_PRACTICES.md](./BEST_PRACTICES.md).
-4. The actual builder reads the agent-specific guide plus the generated workspace start files.
+- **[BUILD_FROM_REQUIREMENTS.md](BUILD_FROM_REQUIREMENTS.md)** — workflow for an attached requirements doc.
+- **[MVP_BUILDER_PRODUCTION_BUILD_PROMPT.md](MVP_BUILDER_PRODUCTION_BUILD_PROMPT.md)** — reusable production-build prompt.
 
-## What This Documentation Is Trying To Prevent
+## I want to understand the orchestrator
 
-These docs are designed to prevent the most common AI-assisted build failures:
+- **[ORCHESTRATOR.md](ORCHESTRATOR.md)** — static-analysis scorer (`npm run orchestrate` / `score` / `gates`).
 
-- starting implementation before the requirements are specific
-- letting scope expand silently
-- treating agent output as proof
-- skipping tests and calling the phase done anyway
-- losing context between sessions
-- leaving the next builder dependent on private chat history
+## Something is broken
+
+- **[TROUBLESHOOTING.md](TROUBLESHOOTING.md)** — symptom → fix table.
+
+## Suggested reading order for new teams
+
+1. Product owner: [QUICKSTART.md](QUICKSTART.md) → [WORKFLOW.md](WORKFLOW.md).
+2. Technical lead: [WORKFLOW.md](WORKFLOW.md) → [COMMANDS.md](COMMANDS.md) → [AUTO_REGRESSION.md](AUTO_REGRESSION.md).
+3. Agent operator: [AGENTS.md](AGENTS.md) → [WORKSPACE.md](WORKSPACE.md).
+4. After first build: [TROUBLESHOOTING.md](TROUBLESHOOTING.md) and [AUTO_REGRESSION.md](AUTO_REGRESSION.md).

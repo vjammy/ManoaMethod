@@ -1,101 +1,104 @@
-# GLOSSARY
+# Glossary
 
-## MVP Builder
+Alphabetical reference for terms used across the docs and generated workspaces.
 
-A local, markdown-first planning and gating system for AI-assisted builds.
+## Acceptance criteria
+The Given/When/Then statements per requirement. Lives in `requirements/ACCEPTANCE_CRITERIA.md`. Each criterion is tagged with a REQ-ID and references an entity in `SAMPLE_DATA.md`.
 
-## package
+## Auto-regression
+The step-9 loop that builds the app, runs tests, drives a browser, and produces a 0–100 score. Failing iterations write fix prompts and roll state back to the earliest failing phase. See [AUTO_REGRESSION.md](AUTO_REGRESSION.md).
 
-The generated set of markdown and JSON files that describes a project, its phases, gates, verification, and handoff state.
+## Browser loop
+`npm run loop:browser`. Playwright-driven probe that scores requirement coverage (max 70) plus probe (max 30).
 
-## workspace
+## Build target
+Declared in `BUILD_TARGET.md`. One of: planning package only, runnable MVP, full production application.
 
-The local folder created by `create-project`. In practice, “package” and “workspace” are often used together.
+## Combined score
+Auto-regression's headline number. Average of the HTTP loop score and the browser loop score, or just the HTTP score when Playwright is unavailable.
 
-## project context
+## Convergence
+Auto-regression iteration outcome where combined score ≥ target. Only convergence exits zero.
 
-The root files that explain what the project is, what rules matter, and what blockers or assumptions already exist.
+## Coverage status
+Per-REQ classification by the browser loop: `covered`, `partially-covered`, or `uncovered`. See [AUTO_REGRESSION.md](AUTO_REGRESSION.md).
 
-## phase
+## Entry gate
+The conditions that must be true before a phase can start. Lives in `phases/phase-NN/ENTRY_GATE.md` and `gates/gate-NN-entry.md`.
 
-One chunk of work in the project plan. You should normally work one phase at a time.
+## Evidence
+Concrete proof a phase or scenario is done: changed files, command output, screenshots, recorded observations. Generic prose ("looks good") is rejected by the validator.
 
-## phase brief
+## Exit gate
+The conditions that must be true before a phase can close. Lives in `phases/phase-NN/EXIT_GATE.md` and `gates/gate-NN-exit.md`.
 
-The file `PHASE_BRIEF.md`. It explains the goal of the current phase, why it exists, and what files to give the coding agent.
+## Fix prompt
+Markdown punch list written by a failing loop iteration. Two flavors:
 
-## entry gate
+- `evidence/runtime/AUTO_REGRESSION_FIX_PROMPT_iteration-NN.md` — combined.
+- `phases/phase-NN/REWORK_PROMPT_auto-regression-iteration-NN_attempt-MM.md` — per affected phase.
 
-The checklist that must be true before you start work on a phase.
+## HTTP loop
+`npm run loop`. Combines `npm run probe` (HTTP smoke) and `npm run test-scripts` (TEST_SCRIPT.md bash) into a 0–100 score. Probe ×50 + step pass rate ×50.
 
-## exit gate
+## Lifecycle status
+The package's overall state. Stored in `repo/mvp-builder-state.json` and mirrored to `repo/manifest.json`. Values:
 
-The checklist that must be true before you call a phase complete.
+| State | Meaning |
+|---|---|
+| `Draft` | Brief and questionnaire incomplete |
+| `Blocked` | Blocker warning unresolved |
+| `ReviewReady` | Eligible for human approval |
+| `ApprovedForBuild` | Build can proceed |
+| `InRework` | Auto-regression rolled state back |
 
-## verification
+## Manifest
+`repo/manifest.json`. Lightweight metadata about the package: profile, score, lifecycle, phase count, supported agents.
 
-The review step where you check whether the phase really meets its goal and gates.
+## Mode
+The combination of experience level (`beginner|intermediate|advanced`) and track (`business|technical`). Drives wording, depth, and minimum phase count.
 
-## evidence
+## Phase
+One unit of work in the build. Each phase has its own folder under `phases/phase-NN/` with brief, gates, test files, and handoff. Phases are typed: `planning`, `design`, `implementation`, `verification`, `handoff`, `finalization`.
 
-The real files or records you reviewed to justify your verification decision.
+## Phase plan
+`PHASE_PLAN.md`. Lists every phase with goal, type, gates, and `Requirement IDs:`. Driven by `npm run traceability`.
 
-## handoff
+## Probe
+`npm run probe`. Spawns the runtime and hits each smoke route from `RUNTIME_TARGET.md`. The HTTP-only sub-step of the loop.
 
-The summary and context you leave for the next builder, next agent, or your future self.
+## Profile
+A `<level>-<track>` configuration in `templates/`. Determines the language style and depth of generated content.
 
-## next phase context
+## REQ-ID
+An identifier like `REQ-1`, `REQ-2`. Numbered requirements from `requirements/FUNCTIONAL_REQUIREMENTS.md`. Mapped to phases via `Requirement IDs:` lines in `PHASE_PLAN.md`. Used by traceability and the browser loop.
 
-The file `NEXT_PHASE_CONTEXT.md`. It tells the next phase what it should inherit from the current one.
+## Requirement coverage
+Browser loop output: `covered + 0.5 × partially-covered) / total`. Drives 70 of the 100 browser loop points.
 
-## status
+## Rework
+The mechanism for reopening a failed phase. Triggered by `npm run rework` manually or auto-regression on a failed loop. Writes a `REWORK_PROMPT_*.md` and sets `lifecycleStatus: InRework`.
 
-The CLI command that explains the current phase, lifecycle state, verification state, evidence state, and next recommended action.
+## Runtime target
+`RUNTIME_TARGET.md`. The contract that says how to start the app, what URL to hit, and which routes count as smoke. Consumed by probe, HTTP loop, and browser loop.
 
-## validate
+## Sample data
+`SAMPLE_DATA.md`. Central fixtures keyed by entity, with happy-path and negative-path JSON samples. Referenced by `TEST_SCRIPT.md` and `requirements/ACCEPTANCE_CRITERIA.md`.
 
-The CLI command that checks whether the generated package has the files and verification structure it needs.
+## Scorecard
+`SCORECARD.md` inside a generated workspace. Planning-readiness score (0–100) from `lib/scoring.ts`. Different from the auto-regression build-correctness score.
 
-## next-phase
+## State
+`repo/mvp-builder-state.json`. Tracks `currentPhase`, `lifecycleStatus`, `completedPhases`, `blockedPhases`, and `phaseEvidence`.
 
-The CLI command that advances the project to the next phase after the current one has passed its gate.
+## Step
+One of the 9 stages in [WORKFLOW.md](WORKFLOW.md). Steps 1–7 are planning, step 8 is export, step 9 is auto-regression.
 
-## approved for build
+## TEST_RESULTS verified
+A REQ is "TEST_RESULTS verified" when its phase's `TEST_RESULTS.md` shows `## Final result: pass` with a `Scenario evidence: REQ-N` block. Required for browser loop `covered` status.
 
-A lifecycle meaning that says the package has explicit approval metadata and is ready for build execution.
+## Traceability
+`npm run traceability`. Builds `repo/TRACEABILITY.md` mapping REQ-IDs to owning phases, attempts, and recommendations.
 
-## blocked
-
-A status that means the package or phase has unresolved blockers and cannot safely advance yet.
-
-## pending
-
-A status that means review or completion is still in progress.
-
-## proceed
-
-A verification recommendation that says the phase is ready to move forward.
-
-## revise
-
-A verification recommendation that says the phase needs more work before advancing.
-
-## pass
-
-A verification result that says the reviewed phase met its checks.
-
-## fail
-
-A verification result that says the reviewed phase did not meet its checks.
-
-## agent-agnostic
-
-Designed to work with different coding agents instead of being locked to only one.
-
-## markdown-first
-
-The main source of truth is plain markdown files that humans and agents can read easily.
-
-## local-first
-
-The workspace lives on your machine and does not depend on a hosted SaaS workflow.
+## Verification report
+`phases/phase-NN/VERIFICATION_REPORT.md`. Records `result`, `recommendation`, and `evidence files` for the phase. Required input to `npm run next-phase`.
