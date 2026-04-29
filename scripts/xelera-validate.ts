@@ -247,6 +247,24 @@ export function runValidate() {
     'MODULE_MAP.md',
     'WHAT_TO_IGNORE_FOR_NOW.md',
     'FINAL_CHECKLIST.md',
+    'BUILD_TARGET.md',
+    'PRODUCTION_SCOPE.md',
+    'DEPLOYMENT_PLAN.md',
+    'ENVIRONMENT_SETUP.md',
+    'PRODUCTION_READINESS_CHECKLIST.md',
+    'OPERATIONS_RUNBOOK.md',
+    'INCIDENT_RESPONSE_GUIDE.md',
+    'ROLLBACK_PLAN.md',
+    'SECURITY_REVIEW.md',
+    'PERFORMANCE_PLAN.md',
+    'RELEASE_CHECKLIST.md',
+    'PRODUCTION_GATE.md',
+    'FINAL_RELEASE_REPORT.md',
+    'FINAL_HANDOFF.md',
+    'FINAL_GATE_REPORT.md',
+    'FINAL_SCORECARD.md',
+    'FINAL_RECOVERY_SUMMARY.md',
+    'FINAL_DEPLOYMENT_STATUS.md',
     'QUICKSTART.md',
     'TROUBLESHOOTING.md',
     'START_HERE.md',
@@ -279,7 +297,12 @@ export function runValidate() {
   const requiredRootTestingFiles = [
     'TESTING_STRATEGY.md',
     'REGRESSION_TEST_PLAN.md',
-    'TEST_SCRIPT_INDEX.md'
+    'TEST_SCRIPT_INDEX.md',
+    'auto-improve/PROGRAM.md',
+    'auto-improve/QUALITY_RUBRIC.md',
+    'auto-improve/SCORECARD.md',
+    'auto-improve/RUN_LOOP.md',
+    'auto-improve/results.tsv'
   ];
   for (const file of requiredRootTestingFiles) {
     if (!fs.existsSync(path.join(packageRoot, file))) {
@@ -469,6 +492,116 @@ export function runValidate() {
     : '';
   if (!/do not need to open every folder/i.test(startHereContent)) {
     issues.push('START_HERE.md must tell the user they do not need to open every folder.');
+  }
+
+  if (
+    !fileContainsAll(path.join(packageRoot, 'BUILD_TARGET.md'), [
+      /Planning package only/i,
+      /Runnable MVP/i,
+      /Production application/i,
+      /Selected target/i
+    ])
+  ) {
+    issues.push('BUILD_TARGET.md must distinguish planning-only, runnable MVP, and production application targets and include a selected target record.');
+  }
+
+  if (
+    !fileContainsAll(path.join(packageRoot, 'PRODUCTION_SCOPE.md'), [
+      /What production means/i,
+      /In scope for production mode/i,
+      /Still out of scope/i,
+      /Production-specific completion checks/i
+    ])
+  ) {
+    issues.push('PRODUCTION_SCOPE.md is missing one or more required production-scope sections.');
+  }
+
+  if (
+    !fileContainsAll(path.join(packageRoot, 'DEPLOYMENT_PLAN.md'), [
+      /Release objective/i,
+      /Intended runtime/i,
+      /Environment flow/i,
+      /Deployment steps/i,
+      /Ownership/i
+    ])
+  ) {
+    issues.push('DEPLOYMENT_PLAN.md is missing one or more required deployment sections.');
+  }
+
+  if (
+    !fileContainsAll(path.join(packageRoot, 'ENVIRONMENT_SETUP.md'), [
+      /Required environment variables/i,
+      /Local prerequisites/i,
+      /Production environment notes/i,
+      /Validation rule/i
+    ])
+  ) {
+    issues.push('ENVIRONMENT_SETUP.md is missing one or more required environment setup sections.');
+  }
+
+  if (
+    !fileContainsAll(path.join(packageRoot, 'OPERATIONS_RUNBOOK.md'), [
+      /Service overview/i,
+      /Daily or regular checks/i,
+      /Operational commands/i,
+      /Escalation path/i
+    ])
+  ) {
+    issues.push('OPERATIONS_RUNBOOK.md is missing one or more required operations sections.');
+  }
+
+  if (
+    !fileContainsAll(path.join(packageRoot, 'INCIDENT_RESPONSE_GUIDE.md'), [
+      /Initial response steps/i,
+      /Severity guide/i,
+      /Required incident evidence/i,
+      /Post-incident follow-up/i
+    ])
+  ) {
+    issues.push('INCIDENT_RESPONSE_GUIDE.md is missing one or more required incident-response sections.');
+  }
+
+  if (
+    !fileContainsAll(path.join(packageRoot, 'ROLLBACK_PLAN.md'), [
+      /Rollback triggers/i,
+      /Rollback steps/i,
+      /Preconditions/i,
+      /Ownership/i
+    ])
+  ) {
+    issues.push('ROLLBACK_PLAN.md is missing one or more required rollback sections.');
+  }
+
+  if (
+    !fileContainsAll(path.join(packageRoot, 'SECURITY_REVIEW.md'), [
+      /Product risk context/i,
+      /Review areas/i,
+      /Security release checks/i,
+      /Result/i
+    ])
+  ) {
+    issues.push('SECURITY_REVIEW.md is missing one or more required security review sections.');
+  }
+
+  if (
+    !fileContainsAll(path.join(packageRoot, 'PERFORMANCE_PLAN.md'), [
+      /Critical paths/i,
+      /Expected checks/i,
+      /Constraints/i,
+      /Result tracking/i
+    ])
+  ) {
+    issues.push('PERFORMANCE_PLAN.md is missing one or more required performance sections.');
+  }
+
+  if (
+    !fileContainsAll(path.join(packageRoot, 'PRODUCTION_GATE.md'), [
+      /This gate passes only when/i,
+      /This gate must fail when/i,
+      /Required evidence/i
+    ])
+  ) {
+    issues.push('PRODUCTION_GATE.md is missing one or more required production gate sections.');
   }
 
   const stepGuideContent = fs.existsSync(path.join(packageRoot, 'STEP_BY_STEP_BUILD_GUIDE.md'))
@@ -730,6 +863,48 @@ export function runValidate() {
     }
     if (containsGenericTestContent(regressionContent)) {
       issues.push('REGRESSION_RESULTS_TEMPLATE.md contains generic or fake evidence. Replace vague claims with concrete, recorded results.');
+    }
+  }
+
+  const autoImproveProgramPath = path.join(packageRoot, 'auto-improve/PROGRAM.md');
+  if (
+    !fileContainsAll(autoImproveProgramPath, [
+      /## Editable files/i,
+      /## Fixed files/i,
+      /Never weaken the rubric/i,
+      /## Validation commands/i,
+      /## Keep or discard loop/i,
+      /## Simplicity criterion/i,
+      /## Stop conditions/i
+    ])
+  ) {
+    issues.push(
+      'auto-improve/PROGRAM.md must define editable and fixed boundaries, validation commands, keep or discard rules, the simplicity criterion, stop conditions, and a prohibition on weakening the evaluator.'
+    );
+  }
+
+  const autoImproveRubricPath = path.join(packageRoot, 'auto-improve/QUALITY_RUBRIC.md');
+  if (
+    !fileContainsAll(autoImproveRubricPath, [
+      /Use-case specificity/i,
+      /Phase usefulness/i,
+      /Beginner clarity/i,
+      /Agent executability/i,
+      /Verification strength/i,
+      /Regression and test coverage/i,
+      /Handoff quality/i,
+      /Simplicity/i,
+      /Hard caps/i
+    ])
+  ) {
+    issues.push('auto-improve/QUALITY_RUBRIC.md is missing the required scoring categories or hard caps.');
+  }
+
+  const autoImproveResultsPath = path.join(packageRoot, 'auto-improve/results.tsv');
+  if (fs.existsSync(autoImproveResultsPath)) {
+    const header = fs.readFileSync(autoImproveResultsPath, 'utf8').split(/\r?\n/)[0] || '';
+    if (!/^timestamp\titeration\toverall_score\thard_cap\tdecision\tcommands_run\tchanged_files\tnotes$/i.test(header)) {
+      issues.push('auto-improve/results.tsv must start with the required header row.');
     }
   }
 

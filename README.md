@@ -6,6 +6,59 @@ It helps you turn a rough idea into a reusable workspace of markdown files befor
 
 Xelera Method is not a hosted app, project manager, or quality guarantee. It gives you structure, but you still need human review and good judgment.
 
+## Xelera Orchestrator
+
+The repo now includes Xelera Orchestrator, a local-first orchestrator that can read a generated workspace or repo, derive objective criteria, generate focused prompt packets, run local commands, enforce gates, score the build from 0 to 100, and write recovery plans when something fails.
+
+What it does not do:
+
+- It does not call hosted agent APIs in v1.
+- It does not fake agent execution.
+- It does not add auth, a database, or a hosted backend.
+
+Run it with:
+
+```bash
+npm run orchestrate
+npm run orchestrate:dry-run
+npm run score
+npm run gates
+npm run recover
+```
+
+Reports are written to `orchestrator/reports/` and run artifacts to `orchestrator/runs/`.
+
+`npm run orchestrate:dry-run` reads the repo, generates prompts and reports, and checks which commands exist, but it intentionally does not execute the real build/test commands. That means a dry-run can be useful for structure and gate review while still scoring below a full pass.
+
+## Production Build Mode
+
+Xelera Method now includes a reusable production-build prompt and production-release document set so teams can distinguish:
+
+- planning package only
+- runnable MVP
+- full production application
+
+Use the reusable production prompt here:
+
+- [docs/XELERA_PRODUCTION_BUILD_PROMPT.md](C:\AI\XeleraMethod\docs\XELERA_PRODUCTION_BUILD_PROMPT.md)
+
+Generated workspaces now also include production-oriented files such as:
+
+- `BUILD_TARGET.md`
+- `PRODUCTION_SCOPE.md`
+- `DEPLOYMENT_PLAN.md`
+- `ENVIRONMENT_SETUP.md`
+- `PRODUCTION_READINESS_CHECKLIST.md`
+- `OPERATIONS_RUNBOOK.md`
+- `INCIDENT_RESPONSE_GUIDE.md`
+- `ROLLBACK_PLAN.md`
+- `SECURITY_REVIEW.md`
+- `PERFORMANCE_PLAN.md`
+- `RELEASE_CHECKLIST.md`
+- `PRODUCTION_GATE.md`
+
+These files are intended to prevent a runnable MVP from being mistaken for a complete end-to-end production build.
+
 ## What Is Xelera Method?
 
 Use Xelera Method when you want to:
@@ -244,6 +297,7 @@ The normal lifecycle loop is:
 - Troubleshooting: [docs/TROUBLESHOOTING.md](C:\AI\XeleraMethod\docs\TROUBLESHOOTING.md)
 - Glossary: [docs/GLOSSARY.md](C:\AI\XeleraMethod\docs\GLOSSARY.md)
 - Family task example: [docs/EXAMPLE_FAMILY_TASK_APP.md](C:\AI\XeleraMethod\docs\EXAMPLE_FAMILY_TASK_APP.md)
+- Orchestrator guide: [docs/ORCHESTRATOR.md](C:\AI\XeleraMethod\docs\ORCHESTRATOR.md)
 
 ## Exported Workspace Contents
 

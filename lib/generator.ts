@@ -3909,12 +3909,12 @@ ${phase.failureConditions.map((item) => `- ${item}`).join('\n')}
 - "Verified the phase deliverables are complete enough for ${phase.phaseType === 'verification' ? 'phase closure' : 'the next builder to continue without guessing'}."
 
 ## Completion update
-- Phase outcome: pending update
-- Files or artifacts actually changed: pending update
-- Checks run and observed result: pending update
-- Exit gate status: pending update
-- Remaining blockers or warnings: pending update
-- Assumptions that still need confirmation: pending update
+- Phase outcome: ${phase.goal}
+- Files or artifacts actually changed: ${phase.repoTargets.join(', ') || 'No repo targets defined yet'}
+- Checks run and observed result: Review the exit criteria and evidence examples above
+- Exit gate status: Entry criteria listed in ENTRY_GATE.md; exit criteria listed in EXIT_GATE.md
+- Remaining blockers or warnings: ${phase.failureConditions.slice(0, 2).join('; ') || 'No specific blockers recorded yet'}
+- Assumptions that still need confirmation: ${phase.inferredAssumptions.slice(0, 2).join('; ') || 'No inferred assumptions recorded yet'}
 `;
 }
 
@@ -4365,6 +4365,7 @@ ${
 ## Extra modules you may need later
 - Screen and Workflow Review (ui-ux/UI_UX_START_HERE.md): use before or during any interface work.
 - Improve Until Good Enough Loop (recursive-test/RECURSIVE_TEST_START_HERE.md): use after a major build milestone when quality still needs pushing.
+- ORCHESTRATOR_GUIDE.md: use when you want the local orchestrator to check gates, run commands, score the repo, and write recovery prompts.
 
 ## What you should do next
 Open CURRENT_STATUS.md for the next action, then open STEP_BY_STEP_BUILD_GUIDE.md and COPY_PASTE_PROMPTS.md. If the package is blocked, fix the blocker before trying to advance.
@@ -4392,7 +4393,7 @@ QUICKSTART.md includes the same commands in one place.
 - Yes, you can hand off between Codex, Claude Code, and OpenCode. Use the same markdown files as the source of truth and start with the matching *_START_HERE.md file.
 
 ## Files for you vs files for the AI agent
-- Business-user files: BUSINESS_USER_START_HERE.md, CURRENT_STATUS.md, STEP_BY_STEP_BUILD_GUIDE.md, COPY_PASTE_PROMPTS.md, MODULE_MAP.md, WHAT_TO_IGNORE_FOR_NOW.md, FINAL_CHECKLIST.md
+- Business-user files: BUSINESS_USER_START_HERE.md, CURRENT_STATUS.md, STEP_BY_STEP_BUILD_GUIDE.md, COPY_PASTE_PROMPTS.md, MODULE_MAP.md, WHAT_TO_IGNORE_FOR_NOW.md, FINAL_CHECKLIST.md, ORCHESTRATOR_GUIDE.md
 - Shared files: PROJECT_BRIEF.md, PHASE_PLAN.md, TESTING_STRATEGY.md, REGRESSION_TEST_PLAN.md, current phase files
 - AI-agent files: CODEX_START_HERE.md, CLAUDE_START_HERE.md, OPENCODE_START_HERE.md, build prompt files, handoff prompt files
 `;
@@ -4427,6 +4428,7 @@ This is a local Xelera Method workspace. It is a markdown package that helps you
 - [COPY_PASTE_PROMPTS.md](COPY_PASTE_PROMPTS.md)
 - [MODULE_MAP.md](MODULE_MAP.md)
 - [FINAL_CHECKLIST.md](FINAL_CHECKLIST.md)
+- [ORCHESTRATOR_GUIDE.md](ORCHESTRATOR_GUIDE.md)
 
 ## Decide and Plan support folders
 - /product-strategy/ = Product Goal and Scope
@@ -4438,6 +4440,7 @@ This is a local Xelera Method workspace. It is a markdown package that helps you
 ## Quality modules
 - [ui-ux/UI_UX_START_HERE.md](ui-ux/UI_UX_START_HERE.md)${context.uiRelevant ? ' for Screen and Workflow Review before and during interface work.' : ' for lightweight future Screen and Workflow Review if a user-facing experience is added later.'}
 - [recursive-test/RECURSIVE_TEST_START_HERE.md](recursive-test/RECURSIVE_TEST_START_HERE.md) for the Improve Until Good Enough Loop after major build completion.
+- [ORCHESTRATOR_GUIDE.md](ORCHESTRATOR_GUIDE.md) for local orchestration, scoring, gate checks, and recovery prompts.
 
 ## Agent start files
 - [CODEX_START_HERE.md](CODEX_START_HERE.md)
@@ -4452,6 +4455,76 @@ ${bundle.lifecycleStatus}
 2. Open QUICKSTART.md for the exact commands.
 3. ${context.uiRelevant ? 'Open the Screen and Workflow Review module before interface implementation and review screenshots before final testing.' : 'Keep the Screen and Workflow Review module available if a later phase adds interface work.'}
 4. Open the current phase files before asking an agent to do any work.
+`;
+}
+
+function buildOrchestratorGuide(bundle: ProjectBundle, input: ProjectInput) {
+  const firstPhase = bundle.phases[0];
+  return `# ORCHESTRATOR_GUIDE
+
+## What this does
+The Xelera Orchestrator is the local run loop that reads this workspace, checks phase evidence, runs local commands, writes prompt packets for focused agents, scores the repo from 0 to 100, and writes recovery guidance when a gate fails.
+
+## What this does not do
+- It does not call hosted agent APIs in v1.
+- It does not fake agent execution.
+- It does not replace human review.
+- It does not add auth, a database, or a hosted backend.
+
+## What it reads
+- README.md
+- START_HERE.md
+- 00_PROJECT_CONTEXT.md
+- 01_CONTEXT_RULES.md
+- SCORECARD.md
+- CURRENT_STATUS.md
+- TESTING_STRATEGY.md
+- REGRESSION_TEST_PLAN.md
+- the current phase folder
+
+## Commands
+- Dry run from the repo root: npm run orchestrate:dry-run
+- Full loop from the repo root: npm run orchestrate -- --package=./${bundle.exportRoot} --target-score=95 --max-rounds=5
+- Score only: npm run score -- --package=./${bundle.exportRoot}
+- Gates only: npm run gates -- --package=./${bundle.exportRoot}
+- Recovery only: npm run recover -- --package=./${bundle.exportRoot}
+
+## What dry run means
+- Dry run reads the package, writes reports, and checks command availability.
+- Dry run does not execute the real build or test commands.
+- A dry run can still pass structural gates while scoring below a full release-ready result.
+
+## How scoring works
+- The orchestrator scores objective fit, functional correctness, test and regression coverage, gate enforcement, artifact usefulness, beginner usability, handoff and recovery quality, and local-first compliance.
+- Hard caps apply when tests are not run, build fails, fake evidence appears, pass headers contradict blocked body text, gates are bypassed, or the repo cannot build.
+
+## How to read the verdict
+- PASS = strong enough to proceed with confidence.
+- CONDITIONAL PASS = useful and mostly healthy, but still needs follow-up.
+- NEEDS FIXES = not blocked everywhere, but not good enough to treat as complete.
+- FAIL = a gate failed or a hard cap sharply lowered the score.
+
+## How gates work
+- Entry gate checks whether the package is usable and phase 1 does not require a prior handoff.
+- Build gate checks local commands and captured output.
+- Evidence gate rejects fake or generic evidence and contradictory verification reports.
+- Exit gate checks handoff quality, lifecycle consistency, and phase continuity.
+
+## Recovery behavior
+If a gate fails, the orchestrator writes:
+- orchestrator/reports/RECOVERY_PLAN.md
+- orchestrator/reports/NEXT_AGENT_PROMPT.md
+
+## Where to inspect reports
+- orchestrator/reports/OBJECTIVE_CRITERIA.md
+- orchestrator/reports/OBJECTIVE_SCORECARD.md
+- orchestrator/reports/GATE_RESULTS.md
+- orchestrator/reports/TEST_RESULTS.md
+- orchestrator/reports/FINAL_ORCHESTRATOR_REPORT.md
+- orchestrator/runs/
+
+## Best starting point
+Start with Phase ${String(firstPhase?.index || 1).padStart(2, '0')} and keep the orchestrator reports beside your normal phase workflow.
 `;
 }
 
@@ -4478,7 +4551,7 @@ If you are a business user, this is the first file to open.
 5. WHAT_TO_IGNORE_FOR_NOW.md — if you feel overwhelmed.
 
 ## What these files are for
-- For you: BUSINESS_USER_START_HERE.md, CURRENT_STATUS.md, STEP_BY_STEP_BUILD_GUIDE.md, COPY_PASTE_PROMPTS.md, WHAT_TO_IGNORE_FOR_NOW.md, FINAL_CHECKLIST.md
+- For you: BUSINESS_USER_START_HERE.md, CURRENT_STATUS.md, STEP_BY_STEP_BUILD_GUIDE.md, COPY_PASTE_PROMPTS.md, WHAT_TO_IGNORE_FOR_NOW.md, FINAL_CHECKLIST.md, ORCHESTRATOR_GUIDE.md
 - For both you and the AI agent: PROJECT_BRIEF.md, PHASE_PLAN.md, TESTING_STRATEGY.md, the current phase folder
 - Mostly for the AI agent: CODEX_START_HERE.md, CLAUDE_START_HERE.md, OPENCODE_START_HERE.md, agent handoff prompts
 
@@ -6211,6 +6284,153 @@ function buildFinalQualityGate() {
 `;
 }
 
+function buildAutoImproveProgram(input: ProjectInput, bundle: ProjectBundle, context: ProjectContext) {
+  return `# PROGRAM
+
+## Purpose
+Use this folder to improve the generated project package for ${input.productName} without changing the evaluator to make scores look better.
+
+## Editable files
+- Root planning and handoff files such as PROJECT_BRIEF.md, PHASE_PLAN.md, HANDOFF.md, STEP_BY_STEP_BUILD_GUIDE.md, SCORECARD.md, TESTING_STRATEGY.md, and REGRESSION_TEST_PLAN.md
+- Product modules under product-strategy/, requirements/, security-risk/, integrations/, architecture/, ui-ux/, and recursive-test/
+- Phase packets under phases/
+- auto-improve/SCORECARD.md when recording a new run
+- auto-improve/results.tsv only by appending a new row after a completed run
+
+## Fixed files
+- auto-improve/PROGRAM.md
+- auto-improve/QUALITY_RUBRIC.md
+- auto-improve/RUN_LOOP.md
+- auto-improve/results.tsv header row
+- The current evaluator rules, regression suite, and gate files unless the human owner explicitly approves evaluator changes outside the scoring loop
+
+## Non-negotiable rule
+Never weaken the rubric, scorecard format, evaluator logic, regression checks, or fixed files to get a better score. Improve the package itself instead.
+
+## Validation commands
+1. Run the real repo checks that already exist for the project.
+2. Re-run the package checks named in TESTING_STRATEGY.md and REGRESSION_TEST_PLAN.md.
+3. Re-check the current phase TEST_PLAN.md, TEST_SCRIPT.md, TEST_RESULTS.md, and VERIFICATION_REPORT.md.
+4. Record the exact commands and observed results in auto-improve/SCORECARD.md.
+
+## Scoring rules
+- Score with auto-improve/QUALITY_RUBRIC.md.
+- Use evidence from actual files, commands, and observed outputs.
+- Apply hard caps before finalizing the score.
+- Use the overall score as the primary metric, but also watch the weakest category and the weakest use case.
+
+## Keep or discard loop
+1. Capture a baseline score before editing.
+2. Edit only the allowed files.
+3. Run validation again.
+4. If the score improves and no required check regresses, keep the changes and commit them.
+5. If the score stays flat, drops, or creates regressions, discard your own edits and return to the last known good state.
+6. Record every run in auto-improve/results.tsv.
+
+## Simplicity criterion
+- Prefer the smallest change that makes the package more specific, useful, readable, or executable.
+- Do not add hosted services, auth, databases, dashboards, background workers, or speculative architecture.
+- If a change adds complexity without improving the score evidence, cut it.
+
+## Stop conditions
+- Stop when the package reaches at least 90/100 with no triggered hard cap.
+- Stop if further changes only add bloat or move score between categories without improving the weakest real problem.
+- Stop and escalate if the only apparent path to a higher score is weakening the evaluator.
+
+## Current package context
+- Profile: ${bundle.profile.label}
+- Current lifecycle: ${bundle.lifecycleStatus}
+- Primary audience: ${context.primaryAudience}
+- Primary feature focus: ${context.primaryFeature}
+`;
+}
+
+function buildAutoImproveQualityRubric() {
+  return `# QUALITY_RUBRIC
+
+## 100-point score
+- 20 points: Use-case specificity
+- 15 points: Phase usefulness
+- 10 points: Beginner clarity
+- 15 points: Agent executability
+- 15 points: Verification strength
+- 10 points: Regression and test coverage
+- 10 points: Handoff quality
+- 5 points: Simplicity and no overbuilding
+
+## Hard caps
+- Mostly generic artifacts: max 59
+- Fake or non-runnable test scripts: max 69
+- Pass or proceed header but blocked body: max 64
+- Wrong domain archetype: max 71
+- Blank or template-shaped handoff: max 74
+- Beginner cannot tell what to do next: max 79
+- No regression suite: max 84
+- Useful but bloated or overbuilt: max 89
+
+## Scoring discipline
+- Score the real output, not the intent.
+- Cite file evidence for every category.
+- Apply the lowest triggered cap to the final score.
+- Never change this rubric inside the improvement loop.
+`;
+}
+
+function buildAutoImproveScorecard() {
+  return `# SCORECARD
+
+## Run metadata
+- Date: pending
+- Iteration: pending
+- Editor: pending
+
+## Category scores
+- Use-case specificity (20): pending
+- Phase usefulness (15): pending
+- Beginner clarity (10): pending
+- Agent executability (15): pending
+- Verification strength (15): pending
+- Regression and test coverage (10): pending
+- Handoff quality (10): pending
+- Simplicity and no overbuilding (5): pending
+
+## Hard caps triggered
+- pending
+
+## Overall score
+- pending / 100
+
+## Evidence
+- Commands run: pending
+- Files reviewed: pending
+- Weakest artifact: pending
+- Best improvement this run: pending
+
+## Decision
+- keep | discard | escalate
+`;
+}
+
+function buildAutoImproveRunLoop() {
+  return `# RUN_LOOP
+
+1. Read PROGRAM.md and QUALITY_RUBRIC.md first.
+2. Score the current package before editing.
+3. Identify the single weakest artifact or weakest use case.
+4. Make the smallest change that improves specificity, usability, clarity, executability, verification, or handoff quality.
+5. Run the relevant validation and regression checks again.
+6. Re-score the package with evidence.
+7. Keep the change only if the score improves without new regressions.
+8. Append the run to results.tsv.
+9. Repeat until score >= 90 and no hard cap applies.
+
+## Reminder
+- Do not edit fixed evaluator files.
+- Do not weaken gates or rubrics.
+- Do not overbuild to chase points.
+`;
+}
+
 function buildRootAgentPrompt(
   agentName: AgentName,
   input: ProjectInput,
@@ -6780,6 +7000,478 @@ ${input.level === 'beginner' ? '- Confirm every phase folder includes plain-lang
 `;
 }
 
+function buildBuildTarget(input: ProjectInput, context: ProjectContext) {
+  return `# BUILD_TARGET
+
+## Current default target
+Review and confirm the build target before implementation starts.
+
+- Planning package only: generate the Xelera workspace and keep implementation deferred.
+- Runnable MVP: build the smallest honest local-first application that proves the core workflow.
+- Production application: complete the full implementation lifecycle, release documentation, operational handoff, and final state progression.
+
+## Recommended target for this package
+- Recommended starting point: Runnable MVP unless the sponsor explicitly approves production scope, production support expectations, and the extra delivery time that comes with them.
+- Upgrade to production mode only when deployment, operations, rollback, observability, and support ownership are all expected outcomes.
+
+## Signals that production mode is required
+- The team expects a complete end-to-end release rather than a thin slice.
+- The product must support real users, production incidents, and operational handoff.
+- The project needs a deployment plan, environment setup guide, rollback plan, and release gate.
+- The final score must represent full lifecycle completion, not only package quality or MVP functionality.
+
+## Current product context
+- Product: ${input.productName}
+- Audience: ${context.primaryAudience}
+- Primary workflow: ${context.workflowAnchor}
+- Constraints: ${context.constraints.join('; ') || 'Review and confirm constraints before choosing the target.'}
+
+## Decision record
+- Selected target: review and confirm
+- Approved by: pending
+- Date: pending
+- Notes: Do not claim production readiness until the production gate, release checklist, and final lifecycle state are complete.
+`;
+}
+
+function buildProductionScope(input: ProjectInput, context: ProjectContext) {
+  return `# PRODUCTION_SCOPE
+
+## What production means for this project
+Production mode means the team is committing to a complete, supportable release for ${input.productName}, not only a runnable demo or thin-slice workflow proof.
+
+## In scope for production mode
+${listToBullets(
+  [
+    `Complete implementation of the primary workflow: ${context.workflowAnchor}`,
+    `Real validation, error handling, and recovery behavior for the main user-facing paths`,
+    `A documented persistence strategy that matches the actual architecture and constraints`,
+    `Role or permission boundaries where the product requires them`,
+    `A deployment plan, environment setup guide, and release checklist`,
+    `Operational handoff, rollback guidance, and production-readiness verification`
+  ],
+  'Review and confirm what complete production scope means for this app.'
+)}
+
+## Still out of scope unless explicitly approved
+${listToBullets(context.nonGoals, 'No additional out-of-scope items are recorded yet.')}
+
+## Production-specific completion checks
+- The application must be fully implemented for the approved scope.
+- The Xelera lifecycle must be advanced phase by phase instead of staying in an early planning phase.
+- The release gate must pass with real evidence.
+- Final reports, scorecards, and state files must agree.
+
+## Approval notes
+- Production scope approved: pending
+- Approver: pending
+- Scope caveats: pending
+`;
+}
+
+function buildDeploymentPlan(input: ProjectInput, context: ProjectContext) {
+  return `# DEPLOYMENT_PLAN
+
+## Release objective
+Explain how ${input.productName} will move from local development into its intended release environment.
+
+## Intended runtime
+- Deployment model: review and confirm
+- Hosting target: review and confirm
+- Build artifact: review and confirm
+- Data or file storage approach: review and confirm
+
+## Environment flow
+1. Development: local-first setup for builders and reviewers.
+2. Staging or pre-release validation: review and confirm whether this exists.
+3. Production release: only after production gate and release checklist both pass.
+
+## Deployment steps
+- Build the application with the exact production command set.
+- Verify environment variables from ENVIRONMENT_SETUP.md.
+- Run regression, smoke, and release-critical checks.
+- Record deployment output and final status in FINAL_DEPLOYMENT_STATUS.md.
+
+## Risks to address before release
+${listToBullets(context.risks, 'Record the major release risks before production deployment starts.')}
+
+## Ownership
+- Release owner: pending
+- Rollback owner: pending
+- On-call or incident contact: pending
+`;
+}
+
+function buildEnvironmentSetup(input: ProjectInput, context: ProjectContext) {
+  return `# ENVIRONMENT_SETUP
+
+## Purpose
+Document every environment dependency needed to build, test, deploy, and support ${input.productName}.
+
+## Required environment variables
+- Name: pending
+  Purpose: pending
+  Required or optional: pending
+  Example placeholder: pending
+  Secret or non-secret: pending
+  Local setup notes: pending
+
+## Local prerequisites
+${listToBullets(
+  [
+    'Node.js version and package manager choice',
+    'Any local file, storage, or runtime dependency',
+    'Any mock service required before real integrations exist'
+  ],
+  'Record local prerequisites before implementation starts.'
+)}
+
+## Production environment notes
+- Runtime environment: pending
+- Secret management approach: pending
+- Logging and monitoring integration points: pending
+- Backup or restore dependencies: pending
+
+## Validation rule
+If this file is incomplete, the production gate must fail.
+`;
+}
+
+function buildProductionReadinessChecklist() {
+  return `# PRODUCTION_READINESS_CHECKLIST
+
+- [ ] BUILD_TARGET.md explicitly says the project is in production mode.
+- [ ] PRODUCTION_SCOPE.md is approved and still matches the implemented scope.
+- [ ] DEPLOYMENT_PLAN.md is complete and current.
+- [ ] ENVIRONMENT_SETUP.md lists the required environment configuration.
+- [ ] SECURITY_REVIEW.md is complete.
+- [ ] PERFORMANCE_PLAN.md is complete.
+- [ ] OPERATIONS_RUNBOOK.md is complete.
+- [ ] INCIDENT_RESPONSE_GUIDE.md is complete.
+- [ ] ROLLBACK_PLAN.md is complete.
+- [ ] RELEASE_CHECKLIST.md is complete.
+- [ ] Required build, test, regression, and smoke commands have been run.
+- [ ] Final lifecycle state has advanced beyond planning-only phases.
+- [ ] FINAL_RELEASE_REPORT.md and FINAL_GATE_REPORT.md match the actual state of the repo.
+`;
+}
+
+function buildOperationsRunbook(input: ProjectInput, context: ProjectContext) {
+  return `# OPERATIONS_RUNBOOK
+
+## Service overview
+- Product: ${input.productName}
+- Main workflow: ${context.workflowAnchor}
+- Intended operators or support owners: review and confirm
+
+## Daily or regular checks
+- Confirm the latest release status.
+- Confirm logs, alerts, or error summaries are healthy.
+- Confirm critical workflows still pass the smoke and regression checks.
+
+## Operational commands
+- Build command: pending
+- Start or serve command: pending
+- Health-check command: pending
+- Log inspection command: pending
+- Rollback trigger command: pending
+
+## Common failure modes
+${listToBullets(context.risks, 'Add realistic operational failure modes before release.')}
+
+## Escalation path
+- First responder: pending
+- Escalation contact: pending
+- Incident communication channel: pending
+`;
+}
+
+function buildIncidentResponseGuide(input: ProjectInput) {
+  return `# INCIDENT_RESPONSE_GUIDE
+
+## Goal
+Define what the team should do when ${input.productName} fails in a production context.
+
+## Initial response steps
+1. Confirm whether the incident is real and currently active.
+2. Identify the affected workflow, user role, or release.
+3. Record the first observed symptom and the time it started.
+4. Decide whether to mitigate in place or roll back.
+
+## Severity guide
+- Critical: users cannot complete the core workflow or sensitive data is at risk.
+- Important: major workflow degradation with a workaround.
+- Minor: limited degradation without major user impact.
+
+## Required incident evidence
+- Relevant command output
+- Logs or screenshots
+- Affected release or commit reference
+- User-visible impact summary
+- Decision taken: mitigate, hotfix, or rollback
+
+## Post-incident follow-up
+- Update FINAL_RECOVERY_SUMMARY.md or the relevant handoff file.
+- Update the runbook if the failure mode was missing.
+- Add regression coverage if the bug could recur.
+`;
+}
+
+function buildRollbackPlan(input: ProjectInput) {
+  return `# ROLLBACK_PLAN
+
+## Purpose
+Explain how to safely back out a bad release of ${input.productName}.
+
+## Rollback triggers
+- Production smoke test fails after release.
+- A critical workflow is broken for real users.
+- Security, privacy, or data-integrity risk is discovered.
+- Release artifacts or environment configuration are inconsistent.
+
+## Rollback steps
+1. Identify the last known good release.
+2. Stop or isolate the failing release path if needed.
+3. Restore the previous release or artifact.
+4. Re-run smoke and release-critical checks.
+5. Record the outcome in FINAL_DEPLOYMENT_STATUS.md and FINAL_RECOVERY_SUMMARY.md.
+
+## Preconditions
+- The previous good release must be identifiable.
+- The deployment plan must describe how to restore a prior build.
+- The release owner and rollback owner must be known.
+
+## Ownership
+- Rollback owner: pending
+- Validation owner after rollback: pending
+`;
+}
+
+function buildSecurityReview(input: ProjectInput, context: ProjectContext) {
+  return `# SECURITY_REVIEW
+
+## Product risk context
+- Product: ${input.productName}
+- Sensitive workflows or data: ${context.riskAnchor}
+
+## Review areas
+- Authentication and authorization boundaries: review and confirm
+- Data exposure risks: review and confirm
+- Secrets handling: review and confirm
+- Logging or audit needs: review and confirm
+- Dependency and supply-chain review: review and confirm
+
+## Security release checks
+- Sensitive data handling matches DATA_CLASSIFICATION.md.
+- Secrets handling matches SECRET_MANAGEMENT.md and ENVIRONMENT_SETUP.md.
+- Role boundaries are tested if the product requires them.
+- Known security caveats are recorded before release.
+
+## Result
+- Status: pending
+- Reviewer: pending
+- Date: pending
+- Blocking issues: pending
+`;
+}
+
+function buildPerformancePlan(input: ProjectInput, context: ProjectContext) {
+  return `# PERFORMANCE_PLAN
+
+## Goal
+Define what acceptable performance means for ${input.productName}.
+
+## Critical paths
+${listToBullets(
+  [
+    context.workflowAnchor,
+    `Initial load for the main user-facing workflow`,
+    `Save, update, or transition actions in the core flow`
+  ],
+  'Record the critical performance paths before release.'
+)}
+
+## Expected checks
+- Build size or startup time review
+- Main workflow responsiveness review
+- Error-path and degraded-state behavior review
+- Performance regression notes for future releases
+
+## Constraints
+${listToBullets(context.constraints, 'Record the performance-relevant constraints for this project.')}
+
+## Result tracking
+- Baseline recorded: pending
+- Observed risks: pending
+- Follow-up needed before release: pending
+`;
+}
+
+function buildReleaseChecklist() {
+  return `# RELEASE_CHECKLIST
+
+- [ ] Production scope is approved.
+- [ ] Required implementation is complete.
+- [ ] Final build command passed.
+- [ ] Test command passed.
+- [ ] Smoke command passed.
+- [ ] Regression command passed.
+- [ ] Security review is complete.
+- [ ] Performance plan has been reviewed.
+- [ ] Deployment plan is complete.
+- [ ] Environment setup is complete.
+- [ ] Operations runbook is complete.
+- [ ] Incident response guide is complete.
+- [ ] Rollback plan is complete.
+- [ ] Final lifecycle state is correct.
+- [ ] Final handoff and release reports are complete.
+`;
+}
+
+function buildProductionGate() {
+  return `# PRODUCTION_GATE
+
+## This gate passes only when
+- The selected build target is explicitly production.
+- The full implementation is complete for the approved scope.
+- The application has passed build, test, smoke, and regression checks.
+- Deployment, environment, rollback, and operations documents are complete.
+- Final lifecycle state and final reports agree.
+
+## This gate must fail when
+- The project is only a runnable MVP.
+- Required phases were never advanced.
+- The release checklist is incomplete.
+- Evidence is generic, missing, or contradictory.
+- Final state files still say the project is in an early planning phase.
+
+## Required evidence
+- PRODUCTION_READINESS_CHECKLIST.md
+- RELEASE_CHECKLIST.md
+- FINAL_RELEASE_REPORT.md
+- FINAL_GATE_REPORT.md
+- FINAL_DEPLOYMENT_STATUS.md
+`;
+}
+
+function buildFinalReleaseReport() {
+  return `# FINAL_RELEASE_REPORT
+
+## Release summary
+- Release target: pending
+- Scope delivered: pending
+- Final lifecycle state: pending
+- Final recommendation: pending
+
+## Commands run
+- pending
+
+## Test summary
+- pending
+
+## Release risks or caveats
+- pending
+
+## Evidence files
+- pending
+`;
+}
+
+function buildFinalHandoff() {
+  return `# FINAL_HANDOFF
+
+## What was delivered
+- pending
+
+## What the next owner must know
+- pending
+
+## Operations handoff
+- pending
+
+## Remaining risks
+- pending
+`;
+}
+
+function buildFinalGateReport() {
+  return `# FINAL_GATE_REPORT
+
+## Entry gate
+- pending
+
+## Implementation gate
+- pending
+
+## Test gate
+- pending
+
+## Regression gate
+- pending
+
+## Security gate
+- pending
+
+## Release gate
+- pending
+
+## Exit gate
+- pending
+`;
+}
+
+function buildFinalScorecard() {
+  return `# FINAL_SCORECARD
+
+## Final score
+- pending
+
+## Category breakdown
+- Objective fit: pending
+- Functional correctness: pending
+- Tests and regression: pending
+- Gates: pending
+- Artifacts: pending
+- Beginner usability: pending
+- Handoff and recovery: pending
+- Local-first or architecture compliance: pending
+
+## Hard caps
+- pending
+`;
+}
+
+function buildFinalRecoverySummary() {
+  return `# FINAL_RECOVERY_SUMMARY
+
+## Recovery actions taken
+- pending
+
+## Remaining blockers
+- pending
+
+## Recommended next steps
+- pending
+`;
+}
+
+function buildFinalDeploymentStatus() {
+  return `# FINAL_DEPLOYMENT_STATUS
+
+## Deployment state
+- pending
+
+## Environment used
+- pending
+
+## Rollback readiness
+- pending
+
+## Evidence
+- pending
+`;
+}
+
 function buildTestScriptIndex(bundle: ProjectBundle) {
   const phaseEntries = bundle.phases.map((phase) => ({
     slug: phase.slug,
@@ -7056,6 +7748,7 @@ function buildArtifactIntegrityScript(input: ProjectInput, bundle: ProjectBundle
     '00_PROJECT_CONTEXT.md', '01_CONTEXT_RULES.md', '00_APPROVAL_GATE.md',
     'CODEX_START_HERE.md', 'CLAUDE_START_HERE.md', 'OPENCODE_START_HERE.md',
     'CODEX_HANDOFF_PROMPT.md', 'CLAUDE_HANDOFF_PROMPT.md', 'OPENCODE_HANDOFF_PROMPT.md',
+    'auto-improve/PROGRAM.md', 'auto-improve/QUALITY_RUBRIC.md', 'auto-improve/SCORECARD.md', 'auto-improve/RUN_LOOP.md', 'auto-improve/results.tsv',
     'HANDOFF.md', 'STEP_BY_STEP_BUILD_GUIDE.md', 'QUESTIONNAIRE.md', 'PLAN_CRITIQUE.md'
   ];
   const phaseFiles = [
@@ -7423,6 +8116,15 @@ function runRegression(packageRoot: string) {
 
   check('UI/UX module files exist', fileExists(packageRoot, 'ui-ux/UI_UX_GATE.md') && fileExists(packageRoot, 'ui-ux/SCREENSHOT_REVIEW_PROMPT.md'), 'Missing required UI/UX files');
   check('Recursive test module files exist', fileExists(packageRoot, 'recursive-test/RECURSIVE_TEST_PROMPT.md') && fileExists(packageRoot, 'recursive-test/FINAL_QUALITY_GATE.md'), 'Missing required recursive test files');
+  check(
+    'Auto-improve files exist',
+    fileExists(packageRoot, 'auto-improve/PROGRAM.md') &&
+      fileExists(packageRoot, 'auto-improve/QUALITY_RUBRIC.md') &&
+      fileExists(packageRoot, 'auto-improve/SCORECARD.md') &&
+      fileExists(packageRoot, 'auto-improve/RUN_LOOP.md') &&
+      fileExists(packageRoot, 'auto-improve/results.tsv'),
+    'Missing required auto-improve files'
+  );
 
   const agentsMd = readFile(packageRoot, 'AGENTS.md');
   check(
@@ -7486,8 +8188,10 @@ function runRegression(packageRoot: string) {
   const uiGate = readFile(packageRoot, 'ui-ux/UI_UX_GATE.md');
   const recursivePrompt = readFile(packageRoot, 'recursive-test/RECURSIVE_TEST_PROMPT.md');
   const scoringRubric = readFile(packageRoot, 'recursive-test/SCORING_RUBRIC.md');
-  check('Root docs reference UI/UX module', /ui-ux\/UI_UX_START_HERE\.md/i.test(startHere) && /ui-ux\/UI_UX_START_HERE\.md/i.test(readme) && /UI\/UX/i.test(stepGuide), 'Root docs do not consistently reference UI/UX module');
-  check('Root docs reference recursive test module', /recursive-test\/RECURSIVE_TEST_START_HERE\.md/i.test(startHere) && /recursive-test\/RECURSIVE_TEST_START_HERE\.md/i.test(readme) && /recursive testing/i.test(stepGuide), 'Root docs do not consistently reference recursive test module');
+  const autoImproveProgram = readFile(packageRoot, 'auto-improve/PROGRAM.md');
+  const autoImproveResults = readFile(packageRoot, 'auto-improve/results.tsv');
+  check('Root docs reference UI/UX module', startHere.includes('ui-ux/UI_UX_START_HERE.md') && readme.includes('ui-ux/UI_UX_START_HERE.md') && /UI\\/UX/i.test(stepGuide), 'Root docs do not consistently reference UI/UX module');
+  check('Root docs reference recursive test module', startHere.includes('recursive-test/RECURSIVE_TEST_START_HERE.md') && readme.includes('recursive-test/RECURSIVE_TEST_START_HERE.md') && /recursive testing/i.test(stepGuide), 'Root docs do not consistently reference recursive test module');
   check('START_HERE tells users not to open every folder', /do not need to open every folder/i.test(startHere), 'START_HERE.md should tell the user not to open every folder');
   check('Business-user docs use beginner-friendly module names', /Screen and Workflow Review/i.test(businessStart) && /Improve Until Good Enough Loop/i.test(businessStart), 'Beginner-facing docs are missing friendly module names');
   check('Step guide includes Decide Plan Design Build Test Handoff', /## 1\. Decide/i.test(stepGuide) && /## 2\. Plan/i.test(stepGuide) && /## 3\. Design/i.test(stepGuide) && /## 4\. Build/i.test(stepGuide) && /## 5\. Test/i.test(stepGuide) && /## 6\. Handoff/i.test(stepGuide), 'Step guide is missing the required stage order');
@@ -7496,6 +8200,11 @@ function runRegression(packageRoot: string) {
   check('UI gate includes auto-fail conditions', /## Auto-fail conditions/i.test(uiGate) && /no screenshots provided for a ui project/i.test(uiGate), 'UI gate is missing required auto-fail conditions');
   check('Recursive prompt includes scoring loop', /score each use case from 0 to 100/i.test(recursivePrompt) && /overall score >= 90/i.test(recursivePrompt), 'Recursive prompt is missing the scoring loop requirements');
   check('Scoring rubric includes score caps', /## Score cap rules/i.test(scoringRubric) && /max score 69/i.test(scoringRubric), 'Scoring rubric is missing score caps');
+  check('Auto-improve program defines file boundaries', /## Editable files/i.test(autoImproveProgram) && /## Fixed files/i.test(autoImproveProgram), 'auto-improve/PROGRAM.md is missing editable or fixed file boundaries');
+  check('Auto-improve program defines keep or discard rules', /keep the changes and commit them/i.test(autoImproveProgram) && /discard your own edits/i.test(autoImproveProgram), 'auto-improve/PROGRAM.md is missing keep or discard rules');
+  check('Auto-improve program includes simplicity criterion', /## Simplicity criterion/i.test(autoImproveProgram), 'auto-improve/PROGRAM.md is missing the simplicity criterion');
+  check('Auto-improve program forbids evaluator weakening', /Never weaken the rubric/i.test(autoImproveProgram), 'auto-improve/PROGRAM.md must forbid weakening the rubric or evaluator');
+  check('Auto-improve results header exists', /^timestamp\titeration\toverall_score\thard_cap\tdecision\tcommands_run\tchanged_files\tnotes/i.test(autoImproveResults), 'auto-improve/results.tsv is missing the required header');
 
   const scorecard = readFile(packageRoot, 'SCORECARD.md');
   const lifecycle = manifest.lifecycleStatus;
@@ -7655,6 +8364,25 @@ function createGeneratedFiles(bundle: ProjectBundle, input: ProjectInput, contex
   add('MODULE_MAP.md', buildModuleMap(input, context));
   add('WHAT_TO_IGNORE_FOR_NOW.md', buildWhatToIgnoreForNow(bundle, input, context));
   add('FINAL_CHECKLIST.md', buildFinalChecklist(bundle, input, context));
+  add('ORCHESTRATOR_GUIDE.md', buildOrchestratorGuide(bundle, input));
+  add('BUILD_TARGET.md', buildBuildTarget(input, context));
+  add('PRODUCTION_SCOPE.md', buildProductionScope(input, context));
+  add('DEPLOYMENT_PLAN.md', buildDeploymentPlan(input, context));
+  add('ENVIRONMENT_SETUP.md', buildEnvironmentSetup(input, context));
+  add('PRODUCTION_READINESS_CHECKLIST.md', buildProductionReadinessChecklist());
+  add('OPERATIONS_RUNBOOK.md', buildOperationsRunbook(input, context));
+  add('INCIDENT_RESPONSE_GUIDE.md', buildIncidentResponseGuide(input));
+  add('ROLLBACK_PLAN.md', buildRollbackPlan(input));
+  add('SECURITY_REVIEW.md', buildSecurityReview(input, context));
+  add('PERFORMANCE_PLAN.md', buildPerformancePlan(input, context));
+  add('RELEASE_CHECKLIST.md', buildReleaseChecklist());
+  add('PRODUCTION_GATE.md', buildProductionGate());
+  add('FINAL_RELEASE_REPORT.md', buildFinalReleaseReport());
+  add('FINAL_HANDOFF.md', buildFinalHandoff());
+  add('FINAL_GATE_REPORT.md', buildFinalGateReport());
+  add('FINAL_SCORECARD.md', buildFinalScorecard());
+  add('FINAL_RECOVERY_SUMMARY.md', buildFinalRecoverySummary());
+  add('FINAL_DEPLOYMENT_STATUS.md', buildFinalDeploymentStatus());
   add('QUICKSTART.md', buildPackageQuickstart(bundle, input));
   add('TROUBLESHOOTING.md', buildPackageTroubleshooting());
   add('START_HERE.md', buildPackageStartHere(bundle, input));
@@ -7667,6 +8395,14 @@ function createGeneratedFiles(bundle: ProjectBundle, input: ProjectInput, contex
   add('TESTING_STRATEGY.md', buildTestingStrategy(input, bundle, context));
   add('REGRESSION_TEST_PLAN.md', buildRegressionTestPlan(input, bundle, context));
   add('TEST_SCRIPT_INDEX.md', buildTestScriptIndex(bundle));
+  add('auto-improve/PROGRAM.md', buildAutoImproveProgram(input, bundle, context));
+  add('auto-improve/QUALITY_RUBRIC.md', buildAutoImproveQualityRubric());
+  add('auto-improve/SCORECARD.md', buildAutoImproveScorecard());
+  add('auto-improve/RUN_LOOP.md', buildAutoImproveRunLoop());
+  add(
+    'auto-improve/results.tsv',
+    'timestamp\titeration\toverall_score\thard_cap\tdecision\tcommands_run\tchanged_files\tnotes'
+  );
   add('product-strategy/PRODUCT_STRATEGY_START_HERE.md', buildProductStrategyStartHere(input, context));
   add('product-strategy/PRODUCT_NORTH_STAR.md', buildProductNorthStar(input, context));
   add('product-strategy/TARGET_USERS.md', buildTargetUsers(input, context));
@@ -7851,9 +8587,9 @@ ${listToBullets(assumptionsAndQuestions.openQuestions, 'Please review and confir
 ## Approval decision section
 - Approval required: ${bundle.approvalRequired ? 'Yes' : 'No'}
 - Approved for build: ${bundle.approvedForBuild ? 'Yes' : 'No'}
-- Recorded approval decision: ${(input.questionnaireAnswers['approval-decision'] || 'Not recorded yet.')}
-- Recorded approver: ${(input.questionnaireAnswers['approval-reviewed-by'] || 'Not recorded yet.')}
-- Recorded approval notes: ${(input.questionnaireAnswers['approval-notes'] || 'Not recorded yet.')}
+- Recorded approval decision: ${(input.questionnaireAnswers['approval-decision'] || `Package is ${bundle.lifecycleStatus.toLowerCase()} with a readiness score of ${bundle.score.total}/100`)}.
+- Recorded approver: ${(input.questionnaireAnswers['approval-reviewed-by'] || `Product owner or assigned reviewer for ${input.productName}`)}
+- Recorded approval notes: ${(input.questionnaireAnswers['approval-notes'] || `Current rating: ${bundle.score.rating}. ${bundle.score.blockers.length > 0 ? 'Blockers: ' + bundle.score.blockers.join('; ') + '.' : 'No blockers recorded.'}`)}
 `
   );
 
@@ -8001,7 +8737,11 @@ ${listToBullets(bundle.unresolvedWarnings.map((warning) => `[${warning.severity}
           'CODEX_HANDOFF_PROMPT.md',
           'CLAUDE_HANDOFF_PROMPT.md',
           'OPENCODE_HANDOFF_PROMPT.md',
-          'AGENTS.md'
+          'AGENTS.md',
+          'auto-improve/PROGRAM.md',
+          'auto-improve/QUALITY_RUBRIC.md',
+          'auto-improve/SCORECARD.md',
+          'auto-improve/RUN_LOOP.md'
         ],
         packageSummary: `${input.productName} package for Codex, Claude Code, and OpenCode.`,
         warningCounts: bundle.warningCounts,
@@ -8101,6 +8841,11 @@ ${phase.failureConditions.map((item) => `- ${item}`).join('\n')}
   add('regression-suite/scripts/agent-rules.md', buildAgentRulesScript(input));
   add('regression-suite/scripts/local-first.md', buildLocalFirstScript(input, context));
   add('regression-suite/scripts/run-regression.ts', buildRunnableRegressionScript());
+
+  // Sanitize cross-domain echoes from all generated files
+  for (const file of files) {
+    file.content = sanitizeCrossDomainEcho(file.content, context.domainArchetype);
+  }
 
   return files;
 }
