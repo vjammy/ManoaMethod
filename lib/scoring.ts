@@ -495,6 +495,13 @@ export function reconcileScoreWithLifecycle(
     adjustments.push(`Total recomputed as average of build readiness (${buildReadiness}) and product fit (${productFit}).`);
   }
 
+  // Re-apply the Blocked total cap after recompute so the cap is not silently undone
+  // by a high un-capped sub-score (e.g., capped buildReadiness=71 + productFit=87 → total=79).
+  if (lifecycleStatus === 'Blocked' && total > 71) {
+    total = 71;
+    adjustments.push('Total re-capped at 71 after recompute because the package lifecycle is Blocked.');
+  }
+
   return {
     ...score,
     total,

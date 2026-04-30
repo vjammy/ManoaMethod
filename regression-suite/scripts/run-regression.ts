@@ -212,10 +212,14 @@ function runRegression(packageRoot: string) {
   }
 }
 
-const packageRoot = process.argv[2];
-if (!packageRoot) {
-  console.error('Usage: tsx run-regression.ts <package-root>');
-  process.exit(1);
+function resolvePackageRootArg(): string {
+  const flag = process.argv.find((arg) => arg.startsWith('--package='));
+  if (flag) return flag.slice('--package='.length);
+  const positional = process.argv[2];
+  if (positional && !positional.startsWith('--')) return positional;
+  if (process.env.INIT_CWD) return process.env.INIT_CWD;
+  return process.cwd();
 }
 
+const packageRoot = resolvePackageRootArg();
 runRegression(path.resolve(packageRoot));

@@ -8,16 +8,23 @@ export function getArg(name: string) {
 }
 
 export function resolvePackageRoot(explicitPath?: string) {
-  const base = path.resolve(explicitPath || process.cwd());
-  if (fs.existsSync(path.join(base, 'repo', 'manifest.json'))) return base;
+  const candidates: string[] = [];
+  const explicit = explicitPath ? path.resolve(explicitPath) : null;
+  if (explicit) candidates.push(explicit);
+  if (process.env.INIT_CWD) candidates.push(path.resolve(process.env.INIT_CWD));
+  candidates.push(path.resolve(process.cwd()));
 
-  const children = fs.readdirSync(base, { withFileTypes: true }).filter((entry) => entry.isDirectory());
-  for (const child of children) {
-    const candidate = path.join(base, child.name);
-    if (fs.existsSync(path.join(candidate, 'repo', 'manifest.json'))) return candidate;
+  for (const base of candidates) {
+    if (!fs.existsSync(base)) continue;
+    if (fs.existsSync(path.join(base, 'repo', 'manifest.json'))) return base;
+    const children = fs.readdirSync(base, { withFileTypes: true }).filter((entry) => entry.isDirectory());
+    for (const child of children) {
+      const candidate = path.join(base, child.name);
+      if (fs.existsSync(path.join(candidate, 'repo', 'manifest.json'))) return candidate;
+    }
   }
 
-  throw new Error(`Could not find a generated MVP Builder package under ${base}`);
+  throw new Error(`Could not find a generated MVP Builder package under ${candidates.join(' | ')}`);
 }
 
 export function readJsonFile<T>(filePath: string): T {

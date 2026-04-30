@@ -5,6 +5,7 @@ node_modules
 *.log
 *.tsbuildinfo
 .tmp-*
+.tmp/
 .temp/
 
 # Generated workspace artifacts
