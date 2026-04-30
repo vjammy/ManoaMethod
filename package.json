@@ -20,6 +20,7 @@
     "test-scripts": "tsx scripts/mvp-builder-test-scripts.ts",
     "traceability": "tsx scripts/mvp-builder-traceability.ts",
     "regression": "tsx regression-suite/scripts/run-regression.ts",
+    "audit": "tsx scripts/mvp-builder-quality-audit.ts",
     "loop": "tsx scripts/mvp-builder-loop.ts",
     "loop:browser": "tsx scripts/mvp-builder-loop-browser.ts",
     "auto-regression": "tsx scripts/mvp-builder-auto-regression.ts",

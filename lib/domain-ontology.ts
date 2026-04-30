@@ -653,10 +653,59 @@ function buildBlueprint(domainType: DomainArchetype): Blueprint {
           actor('Reviewer', 'reviewer', ['reviewer', 'approver'], ['Review and approve sensitive steps'], ['Review records'])
         ],
         entities: [
-          entity({ name: 'Core Record', type: 'core-record', core: true, description: 'Primary business record for the product.', aliases: ['record'], fields: [field('recordId', 'id', 'Stable record identifier.', 'record-001'), field('title', 'string', 'Main label for the record.', 'Primary workflow record'), field('status', 'enum', 'Current workflow state.', 'active')], relationships: ['Referenced by support workflow records'], ownerActors: ['Primary User'], riskTypes: ['Generic workflow risk'], sample: { recordId: 'record-001', title: 'Primary workflow record', status: 'active' } })
+          entity({
+            name: 'Core Record',
+            type: 'core-record',
+            core: true,
+            description: 'Primary business record for the product.',
+            aliases: ['record'],
+            fields: [
+              field('recordId', 'id', 'Stable record identifier.', 'record-001'),
+              field('title', 'string', 'Main label for the record.', 'Primary workflow record'),
+              field('status', 'enum', 'Current workflow state.', 'active')
+            ],
+            relationships: ['Referenced by support workflow records'],
+            ownerActors: ['Primary User'],
+            riskTypes: ['Generic workflow risk'],
+            sample: { recordId: 'record-001', title: 'Primary workflow record', status: 'active' }
+          }),
+          entity({
+            name: 'Member Profile',
+            type: 'person',
+            core: true,
+            description: 'Primary or reviewing actor account associated with the workspace.',
+            aliases: ['member', 'user profile'],
+            fields: [
+              field('memberId', 'id', 'Stable member identifier.', 'member-001'),
+              field('displayName', 'string', 'Human-readable member name.', 'Alex Reviewer'),
+              field('role', 'enum', 'Primary role for this member.', 'primary-user')
+            ],
+            relationships: ['Owns Core Record entries', 'Acts on Audit Entry records'],
+            ownerActors: ['Primary User', 'Reviewer'],
+            riskTypes: ['Generic workflow risk'],
+            sample: { memberId: 'member-001', displayName: 'Alex Reviewer', role: 'primary-user' }
+          }),
+          entity({
+            name: 'Audit Entry',
+            type: 'audit',
+            core: true,
+            description: 'Immutable record of who changed a Core Record and when, used for review traceability.',
+            aliases: ['audit log', 'history'],
+            fields: [
+              field('entryId', 'id', 'Stable audit identifier.', 'audit-001'),
+              field('recordId', 'id', 'Core Record referenced by this audit entry.', 'record-001'),
+              field('actorMemberId', 'id', 'Member who performed the action.', 'member-001'),
+              field('action', 'enum', 'Action performed.', 'state-change'),
+              field('recordedAt', 'datetime', 'Server timestamp the entry was recorded.', '2026-04-30T10:00:00Z')
+            ],
+            relationships: ['References Core Record', 'References Member Profile'],
+            ownerActors: ['Primary User', 'Reviewer'],
+            riskTypes: ['Generic workflow risk'],
+            sample: { entryId: 'audit-001', recordId: 'record-001', actorMemberId: 'member-001', action: 'state-change', recordedAt: '2026-04-30T10:00:00Z' }
+          })
         ],
         workflows: [
-          workflow({ name: 'Core workflow', type: 'record-create', aliases: ['workflow', 'core workflow'], description: 'Primary business workflow inferred from the brief.', primaryActors: ['Primary User'], entityRefs: ['Core Record'], steps: ['Create core record', 'Update state', 'Review outcome'], failureModes: ['Core record is missing required details', 'Workflow outcome is not visible'], featureTriggers: ['workflow'], acceptancePattern: 'record-create' })
+          workflow({ name: 'Core workflow', type: 'record-create', aliases: ['workflow', 'core workflow'], description: 'Primary business workflow inferred from the brief.', primaryActors: ['Primary User'], entityRefs: ['Core Record', 'Audit Entry'], steps: ['Create core record', 'Record audit entry', 'Update state', 'Review outcome'], failureModes: ['Core record is missing required details', 'Workflow outcome is not visible', 'Audit entry is not written when state changes'], featureTriggers: ['workflow'], acceptancePattern: 'record-create' })
         ],
         integrations: [],
         risks: [
