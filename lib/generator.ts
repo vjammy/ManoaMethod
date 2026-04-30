@@ -171,13 +171,15 @@ function extractRoleHead(value: string, fallback: string, maxWords = 4): string 
   if (!trimmed) return fallback;
   // Cut at relative-clause / conjunction boundaries.
   const head = trimmed.split(/\s+(?:and|or|who|that|which|where|when)\s+/i)[0].trim();
-  const words = head
+  const stripped = head
     .replace(/^[\s,;:.\-]+|[\s,;:.\-]+$/g, '')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, maxWords)
-    .join(' ');
-  return words || fallback;
+    // Drop leading articles so "An independent dog walker" → "independent dog walker".
+    .replace(/^(?:a|an|the)\s+/i, '');
+  const words = stripped.split(/\s+/).filter(Boolean).slice(0, maxWords).join(' ');
+  if (!words) return fallback;
+  // Capitalize the first letter so "independent dog walker" becomes
+  // "Independent dog walker" when it appears mid-title.
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 function buildFocusSummary(blueprint: PhaseBlueprint, context: ProjectContext): string {

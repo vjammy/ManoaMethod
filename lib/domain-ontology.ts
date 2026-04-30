@@ -731,6 +731,54 @@ const ACTOR_BLOCKLIST = new Set([
   'mvp builder'
 ]);
 
+// Words/phrases that look noun-like but are actions, version markers, or
+// filler — they should never become entity names.
+const ENTITY_BLOCKLIST_TOKENS = new Set([
+  'login',
+  'logout',
+  'signin',
+  'sign-in',
+  'sign-up',
+  'signup',
+  'auth',
+  'authentication',
+  'add',
+  'edit',
+  'create',
+  'delete',
+  'remove',
+  'update',
+  'manage',
+  'management',
+  'view',
+  'list',
+  'search',
+  'filter',
+  'export',
+  'import',
+  'integration',
+  'integrations'
+]);
+
+const ENTITY_BLOCKLIST_PATTERNS: RegExp[] = [
+  /\bv\d+\b/i, // v1 / v2 / etc.
+  /\bmay\s+use\b/i,
+  /\boptional\b/i
+];
+
+function isEntityCandidateBlocked(candidate: string): boolean {
+  const lower = candidate.toLowerCase().trim();
+  if (!lower) return true;
+  if (ENTITY_BLOCKLIST_PATTERNS.some((re) => re.test(lower))) return true;
+  // Block any phrase that contains a blocklist token as a whole word.
+  // "Walker Login" → blocked (login is a verb/action). "Manage Clients" →
+  // blocked (the entity is "Clients", which will be picked up separately).
+  for (const token of lower.split(/\s+/)) {
+    if (ENTITY_BLOCKLIST_TOKENS.has(token)) return true;
+  }
+  return false;
+}
+
 const ENTITY_HINT_NOUNS = [
   // Generic data noun hints, ranked roughly by descriptive value.
   'session',
@@ -793,8 +841,13 @@ function deriveActorsFromAudience(audienceSegments: string[]): OntologyActor[] {
   for (const segment of audienceSegments) {
     const roleClause = segment.match(/roles?\s+are\s*:\s*(.+?)(?:\.|$)/i)?.[1];
     if (roleClause) {
-      for (const fragment of roleClause.split(/\s+and\s+|,\s*/)) {
-        const cleaned = fragment.replace(/\([^)]*\)/g, '').replace(/[.,;:!?]+$/, '').trim();
+      // Strip parenthetical descriptors *before* splitting on " and ", so
+      // "walker (operator and admin) and client (pet owner who requests
+      // and reviews walks)" doesn't fragment into "walker (operator" and
+      // "admin)" when " and " appears inside the parens.
+      const stripped = roleClause.replace(/\([^)]*\)/g, ' ');
+      for (const fragment of stripped.split(/\s+and\s+|,\s*/)) {
+        const cleaned = fragment.replace(/[.,;:!?]+$/, '').trim();
         if (!cleaned) continue;
         const lower = cleaned.toLowerCase();
         if (ACTOR_BLOCKLIST.has(lower)) continue;
@@ -842,28 +895,41 @@ function deriveEntitiesFromBrief(input: ProjectInput, args: BuildArgs): Ontology
   const featureItems = args.mustHaves.concat(args.niceToHaves);
   const candidates: string[] = [];
   for (const raw of dataItems.concat(featureItems)) {
-    const cleaned = raw.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
+    let cleaned = raw.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim();
     if (!cleaned) continue;
-    // Try "<noun phrase> with ..." or "<noun phrase> for ..."
+    // Strip leading filler/verb words so "may use local filesystem" doesn't
+    // become an entity head.
+    cleaned = cleaned.replace(/^(?:v\d+\s+may\s+use|may\s+use|use|see|note|the|a|an|some|any)\s+/i, '').trim();
+    if (!cleaned) continue;
     const head = cleaned.split(/\s+with\s+|\s+for\s+|\s+by\s+|\s+in\s+|\s+of\s+|\.|;|:/)[0].trim();
-    if (head && head.length <= 40 && /^[A-Za-z][A-Za-z0-9 \-/]*$/.test(head)) {
-      candidates.push(head);
-    }
+    if (!head || head.length > 40) continue;
+    if (!/^[A-Za-z][A-Za-z0-9 \-/]*$/.test(head)) continue;
+    if (isEntityCandidateBlocked(head)) continue;
+    candidates.push(head);
   }
   // Score candidates by whether they contain a known entity-hint noun.
   const scored = candidates.map((candidate) => {
     const lower = candidate.toLowerCase();
-    const hint = ENTITY_HINT_NOUNS.find((noun) => lower.includes(noun));
+    // Word-boundary match with optional plural so "Walk Requests" matches
+    // "request" but "Local Filesystem" does NOT match "file".
+    const hint = ENTITY_HINT_NOUNS.find((noun) => {
+      const re = new RegExp(`\\b${noun.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}s?\\b`);
+      return re.test(lower);
+    });
     return { candidate, score: hint ? 2 : lower.split(/\s+/).length === 1 ? 0 : 1 };
   });
   // Prefer multi-word names that include a hint noun, then de-dup by lower-case.
   scored.sort((a, b) => b.score - a.score);
   const seen = new Set<string>();
   const picked: string[] = [];
-  for (const { candidate } of scored) {
+  for (const { candidate, score } of scored) {
     const key = candidate.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
+    // Once we have 2 hint-bearing entities, stop accepting low-confidence
+    // fillers — better to have 2 sharp brief-derived entities than to pad
+    // out to 4 with infrastructure phrases like "local filesystem".
+    if (picked.length >= 2 && score < 2) continue;
     picked.push(titleCase(candidate));
     if (picked.length >= 4) break;
   }
