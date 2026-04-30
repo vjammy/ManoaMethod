@@ -22,6 +22,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ideas } from './loop-50-ideas';
 import { runAudit, renderAudit } from './mvp-builder-quality-audit';
+import { synthesizeExtractions, writeSynthesizedToWorkspace } from './synthesize-research-ontology';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const RUN_ROOT = path.join(REPO_ROOT, '.tmp', 'loop-50');
@@ -137,9 +138,40 @@ async function runIteration(iteration: number, idea: typeof ideas[number]): Prom
   const steps: StepResult[] = [];
   const notes: string[] = [];
 
-  // Step 1: create-project
+  // Step 0: synthesize research extractions from the brief (deterministic, in-process).
+  // Real users get this from an agent following docs/RESEARCH_RECIPE.md; the synthesizer
+  // is the harness-only bridge that lets us measure audit deltas without LLM calls.
+  const researchInputDir = path.join(iterDir, 'research-input');
+  const synthStart = Date.now();
+  let synthOk = false;
+  let synthOutput = '';
+  try {
+    const ex = synthesizeExtractions(idea.input);
+    fs.mkdirSync(researchInputDir, { recursive: true });
+    writeSynthesizedToWorkspace(researchInputDir, idea.input, ex);
+    synthOk = true;
+    synthOutput = `actors=${ex.actors.length} entities=${ex.entities.length} workflows=${ex.workflows.length} risks=${ex.risks.length} gates=${ex.gates.length}`;
+  } catch (err) {
+    synthOutput = `synthesizer threw: ${(err as Error).message}`;
+  }
+  steps.push({
+    name: 'synthesize-research',
+    command: 'in-process synthesize-research-ontology',
+    passed: synthOk,
+    exitCode: synthOk ? 0 : 1,
+    durationMs: Date.now() - synthStart,
+    stdoutTail: synthOutput,
+    stderrTail: ''
+  });
+
+  // Step 1: create-project, hydrated with synthesized research
   steps.push(
-    await runCmd('create-project', 'npm', ['run', 'create-project', '--', `--input=${inputJsonPath}`, `--out=${outDir}`], REPO_ROOT)
+    await runCmd(
+      'create-project',
+      'npm',
+      ['run', 'create-project', '--', `--input=${inputJsonPath}`, `--out=${outDir}`, `--research-from=${researchInputDir}`],
+      REPO_ROOT
+    )
   );
   if (!fs.existsSync(packageDir)) {
     notes.push('Workspace not generated; remaining steps skipped.');

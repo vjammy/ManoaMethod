@@ -1544,30 +1544,46 @@ function buildFunctionalRequirementsFromResearch(input: ProjectInput, ex: Resear
   const actorById = new Map(ex.actors.map((a) => [a.id, a]));
   const entityById = new Map(ex.entities.map((e) => [e.id, e]));
 
-  const requirements = ex.workflows.flatMap((wf, wfIdx) =>
-    wf.steps.map((step, stepIdx) => {
+  // Flatten workflows × steps into one requirements list, but use the legacy
+  // `Requirement N:` heading format and a flat REQ-N counter so every downstream
+  // consumer (audit, phase plan REQ refs, traceability matrix) sees one ID space.
+  type FlatReq = {
+    title: string;
+    workflow: { name: string; acceptancePattern: string; sources: typeof ex.workflows[number]['sources']; failureModes: typeof ex.workflows[number]['failureModes'] };
+    actor: ReturnType<typeof actorById.get>;
+    entities: typeof ex.entities;
+    step: typeof ex.workflows[number]['steps'][number];
+  };
+  const flat: FlatReq[] = [];
+  for (const wf of ex.workflows) {
+    for (const step of wf.steps) {
       const actor = actorById.get(step.actor);
-      const entities = wf.entitiesTouched.map((id) => entityById.get(id)).filter(Boolean);
-      const reqId = `REQ-${String(wfIdx + 1).padStart(2, '0')}-${String(stepIdx + 1).padStart(2, '0')}`;
-      const sourceList = wf.sources
-        .slice(0, 2)
-        .map((s) => `[${s.title}](${s.url})`)
-        .join('; ');
-      const failureNote = wf.failureModes[0]
-        ? `On ${wf.failureModes[0].trigger.toLowerCase()}, ${wf.failureModes[0].mitigation.toLowerCase()}.`
-        : 'Failure surfaces clearly to the actor; no silent state.';
-      return `## ${reqId}: ${sentenceCase(step.action)}
+      const entities = wf.entitiesTouched.map((id) => entityById.get(id)).filter(Boolean) as typeof ex.entities;
+      flat.push({ title: sentenceCase(step.action), workflow: wf, actor, entities, step });
+    }
+  }
 
-- Workflow: ${wf.name}
-- Actor: ${actor ? actor.name : step.actor} (${actor ? actor.type : 'unknown role'})
-- User action: ${step.action}
-- System response: ${step.systemResponse}
-- Entities touched: ${entities.map((e) => e!.name).join(', ') || '—'}
-- Acceptance signal: ${wf.acceptancePattern}
-- Failure handling: ${failureNote}
+  const requirements = flat.map((r, i) => {
+    const reqNum = i + 1;
+    const sourceList = r.workflow.sources
+      .slice(0, 2)
+      .map((s) => `[${s.title}](${s.url})`)
+      .join('; ');
+    const failureNote = r.workflow.failureModes[0]
+      ? `On ${r.workflow.failureModes[0].trigger.toLowerCase()}, ${r.workflow.failureModes[0].mitigation.toLowerCase()}.`
+      : 'Failure surfaces clearly to the actor; no silent state.';
+    return `## Requirement ${reqNum}: ${r.title}
+
+- Actor: ${r.actor ? r.actor.name : r.step.actor}
+- User action: ${r.step.action}
+- System response: ${r.step.systemResponse}
+- Stored data: ${r.entities.map((e) => `${e.name} (${e.fields.slice(0, 4).map((f) => f.name).join(', ')})`).join('; ') || 'See research/extracted/entities.json'}
+- Failure case: ${failureNote}
+- Testable outcome: ${r.workflow.acceptancePattern}
+- Related workflow: ${r.workflow.name}
+- Related entities: ${r.entities.map((e) => e.name).join(', ') || '—'}
 - Sourced from: ${sourceList || 'research extractions'}`;
-    })
-  );
+  });
 
   const conflictsBlock = ex.conflicts.length
     ? `\n\n## Outstanding conflicts with the brief\n\n${ex.conflicts
@@ -1595,8 +1611,6 @@ ${ex.actors.map((a) => `- **${a.name}** (\`${a.id}\`, ${a.type}) — ${a.respons
 ## Entities
 
 ${ex.entities.map((e) => `- **${e.name}** (\`${e.id}\`) — ${e.description} Owners: ${e.ownerActors.join(', ')}.`).join('\n')}
-
-## Requirements (one per researched workflow step)
 
 ${requirements.join('\n\n')}${antiBlock}${conflictsBlock}
 `;
