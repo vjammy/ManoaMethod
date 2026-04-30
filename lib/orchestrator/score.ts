@@ -1,6 +1,42 @@
-import type { CommandResult, GateResult, ObjectiveCriterion, RepoState, Scorecard } from './types';
+import type { CommandResult, GateResult, ObjectiveCriterion, RepoState, Scorecard, ScorecardVerdict } from './types';
 import { detectHardCapSignals } from './gates';
 import { ratio } from './utils';
+
+export const RELEASE_APPROVAL_BLOCKER_LABELS = [
+  'Lifecycle state is synchronized',
+  'Final reports are repo-specific'
+] as const;
+
+export type ReleaseApprovalBlockerLabel = (typeof RELEASE_APPROVAL_BLOCKER_LABELS)[number];
+
+function isReleaseApprovalOnlyFailure(gates: GateResult[]) {
+  const failed = gates.filter((gate) => gate.status === 'fail');
+  if (failed.length !== 1) return null;
+  const releaseGate = failed[0];
+  if (releaseGate.gate !== 'release gate') return null;
+  if (releaseGate.failedCriteria.length === 0) return null;
+  const everyFailureIsApprovalOnly = releaseGate.failedCriteria.every((label) =>
+    (RELEASE_APPROVAL_BLOCKER_LABELS as readonly string[]).includes(label)
+  );
+  return everyFailureIsApprovalOnly ? releaseGate : null;
+}
+
+export function buildReleaseBlockerExplanation(failedCriteria: string[]) {
+  const reasons = failedCriteria.map((label) => {
+    if (label === 'Lifecycle state is synchronized') {
+      return 'Manifest lifecycle is not yet ApprovedForBuild — production release requires explicit human approval (manifest.approvedForBuild=true and lifecycleStatus=ApprovedForBuild).';
+    }
+    if (label === 'Final reports are repo-specific') {
+      return 'FINAL_RELEASE_REPORT.md is still a generated pending shell — fill it with the actual release summary, scope, and caveats before approving release.';
+    }
+    return label;
+  });
+  return [
+    'Build evidence is complete, but release approval is intentionally withheld.',
+    ...reasons,
+    'Treat this as BUILD PASS / RELEASE NOT APPROVED until the release gate passes.'
+  ].join(' ');
+}
 
 function category(
   key: Scorecard['categories'][number]['key'],
@@ -141,15 +177,15 @@ export function buildScorecard(
   const cap = activeCaps.length ? Math.min(...activeCaps.map((item) => item.maxScore)) : null;
   const cappedTotal = cap === null ? total : Math.min(total, cap);
   const capReason = activeCaps.find((item) => item.maxScore === cap)?.reason || null;
-  const hasFailedGate = gates.some((gate) => gate.status === 'fail');
-  const verdict =
-    hasFailedGate || cappedTotal < 60
-      ? 'FAIL'
-      : cappedTotal >= 90
-        ? 'PASS'
-        : cappedTotal >= 80
-          ? 'CONDITIONAL PASS'
-          : 'NEEDS FIXES';
+  const releaseBlocker = computeReleaseBlocker(gates);
+
+  const verdict = computeVerdict(cappedTotal, gates, releaseBlocker);
+
+  const summary = capReason
+    ? `Raw score ${total}/100 capped to ${cappedTotal}/100 because ${capReason.toLowerCase()}.`
+    : releaseBlocker.blocked
+      ? `Build score ${cappedTotal}/100, but release is not approved: ${releaseBlocker.explanation}`
+      : `Score ${cappedTotal}/100 with no hard caps triggered.`;
 
   return {
     total,
@@ -158,8 +194,55 @@ export function buildScorecard(
     categories,
     hardCaps,
     capReason,
-    summary: capReason
-      ? `Raw score ${total}/100 capped to ${cappedTotal}/100 because ${capReason.toLowerCase()}.`
-      : `Score ${cappedTotal}/100 with no hard caps triggered.`
+    summary,
+    releaseBlocker
   };
+}
+
+export type ReleaseBlockerInfo = Scorecard['releaseBlocker'];
+
+export function computeReleaseBlocker(gates: GateResult[]): ReleaseBlockerInfo {
+  const releaseApprovalOnlyGate = isReleaseApprovalOnlyFailure(gates);
+  if (!releaseApprovalOnlyGate) return { blocked: false, failedCriteria: [], explanation: null };
+  return {
+    blocked: true,
+    failedCriteria: [...releaseApprovalOnlyGate.failedCriteria],
+    explanation: buildReleaseBlockerExplanation(releaseApprovalOnlyGate.failedCriteria)
+  };
+}
+
+export function computeVerdict(
+  cappedTotal: number,
+  gates: GateResult[],
+  releaseBlocker: ReleaseBlockerInfo
+): ScorecardVerdict {
+  const hasFailedGate = gates.some((gate) => gate.status === 'fail');
+  if (cappedTotal < 60) return 'FAIL';
+  if (releaseBlocker.blocked && cappedTotal >= 80) return 'PASS WITH RELEASE BLOCKER';
+  if (hasFailedGate) return 'FAIL';
+  if (cappedTotal >= 90) return 'PASS';
+  if (cappedTotal >= 80) return 'CONDITIONAL PASS';
+  return 'NEEDS FIXES';
+}
+
+export function qualifiedRecommendation(
+  scorecard: Pick<Scorecard, 'verdict' | 'cappedTotal' | 'releaseBlocker'>,
+  gates: GateResult[]
+): 'PASS' | 'BUILD PASS / RELEASE NOT APPROVED' | 'CONDITIONAL PASS' | 'NEEDS TARGETED FIXES' | 'FAIL' {
+  // The recommendation is anchored on the verdict so they can never silently
+  // disagree. releaseBlocker.blocked alone is NOT enough to surface BUILD PASS
+  // / RELEASE NOT APPROVED — the verdict must already be 'PASS WITH RELEASE
+  // BLOCKER', which itself requires a passing build score (>= 80) and only the
+  // release gate failing for the canonical approval-only criteria.
+  if (scorecard.verdict === 'PASS') return 'PASS';
+  if (scorecard.verdict === 'PASS WITH RELEASE BLOCKER') {
+    return 'BUILD PASS / RELEASE NOT APPROVED';
+  }
+  if (scorecard.verdict === 'CONDITIONAL PASS') return 'CONDITIONAL PASS';
+  if (scorecard.verdict === 'NEEDS FIXES') return 'NEEDS TARGETED FIXES';
+  // verdict === 'FAIL'
+  if (gates.filter((gate) => gate.status === 'fail').length === 0 && scorecard.cappedTotal >= 90) {
+    return 'PASS';
+  }
+  return 'FAIL';
 }

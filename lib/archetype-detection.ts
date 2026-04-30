@@ -47,7 +47,22 @@ const RULES: KeywordRule[] = [
   },
   {
     archetype: 'inventory',
-    anchors: ['inventory management', 'stock level', 'cycle count', 'reorder threshold', 'stock adjustment', 'sku'],
+    anchors: [
+      'inventory management',
+      'inventory planning',
+      'inventory item',
+      'inventory items',
+      'stock level',
+      'stock state',
+      'stock states',
+      'low-stock',
+      'low stock',
+      'cycle count',
+      'reorder threshold',
+      'stock adjustment',
+      'stock adjustments',
+      'sku'
+    ],
     incidentals: ['inventory', 'stock', 'threshold', 'adjustment'],
     antiMatch: ['no inventory', 'not inventory', 'no stock management', 'inventory: out of scope', 'no inventory management']
   },

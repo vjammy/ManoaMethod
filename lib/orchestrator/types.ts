@@ -134,10 +134,17 @@ export type ScoreCategory = {
   rationale: string[];
 };
 
+export type ScorecardVerdict =
+  | 'PASS'
+  | 'PASS WITH RELEASE BLOCKER'
+  | 'CONDITIONAL PASS'
+  | 'NEEDS FIXES'
+  | 'FAIL';
+
 export type Scorecard = {
   total: number;
   cappedTotal: number;
-  verdict: 'PASS' | 'CONDITIONAL PASS' | 'NEEDS FIXES' | 'FAIL';
+  verdict: ScorecardVerdict;
   categories: ScoreCategory[];
   hardCaps: Array<{
     reason: string;
@@ -146,6 +153,11 @@ export type Scorecard = {
   }>;
   capReason: string | null;
   summary: string;
+  releaseBlocker: {
+    blocked: boolean;
+    failedCriteria: string[];
+    explanation: string | null;
+  };
 };
 
 export type RecoveryPlan = {

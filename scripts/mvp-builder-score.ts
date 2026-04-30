@@ -5,7 +5,7 @@ import { buildRepoState } from '../lib/orchestrator/scanner';
 import { deriveObjectiveCriteria } from '../lib/orchestrator/criteria';
 import { runProjectCommands } from '../lib/orchestrator/commands';
 import { runGateChecks } from '../lib/orchestrator/gates';
-import { buildScorecard } from '../lib/orchestrator/score';
+import { buildScorecard, qualifiedRecommendation } from '../lib/orchestrator/score';
 import { ensureDir, resolveOrchestratorRoot, writeFile } from '../lib/orchestrator/utils';
 
 function getArg(name: string) {
@@ -28,6 +28,11 @@ export function runScore() {
   const gates = runGateChecks(repoState, commands);
   const scorecard = buildScorecard(repoState, criteria, commands, gates);
 
+  const recommendation = qualifiedRecommendation(scorecard, gates);
+  const releaseBlockerSection = scorecard.releaseBlocker.blocked
+    ? `\n## Release blocker\n- Status: BUILD PASS / RELEASE NOT APPROVED\n- Failed release-gate checks: ${scorecard.releaseBlocker.failedCriteria.join(', ') || 'none'}\n- Explanation: ${scorecard.releaseBlocker.explanation || 'Release approval is missing.'}\n`
+    : '';
+
   writeFile(
     path.join(reportsRoot, 'OBJECTIVE_SCORECARD.md'),
     `# OBJECTIVE_SCORECARD
@@ -36,13 +41,19 @@ export function runScore() {
 - Score: ${scorecard.cappedTotal}/100
 - Raw score: ${scorecard.total}/100
 - Verdict: ${scorecard.verdict}
+- Recommendation: ${recommendation}
 - Hard cap reason: ${scorecard.capReason || 'none'}
 
 ${scorecard.categories.map((category) => `- ${category.label}: ${category.awarded}/${category.weight}`).join('\n')}
+${releaseBlockerSection}
+## Summary
+${scorecard.summary}
 `
   );
 
   console.log(`Score: ${scorecard.cappedTotal}/100`);
+  console.log(`Verdict: ${scorecard.verdict}`);
+  console.log(`Recommendation: ${recommendation}`);
   console.log(`Report: ${path.join(reportsRoot, 'OBJECTIVE_SCORECARD.md')}`);
 }
 

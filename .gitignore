@@ -58,6 +58,10 @@ node_modules
 /ROLLBACK_PLAN.md
 /SCORECARD.md
 /SECURITY_REVIEW.md
+# Tracked SECURITY_REVIEW.md for the MVP Builder repo itself. The security
+# gate (lib/orchestrator/gates.ts:238) requires it; a tracked, repo-specific
+# review is the canonical version.
+!/SECURITY_REVIEW.md
 /START_HERE.md
 /STEP_BY_STEP_BUILD_GUIDE.md
 /TESTING_STRATEGY.md
@@ -80,7 +84,17 @@ node_modules
 /phases/
 /product-strategy/
 /recursive-test/
-/regression-suite/
+# Ignore generated regression-suite contents but keep the four required dev
+# docs and the tracked scripts dir. The regression gate
+# (lib/orchestrator/gates.ts:147) requires these four docs to exist; fresh
+# checkouts should not see them as missing. Use `dir/*` (not `dir/`) so
+# negation patterns can re-include specific children.
+/regression-suite/*
+!/regression-suite/README.md
+!/regression-suite/RUN_REGRESSION.md
+!/regression-suite/REGRESSION_CHECKLIST.md
+!/regression-suite/REGRESSION_RESULTS_TEMPLATE.md
+!/regression-suite/scripts/
 /requirements/
 /security-risk/
 /ui-ux/

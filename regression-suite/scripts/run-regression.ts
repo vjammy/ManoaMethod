@@ -212,14 +212,74 @@ function runRegression(packageRoot: string) {
   }
 }
 
-function resolvePackageRootArg(): string {
+function resolvePackageRootArg(): { path: string; explicit: boolean } {
   const flag = process.argv.find((arg) => arg.startsWith('--package='));
-  if (flag) return flag.slice('--package='.length);
+  if (flag) return { path: flag.slice('--package='.length), explicit: true };
   const positional = process.argv[2];
-  if (positional && !positional.startsWith('--')) return positional;
-  if (process.env.INIT_CWD) return process.env.INIT_CWD;
-  return process.cwd();
+  if (positional && !positional.startsWith('--')) return { path: positional, explicit: true };
+  // INIT_CWD is set by npm to the directory `npm run` was invoked from. When
+  // that directory IS the MVP Builder source repo (not a generated package),
+  // we treat the call as implicit so we can bootstrap a sample package below.
+  // Otherwise — e.g. INIT_CWD is a generated-package working dir — treat it
+  // as explicit.
+  const initCwd = process.env.INIT_CWD;
+  if (initCwd) {
+    const resolved = path.resolve(initCwd);
+    const isMvpBuilderRepo =
+      fs.existsSync(path.join(resolved, 'package.json')) &&
+      (() => {
+        try {
+          const pkg = JSON.parse(fs.readFileSync(path.join(resolved, 'package.json'), 'utf8'));
+          return pkg.name === 'mvp-builder';
+        } catch {
+          return false;
+        }
+      })();
+    return { path: resolved, explicit: !isMvpBuilderRepo };
+  }
+  return { path: process.cwd(), explicit: false };
 }
 
-const packageRoot = resolvePackageRootArg();
-runRegression(path.resolve(packageRoot));
+function isGeneratedPackage(root: string) {
+  return fs.existsSync(path.join(root, 'repo', 'manifest.json'));
+}
+
+async function bootstrapSamplePackage(): Promise<string> {
+  // The MVP Builder source repo is not itself a generated package. When the
+  // regression script is invoked from the repo root with no --package flag,
+  // generate a deterministic sample (examples/family-task-app.json) into a
+  // tmp dir and run against that. This exercises the regression script the
+  // way it is meant to be used and avoids false-positive failures from
+  // missing PROJECT_BRIEF.md, PHASE_PLAN.md, etc. at the source repo root.
+  const repoRoot = path.resolve(__dirname, '..', '..');
+  const { pathToFileURL } = await import('node:url');
+  const createProjectModulePath = path.join(repoRoot, 'scripts', 'mvp-builder-create-project.ts');
+  // Lazy-import via file:// URL so Windows absolute paths resolve under the
+  // default ESM loader.
+  const { createArtifactPackage, loadInput } = await import(pathToFileURL(createProjectModulePath).href);
+  const samplePath = path.join(repoRoot, 'examples', 'family-task-app.json');
+  const input = loadInput(samplePath);
+  const { tmpdir } = await import('node:os');
+  const outDir = fs.mkdtempSync(path.join(tmpdir(), 'mvp-builder-regression-'));
+  const result = await createArtifactPackage({ input, outDir, zip: false });
+  return result.rootDir;
+}
+
+async function main() {
+  const { path: requestedPath, explicit } = resolvePackageRootArg();
+  const resolvedPath = path.resolve(requestedPath);
+  if (!explicit && !isGeneratedPackage(resolvedPath)) {
+    console.log(
+      'No --package flag provided and no generated package detected at the working directory. Generating a deterministic sample package from examples/family-task-app.json and running the regression suite against it.\n'
+    );
+    const sampleRoot = await bootstrapSamplePackage();
+    runRegression(sampleRoot);
+  } else {
+    runRegression(resolvedPath);
+  }
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { CommandResult, GateResult, OrchestratorRun, RepoState, RoundResult, Scorecard } from './types';
+import { qualifiedRecommendation } from './score';
 import { summarizeList, writeFile } from './utils';
 
 function renderCommandResults(commands: CommandResult[]) {
@@ -36,6 +37,9 @@ ${gate.checks.map((check) => `- ${check.passed ? 'PASS' : 'FAIL'}: ${check.label
 }
 
 function renderScorecard(scorecard: Scorecard) {
+  const releaseBlockerSection = scorecard.releaseBlocker.blocked
+    ? `\n## Release blocker\n- Status: BUILD PASS / RELEASE NOT APPROVED\n- Failed release-gate checks: ${scorecard.releaseBlocker.failedCriteria.join(', ') || 'none'}\n- Explanation: ${scorecard.releaseBlocker.explanation || 'Release approval is missing.'}\n`
+    : '';
   return `# OBJECTIVE_SCORECARD
 
 - Raw score: ${scorecard.total}/100
@@ -49,7 +53,7 @@ ${scorecard.categories.map((category) => `| ${category.label} | ${category.award
 
 ## Hard caps
 ${scorecard.hardCaps.map((cap) => `- ${cap.triggered ? 'TRIGGERED' : 'not triggered'}: ${cap.reason} -> max ${cap.maxScore}`).join('\n')}
-
+${releaseBlockerSection}
 ## Summary
 ${scorecard.summary}
 `;
@@ -86,6 +90,10 @@ ${summarizeList(round.recoveryPlan.exactProblems, 'No recovery issues were recor
 
 export function writeFinalReports(run: OrchestratorRun, reportsRoot: string) {
   const finalRound = run.finalRound;
+  const recommendation = qualifiedRecommendation(finalRound.scorecard, finalRound.gates);
+  const releaseBlockerNotice = finalRound.scorecard.releaseBlocker.blocked
+    ? `\n## Release approval status\n- Recommendation: ${recommendation}\n- Reason: ${finalRound.scorecard.releaseBlocker.explanation || 'Release approval is missing.'}\n- Outstanding release-gate checks: ${finalRound.scorecard.releaseBlocker.failedCriteria.join(', ') || 'none'}\n`
+    : `\n## Release approval status\n- Recommendation: ${recommendation}\n`;
   writeFile(
     path.join(reportsRoot, 'FINAL_ORCHESTRATOR_REPORT.md'),
     `# FINAL_ORCHESTRATOR_REPORT
@@ -94,6 +102,7 @@ export function writeFinalReports(run: OrchestratorRun, reportsRoot: string) {
 - Target score: ${run.options.targetScore}
 - Final score: ${finalRound.scorecard.cappedTotal}
 - Verdict: ${finalRound.scorecard.verdict}
+- Recommendation: ${recommendation}
 - Rounds completed: ${run.rounds.length}
 - Stop reason: ${run.stopReason}
 
@@ -102,6 +111,6 @@ ${summarizeList(finalRound.gates.map((gate) => `${gate.gate}: ${gate.status}`), 
 
 ## Final recovery state
 ${summarizeList(finalRound.recoveryPlan.exactProblems, 'No active recovery problems remain.')}
-`
+${releaseBlockerNotice}`
   );
 }

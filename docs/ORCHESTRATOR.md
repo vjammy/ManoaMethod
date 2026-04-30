@@ -1,6 +1,6 @@
 # Orchestrator
 
-The orchestrator is the **static-analysis** scorer. It reads the repo (or a generated workspace), runs gate checks, executes the required commands (build/test/smoke/validate), and produces a 0–100 score with hard caps.
+The MVP Builder orchestrator is the **static-analysis** scorer. It reads the MVP Builder source repo (or a generated workspace), runs gate checks, executes the required commands (build/test/smoke/validate), and produces a 0–100 score with hard caps.
 
 This is **different from auto-regression**:
 

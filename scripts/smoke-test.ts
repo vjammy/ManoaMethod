@@ -359,7 +359,11 @@ async function main() {
   assert(manifest.approvedForBuild === false, 'Sample package should not be approved for build.');
   assert(state.currentPhase === 1, `Expected mvp-builder-state currentPhase to be 1, received ${state.currentPhase}`);
   assert(Array.isArray(state.unresolvedBlockers), 'mvp-builder-state unresolvedBlockers list is missing.');
-  assert(workflowSteps.length === 8, `Expected 8 workflow steps, received ${workflowSteps.length}`);
+  assert(workflowSteps.length === 9, `Expected 9 workflow steps, received ${workflowSteps.length}`);
+  assert(
+    workflowSteps[workflowSteps.length - 1].id === 'auto-regression',
+    'Step 9 should be auto-regression (added by 3d55548).'
+  );
   assert(
     workflowSteps.some((step) => step.id === 'approval-gate' && step.status === 'Blocked'),
     'Approval gate step should be blocked for the sample package.'
@@ -1085,93 +1089,70 @@ async function main() {
     'Missing critical answers did not appear in the final guide.'
   );
 
-  const reviewReadyBundle = generateProjectBundle(
-    buildAnsweredInput({
-      level: 'advanced',
-      track: 'technical',
-      productName: 'Review Ready AT',
-      targetAudience:
-        'Technical product owners, engineering leads, and AI-assisted builders shipping internal planning tools.',
-      constraints:
-        'Keep the MVP local-first, markdown-first, deterministic, and inside the current Next.js plus CLI stack with no auth or payments.',
-      risks:
-        'The main risks are stale planning artifacts, skipped gates, misunderstood acceptance criteria, and false confidence in inferred assumptions.',
-      successMetrics:
-        'A reviewer should be able to inspect the package, trace every phase back to the brief, and approve it for build without relying on hidden chat context.',
-      questionnaireAnswers: {
-        'north-star':
-          'The release must prove that a planner can create a trustworthy, build-review-ready markdown package without hidden chat context.',
-        'primary-workflow':
-          'Start a project, choose the advanced technical mode, complete the brief, answer the full questionnaire, review the critique, inspect each gate, and export the package for human approval.',
-        'data-boundaries':
-          'Explicit boundaries include the project brief inputs, questionnaire responses, generated markdown artifacts, zip export contents, and CLI package files that mirror the UI output.',
-        'failure-modes':
-          'Key failure modes are contradictory scope, weak phase exits, skipped review evidence, missing ownership, and unlabeled assumptions that slip into implementation.',
-        observability:
-          'The package should define what to log during export, what review signals matter, and what patterns show downstream builders misunderstood the plan.',
-        'scaling-risk':
-          'The main scaling risks are artifact sprawl, repeated regeneration, and future integration drift if package boundaries stay vague.',
-        'scope-cut':
-          'Keep planning, critique, lifecycle status, approval gate, scorecard, phases, gates, and export parity. Defer persistence, auth, payments, and external AI integrations.',
-        acceptance:
-          'A skeptical reviewer should be able to audit the package, trace every phase to the brief, and identify all unresolved assumptions before approving the build.',
-        'operating-risks':
-          'The main operating risks are skipped gates, stale package exports, overconfidence in inferred content, and unreviewed blocker warnings.',
-        'deployment-guardrails':
-          'Typecheck, smoke, build, and create-project must pass, and the exported package must preserve lifecycle state and warning metadata.',
-        'test-proof':
-          'The reviewer should run smoke coverage, inspect manifest warning counts, verify the approval gate file, and compare CLI output against the shared UI generator.',
-        'approval-decision': '',
-        'approval-checklist-complete': ''
-      }
-    })
-  );
+  // The advanced+technical lifecycle test must use a productIdea that the
+  // archetype detector (lib/archetype-detection.ts) recognizes — otherwise
+  // the semantic-fit warning emitted from lib/generator.ts:9417 keeps the
+  // package out of ReviewReady. We use the household-task archetype and answer
+  // every advanced+technical questionnaire item.
+  const reviewReadyAdvancedTechnicalInput = buildAnsweredInput({
+    level: 'advanced',
+    track: 'technical',
+    productName: 'Household Task Workspace AT',
+    productIdea:
+      'A mobile-friendly local-first family task board that helps parents and kids assign household chores, track completion, and hand off household tasks across the week with clear role-based visibility.',
+    targetAudience:
+      'Parent or household admin, second parent or co-parent, child or kid user, optional caregiver supporting the household.',
+    problemStatement:
+      'Families manage household tasks through messy group chats and verbal reminders, which causes missed chores, unclear ownership, weak follow-through, and frustration for parents and kids.',
+    constraints:
+      'Keep the first release local-first, mobile-friendly, and markdown-first. Parents control child accounts. Kids should only see their own assigned or shared household tasks. No cloud auth, no payments, no external chat.',
+    desiredOutput:
+      'A build-ready markdown workspace with phased planning, role boundaries, gates, verification files, handoff context, and enough implementation clarity for a family task management app.',
+    mustHaveFeatures:
+      'Family workspace setup, parent and co-parent roles, kid profiles, household task creation, task assignment, due dates, priority, task status, parent dashboard, kid dashboard, parent approval of kid-completed tasks, mobile-friendly layout, reminder preferences, verification and handoff workflow.',
+    niceToHaveFeatures:
+      'Recurring chores, simple reward tracking, calendar view, printable summaries, optional caregiver views.',
+    dataAndIntegrations:
+      'Family workspaces, parent and kid profiles, household tasks, task assignments, due dates, reminder preferences, parent approval states.',
+    risks:
+      'Children are privacy-sensitive users, role boundaries could leak the wrong household tasks, reminder behavior could create confusion, and mobile usability issues could make the app fail even if backend logic works.',
+    successMetrics:
+      'A reviewer can understand who uses the app, what each role can see, how household tasks move through assignment and completion, and what evidence proves each phase is ready.',
+    nonGoals:
+      'No payment system, no social feed, no school integration, no native mobile app in v1, no chat system, no AI features in v1.',
+    questionnaireAnswers: {
+      'north-star':
+        'The first release must prove a family can create a shared household workspace, assign chores, review completion clearly, and understand what each person should do without group chats or verbal reminders.',
+      'primary-workflow':
+        'A parent creates the family workspace, invites a co-parent, creates kid profiles, adds household tasks, assigns to a parent or child, tracks progress, and lets kids mark their own tasks done so parents can review and approve completion.',
+      'data-boundaries':
+        'Important boundaries include family workspaces, parent accounts, kid profiles managed by parents, household tasks, assignment rules, status changes, reminder preferences, and visibility rules so kids only see their own assigned or shared household tasks while parents see the whole household view.',
+      'failure-modes':
+        'Failure modes include role boundary leaks across kid profiles, parent approval bottlenecks, missed recurring household tasks, and contradictory task ownership when both parents edit at once.',
+      observability:
+        'The package should define what to log when a household task changes ownership, what review signals matter for completion, and what patterns show role boundary drift.',
+      'scaling-risk':
+        'Scaling risks include growing household task volume per family, repeated regeneration of the recurring chore set, and weak boundaries around future calendar integrations.',
+      'scope-cut':
+        'Keep household setup, role boundaries, household task assignment, task completion flow, parent review, dashboard clarity, reminder planning, and privacy guardrails in v1. Defer advanced gamification, school links, native mobile apps, social features.',
+      acceptance:
+        'A skeptical reviewer should be able to read the generated package and understand exactly who the users are, what each role can do, how a household task moves from creation to completion, what safety constraints apply to kid users, and what proof is needed before each phase can advance.',
+      'operating-risks':
+        'The biggest risks are weak role boundaries, privacy mistakes around child accounts, confusing reminder behavior, mobile usability gaps, and false confidence if the dashboards look planned but the verification evidence does not prove the flows actually make sense.',
+      'deployment-guardrails':
+        'The plan should protect role and visibility rules, keep child-facing flows mobile-friendly, avoid leaking private household task information, and keep deployment local-first with no auth or hosted backend.',
+      'test-proof':
+        'Before a phase is considered ready, the reviewer should be able to confirm role permissions, household task lifecycle behavior, parent and kid dashboard expectations, mobile layout assumptions, and privacy-sensitive edge cases through clear phase evidence and verification notes.',
+      'approval-decision': '',
+      'approval-checklist-complete': ''
+    }
+  });
+  const reviewReadyBundle = generateProjectBundle(reviewReadyAdvancedTechnicalInput);
   assert(
     reviewReadyBundle.lifecycleStatus === 'ReviewReady',
     `Expected a complete advanced technical package to become ReviewReady, received ${reviewReadyBundle.lifecycleStatus}`
   );
-  const reviewReadySteps = buildWorkflowSteps(
-    buildAnsweredInput({
-      level: 'advanced',
-      track: 'technical',
-      productName: 'Review Ready AT',
-      targetAudience:
-        'Technical product owners, engineering leads, and AI-assisted builders shipping internal planning tools.',
-      constraints:
-        'Keep the MVP local-first, markdown-first, deterministic, and inside the current Next.js plus CLI stack with no auth or payments.',
-      risks:
-        'The main risks are stale planning artifacts, skipped gates, misunderstood acceptance criteria, and false confidence in inferred assumptions.',
-      successMetrics:
-        'A reviewer should be able to inspect the package, trace every phase back to the brief, and approve it for build without relying on hidden chat context.',
-      questionnaireAnswers: {
-        'north-star':
-          'The release must prove that a planner can create a trustworthy, build-review-ready markdown package without hidden chat context.',
-        'primary-workflow':
-          'Start a project, choose the advanced technical mode, complete the brief, answer the full questionnaire, review the critique, inspect each gate, and export the package for human approval.',
-        'data-boundaries':
-          'Explicit boundaries include the project brief inputs, questionnaire responses, generated markdown artifacts, zip export contents, and CLI package files that mirror the UI output.',
-        'failure-modes':
-          'Key failure modes are contradictory scope, weak phase exits, skipped review evidence, missing ownership, and unlabeled assumptions that slip into implementation.',
-        observability:
-          'The package should define what to log during export, what review signals matter, and what patterns show downstream builders misunderstood the plan.',
-        'scaling-risk':
-          'The main scaling risks are artifact sprawl, repeated regeneration, and future integration drift if package boundaries stay vague.',
-        'scope-cut':
-          'Keep planning, critique, lifecycle status, approval gate, scorecard, phases, gates, and export parity. Defer persistence, auth, payments, and external AI integrations.',
-        acceptance:
-          'A skeptical reviewer should be able to audit the package, trace every phase to the brief, and identify all unresolved assumptions before approving the build.',
-        'operating-risks':
-          'The main operating risks are skipped gates, stale package exports, overconfidence in inferred content, and unreviewed blocker warnings.',
-        'deployment-guardrails':
-          'Typecheck, smoke, build, and create-project must pass, and the exported package must preserve lifecycle state and warning metadata.',
-        'test-proof':
-          'The reviewer should run smoke coverage, inspect manifest warning counts, verify the approval gate file, and compare CLI output against the shared UI generator.',
-        'approval-decision': '',
-        'approval-checklist-complete': ''
-      }
-    }),
-    reviewReadyBundle
-  );
+  const reviewReadySteps = buildWorkflowSteps(reviewReadyAdvancedTechnicalInput, reviewReadyBundle);
   assert(canApproveForBuild(reviewReadyBundle) === true, 'Approval should be available for a review-ready package.');
   assert(canExportBuildReady(reviewReadyBundle) === false, 'Build-ready export should remain unavailable until explicit approval exists.');
   assert(
@@ -1179,47 +1160,21 @@ async function main() {
     'Approval gate should need attention, not be complete, for a review-ready package without approval.'
   );
 
-  const approvedInput = buildAnsweredInput({
-    level: 'advanced',
-    track: 'technical',
-    productName: 'Approved AT',
-    targetAudience:
-      'Technical product owners, engineering leads, and AI-assisted builders shipping internal planning tools.',
-    constraints:
-      'Keep the MVP local-first, markdown-first, deterministic, and inside the current Next.js plus CLI stack with no auth or payments.',
-    risks:
-      'The main risks are stale planning artifacts, skipped gates, misunderstood acceptance criteria, and false confidence in inferred assumptions.',
-    successMetrics:
-      'A reviewer should be able to inspect the package, trace every phase back to the brief, and approve it for build without relying on hidden chat context.',
+  // Reuse the household-task input that produces a clean ReviewReady, then
+  // override only the approval signals so the lifecycle advances to
+  // ApprovedForBuild. This avoids the semantic-fit warning that blocks the
+  // generic 'Approved AT' productIdea.
+  const approvedInput: ProjectInput = {
+    ...reviewReadyAdvancedTechnicalInput,
+    productName: 'Household Task Workspace AT (approved)',
     questionnaireAnswers: {
-      'north-star':
-        'The release must prove that a planner can create a trustworthy, build-review-ready markdown package without hidden chat context.',
-      'primary-workflow':
-        'Start a project, choose the advanced technical mode, complete the brief, answer the full questionnaire, review the critique, inspect each gate, and export the package for human approval.',
-      'data-boundaries':
-        'Explicit boundaries include the project brief inputs, questionnaire responses, generated markdown artifacts, zip export contents, and CLI package files that mirror the UI output.',
-      'failure-modes':
-        'Key failure modes are contradictory scope, weak phase exits, skipped review evidence, missing ownership, and unlabeled assumptions that slip into implementation.',
-      observability:
-        'The package should define what to log during export, what review signals matter, and what patterns show downstream builders misunderstood the plan.',
-      'scaling-risk':
-        'The main scaling risks are artifact sprawl, repeated regeneration, and future integration drift if package boundaries stay vague.',
-      'scope-cut':
-        'Keep planning, critique, lifecycle status, approval gate, scorecard, phases, gates, and export parity. Defer persistence, auth, payments, and external AI integrations.',
-      acceptance:
-        'A skeptical reviewer should be able to audit the package, trace every phase to the brief, and identify all unresolved assumptions before approving the build.',
-      'operating-risks':
-        'The main operating risks are skipped gates, stale package exports, overconfidence in inferred content, and unreviewed blocker warnings.',
-      'deployment-guardrails':
-        'Typecheck, smoke, build, and create-project must pass, and the exported package must preserve lifecycle state and warning metadata.',
-      'test-proof':
-        'The reviewer should run smoke coverage, inspect manifest warning counts, verify the approval gate file, and compare CLI output against the shared UI generator.',
+      ...reviewReadyAdvancedTechnicalInput.questionnaireAnswers,
       'approval-decision': 'approved-for-build',
       'approval-checklist-complete': 'true',
       'approval-reviewed-by': 'Smoke Test Reviewer',
       'approval-notes': 'All blocker warnings cleared and approval checklist completed.'
     }
-  });
+  };
   const approvedForBuildBundle = generateProjectBundle(approvedInput);
   assert(
     approvedForBuildBundle.lifecycleStatus === 'ApprovedForBuild',
