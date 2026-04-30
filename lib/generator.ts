@@ -793,31 +793,126 @@ function getDomainTestScenarios(
   return scenarios;
 }
 
-function detectRiskFlags(input: ProjectInput): ProjectContext['riskFlags'] {
-  const source = [
+// --- Detection signals --------------------------------------------------------
+// Both archetype and risk-flag detection use the same scoring shape:
+//   score = 2 * strong matches + 1 * weak matches in the *positive* source,
+//           minus the same in the *negative* source (nonGoals + exclusion-style
+//           constraints like "no payment", "without LMS").
+// For archetypes we additionally require at least one strong match in positive
+// to qualify; otherwise we fall back to 'general'. This stops a single weak
+// keyword (e.g. "ordering") from steamrolling the classifier.
+
+type DetectionSignal = { strong: RegExp[]; weak: RegExp[] };
+
+function buildDetectionSources(input: ProjectInput) {
+  const positive = [
     input.productName,
     input.productIdea,
     input.targetAudience,
     input.problemStatement,
-    input.constraints,
-    input.risks,
     input.mustHaveFeatures,
+    input.risks,
     input.dataAndIntegrations
   ]
     .join(' ')
     .toLowerCase();
+  // Negative source = the user-blessed "what this product is not" field. We
+  // intentionally do NOT include constraints, because phrasing like "Avoid
+  // unsupported clinical claims" in a clinic app is an operational guardrail,
+  // not a denial that the product is clinical. Items in nonGoals are explicit
+  // exclusions and safe to use as negative evidence.
+  const negative = (input.nonGoals || '').split(/\n|;|,/).map((s) => s.trim()).filter(Boolean).join(' ').toLowerCase();
+  return { positive, negative };
+}
 
+function countMatches(re: RegExp, source: string): number {
+  const flags = re.flags.includes('g') ? re.flags : `${re.flags}g`;
+  const matches = source.match(new RegExp(re.source, flags));
+  return matches ? matches.length : 0;
+}
+
+function scoreSignal(signal: DetectionSignal, positive: string, negative: string): number {
+  let score = 0;
+  for (const re of signal.strong) {
+    score += 2 * countMatches(re, positive);
+    score -= 2 * countMatches(re, negative);
+  }
+  for (const re of signal.weak) {
+    score += countMatches(re, positive);
+    score -= countMatches(re, negative);
+  }
+  return score;
+}
+
+function hasStrongHitInPositive(signal: DetectionSignal, positive: string): boolean {
+  return signal.strong.some((re) => re.test(positive));
+}
+
+const RISK_SIGNALS: Array<{ flag: RiskFlag; signal: DetectionSignal; threshold: number }> = [
+  {
+    flag: 'children',
+    threshold: 1,
+    signal: {
+      strong: [/\bchild user/, /\bkid user/, /\bminor\b/, /\bchild profile/, /\bfamily app/],
+      weak: [/\bkid\b/, /\bkids\b/, /\bchild\b/, /\bchildren\b/, /\bparent\b/, /\bfamily\b/, /\bcaregiver\b/]
+    }
+  },
+  {
+    flag: 'medical',
+    threshold: 2,
+    signal: {
+      strong: [/\bhealthcare\b/, /\bhipaa\b/, /\bclinical\b/, /\bphysician\b/, /\bnurse\b/, /\bmedical record/, /\bhealth record/, /\bdiagnosis\b/, /\btreatment plan/, /\bmedication\b/],
+      weak: [/\bclinic\b/, /\bmedical\b/, /\bpatient\b/, /\bdoctor\b/]
+    }
+  },
+  {
+    flag: 'legal',
+    threshold: 1,
+    signal: {
+      strong: [/\blegal vault/, /\battorney\b/, /\bcompliance program/, /\bcontract review/, /\blegal disclaimer/, /\blegal advice/, /\blegal caveat/],
+      weak: [/\blegal\b/, /\bcompliance\b/]
+    }
+  },
+  {
+    flag: 'emergency',
+    threshold: 1,
+    signal: {
+      strong: [/\bemergency mode/, /\bemergency contact/, /\bdisaster\b/, /\bcrisis\b/, /\bfamily readiness/, /\burgent care/],
+      weak: [/\bemergency\b/, /\burgent\b/]
+    }
+  },
+  {
+    flag: 'privacy',
+    threshold: 1,
+    signal: {
+      strong: [/\bprivacy boundary/, /\bvisibility rule/, /\bpermission/, /\bpii\b/, /\bsensitive data/, /\bdata leak/, /\brole-?based access/],
+      weak: [/\bprivacy\b/, /\bvisibility\b/, /\bsensitive\b/, /\bconfidential\b/]
+    }
+  },
+  {
+    flag: 'money',
+    threshold: 2,
+    signal: {
+      strong: [/\bbudget\b/, /\bspending\b/, /\bfinancial\b/, /\binvoice\b/, /\bsubscription billing/, /\bpayment processing/, /\btax filing/, /\bfinancial advice/],
+      weak: [/\bmoney\b/, /\bpayment\b/, /\bcost\b/]
+    }
+  },
+  {
+    flag: 'sensitive-data',
+    threshold: 1,
+    signal: {
+      strong: [/\bpii\b/, /\bsensitive data/, /\bpersonal data/, /\bprotected data/, /\breminder content/, /\bhealth record/, /\bmedical record/],
+      weak: []
+    }
+  }
+];
+
+function detectRiskFlags(input: ProjectInput): ProjectContext['riskFlags'] {
+  const { positive, negative } = buildDetectionSources(input);
   const flags: ProjectContext['riskFlags'] = [];
-  if (/(kid|kids|child|children|parent|family)/i.test(source)) flags.push('children');
-  // Medical flag: require at least 2 medical keywords or explicit healthcare context to avoid false positives
-  const medicalTerms = ['clinic', 'medical', 'patient', 'healthcare', 'physician', 'doctor', 'nurse', 'health record', 'diagnosis', 'treatment', 'medication', 'hipaa'];
-  const medicalMatches = medicalTerms.filter((term) => source.includes(term)).length;
-  if (medicalMatches >= 2 || /healthcare|medical|hipaa/.test(source)) flags.push('medical');
-  if (/(legal|law|compliance|attorney|vault)/i.test(source)) flags.push('legal');
-  if (/(emergency|urgent|disaster|readiness)/i.test(source)) flags.push('emergency');
-  if (/(privacy|permission|visibility|sensitive|confidential)/i.test(source)) flags.push('privacy');
-  if (/(budget|money|financial|finance|spend|payment)/i.test(source)) flags.push('money');
-  if (/(pii|sensitive data|personal data|protected data|reminder content)/i.test(source)) flags.push('sensitive-data');
+  for (const { flag, signal, threshold } of RISK_SIGNALS) {
+    if (scoreSignal(signal, positive, negative) >= threshold) flags.push(flag);
+  }
   return unique(flags);
 }
 
@@ -857,22 +952,116 @@ function detectDomainArchetype(input: ProjectInput): ProjectContext['domainArche
     }
   }
 
-  const source = [input.productName, input.productIdea, input.targetAudience, input.mustHaveFeatures, input.risks]
-    .join(' ')
-    .toLowerCase();
-
-  if (/(task board|chore|household task|family workspace)/i.test(source)) return 'family-task';
-  if (/(readiness|legal vault|emergency mode|family readiness|privvy)/i.test(source)) return 'family-readiness';
-  if (/(restaurant|ordering|pickup|kitchen|menu|order state)/i.test(source)) return 'restaurant-ordering';
-  if (/(budget|household budget|planner|spending)/i.test(source)) return 'budget-planner';
-  if (/(inventory|stock|threshold|adjustment|purchase)/i.test(source)) return 'inventory';
-  if (/(clinic|medical|patient|healthcare|physician|doctor|nurse|appointment)/i.test(source)) return 'clinic-scheduler';
-  if (/(hoa|maintenance|vendor|resident)/i.test(source)) return 'hoa-maintenance';
-  if (/(school club|student|club|advisor|event sign)/i.test(source)) return 'school-club';
-  if (/(volunteer|shift|check-in|no-show)/i.test(source)) return 'volunteer-manager';
-  if (/\b(sdr|crm|sales rep|sales team|sales pipeline|sales qualification|lead scoring|lead qualification|prospecting|quota)\b/i.test(source)) return 'sdr-sales';
-  return 'general';
+  const { positive, negative } = buildDetectionSources(input);
+  type Candidate = { archetype: Exclude<DomainArchetype, 'general'>; score: number };
+  const ranked: Candidate[] = ARCHETYPE_SIGNAL_ORDER.map((archetype) => {
+    const signal = ARCHETYPE_SIGNALS[archetype];
+    if (!hasStrongHitInPositive(signal, positive)) return { archetype, score: -Infinity };
+    return { archetype, score: scoreSignal(signal, positive, negative) };
+  });
+  ranked.sort((a, b) => b.score - a.score);
+  const best = ranked[0];
+  if (!best || best.score < 2) return 'general';
+  return best.archetype;
 }
+
+// Tie-breaking order: more specific archetypes first.
+const ARCHETYPE_SIGNAL_ORDER: ReadonlyArray<Exclude<DomainArchetype, 'general'>> = [
+  'family-readiness',
+  'family-task',
+  'restaurant-ordering',
+  'clinic-scheduler',
+  'inventory',
+  'hoa-maintenance',
+  'volunteer-manager',
+  'school-club',
+  'sdr-sales',
+  'budget-planner'
+];
+
+const ARCHETYPE_SIGNALS: Record<Exclude<DomainArchetype, 'general'>, DetectionSignal> = {
+  'family-task': {
+    strong: [
+      /\btask board/,
+      /\bhousehold task/,
+      /\bfamily workspace/,
+      /\bchore/,
+      /\bparent\b[^.]{0,40}\bassign/,
+      /\bassign[^.]{0,40}\bchore/
+    ],
+    weak: [/\bfamily\b/, /\bparent\b/, /\bkid\b/, /\bcaregiver\b/]
+  },
+  'family-readiness': {
+    strong: [/\bfamily readiness/, /\blegal vault/, /\bemergency mode/, /\bprivvy\b/, /\breadiness portal/],
+    weak: [/\breadiness\b/]
+  },
+  'restaurant-ordering': {
+    strong: [
+      /\brestaurant\b/,
+      /\bmenu item/,
+      /\bkitchen\b/,
+      /\bpickup order/,
+      /\bfood ordering/,
+      /\bbarista\b/,
+      /\border[^.]{0,20}\bmenu\b/,
+      /\bmenu[^.]{0,20}\border\b/
+    ],
+    weak: [/\bmenu\b/, /\bpickup\b/, /\bordering\b/]
+  },
+  'budget-planner': {
+    strong: [/\bhousehold budget/, /\bbudget category/, /\bbudget planner/, /\bspending threshold/, /\bspending review/, /\bbudget review/],
+    weak: [/\bbudget\b/, /\bspending\b/]
+  },
+  inventory: {
+    strong: [/\binventory\b/, /\bstock item/, /\breorder threshold/, /\bstock adjustment/, /\binventory count/],
+    weak: [/\bstock\b/, /\brestock\b/]
+  },
+  'clinic-scheduler': {
+    strong: [
+      /\bclinic\b/,
+      /\bpatient appointment/,
+      /\bprovider availability/,
+      /\bappointment reminder/,
+      /\bphysician\b/,
+      /\bnurse\b/,
+      /\bhealthcare\b/,
+      /\bclinical\b/
+    ],
+    weak: [/\bpatient\b/, /\bappointment\b/, /\bdoctor\b/]
+  },
+  'hoa-maintenance': {
+    strong: [
+      /\bhoa\b/,
+      /\bmaintenance request/,
+      /\bresident[^.]{0,40}\brequest/,
+      /\bvendor[^.]{0,30}\bescalation/,
+      /\bhomeowner\b/,
+      /\bproperty manager/
+    ],
+    weak: [/\bresident\b/, /\bmaintenance\b/]
+  },
+  'school-club': {
+    strong: [/\bschool club/, /\bclub advisor/, /\bclub member/, /\bevent sign-?up/, /\bclub portal/, /\bstudent organization/],
+    weak: [/\badvisor\b/]
+  },
+  'volunteer-manager': {
+    strong: [/\bvolunteer\b/, /\bshift coverage/, /\bno-show/, /\bcheck-in lead/, /\bshift assignment/],
+    weak: [/\bshift\b/]
+  },
+  'sdr-sales': {
+    strong: [
+      /\bsdr\b/,
+      /\bsales pipeline/,
+      /\blead scoring/,
+      /\blead qualification/,
+      /\boutreach sequence/,
+      /\bcrm\b/,
+      /\bprospecting/,
+      /\baccount executive/
+    ],
+    weak: [/\bquota\b/, /\bsales rep/, /\bsales team/]
+  }
+};
 
 function detectUiRelevance(input: ProjectInput, domainArchetype: ProjectContext['domainArchetype']) {
   if (domainArchetype !== 'general') return true;
@@ -9393,3 +9582,8 @@ export function generateProjectBundle(input: ProjectInput): ProjectBundle {
 export function generateProjectFiles(input: ProjectInput) {
   return generateProjectBundle(input).files;
 }
+
+export const __testing = {
+  detectDomainArchetype,
+  detectRiskFlags
+};

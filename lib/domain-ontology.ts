@@ -804,7 +804,11 @@ function deriveActorsFromAudience(audienceSegments: string[]): OntologyActor[] {
       continue;
     }
     for (const fragment of segment.split(/\s+and\s+|,\s*/)) {
-      const cleaned = fragment.replace(/\([^)]*\)/g, '').trim();
+      const cleaned = fragment
+        .replace(/\([^)]*\)/g, '')
+        // strip leading filler/conjunctions/articles so "and the students" → "students"
+        .replace(/^\s*(and|or|but|the|a|an)\s+/i, '')
+        .trim();
       if (!cleaned) continue;
       const head = cleaned
         .split(/\s+/)
