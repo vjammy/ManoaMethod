@@ -739,6 +739,24 @@ type ResearchExtractsLite = {
     testDataRefs: string[];
     expectedFailureRef?: string;
   }>;
+  jobsToBeDone?: Array<{
+    id: string;
+    actorId: string;
+    situation: string;
+    motivation: string;
+    expectedOutcome: string;
+    currentWorkaround: string;
+    hireForCriteria: string[];
+  }>;
+  meta?: {
+    researcher?: string;
+    discovery?: {
+      valueProposition?: { headline?: string; oneLineProblem?: string; oneLineSolution?: string; topThreeOutcomes?: string[] };
+      whyNow?: { driver?: string; recentChange?: string; risksIfDelayed?: string };
+      ideaCritique?: Array<{ weakSpot: string; mitigation: string }>;
+      competingAlternatives?: Array<{ name: string; whyInsufficient: string }>;
+    };
+  };
 };
 
 function loadExtracts(packageRoot: string): ResearchExtractsLite | undefined {
@@ -760,7 +778,9 @@ function loadExtracts(packageRoot: string): ResearchExtractsLite | undefined {
     antiFeatures: (safe('antiFeatures.json') as ResearchExtractsLite['antiFeatures']) || [],
     screens: (safe('screens.json') as ResearchExtractsLite['screens']) || undefined,
     uxFlow: (safe('uxFlow.json') as ResearchExtractsLite['uxFlow']) || undefined,
-    testCases: (safe('testCases.json') as ResearchExtractsLite['testCases']) || undefined
+    testCases: (safe('testCases.json') as ResearchExtractsLite['testCases']) || undefined,
+    jobsToBeDone: (safe('jobsToBeDone.json') as ResearchExtractsLite['jobsToBeDone']) || undefined,
+    meta: (safe('meta.json') as ResearchExtractsLite['meta']) || undefined
   };
 }
 
@@ -1198,6 +1218,91 @@ function expertTestCaseGrounding(ex: ResearchExtractsLite): ExpertScore | undefi
   return { name: 'test-case-grounding', score: Math.min(10, score), max: 10, evidence, cap };
 }
 
+// E9 (Phase E4). jtbd-coverage (max 5) — only when extractions include JTBDs.
+function expertJtbdCoverage(ex: ResearchExtractsLite): ExpertScore | undefined {
+  if (!ex.jobsToBeDone || ex.jobsToBeDone.length === 0) return undefined;
+
+  const evidence: string[] = [];
+  let score = 0;
+
+  // 1. Coverage: ≥1 JTBD per actor.
+  const actorIds = new Set(ex.actors.map((a) => a.id));
+  const covered = new Set(ex.jobsToBeDone.map((j) => j.actorId));
+  const missing = [...actorIds].filter((id) => !covered.has(id));
+  evidence.push(`actors with ≥1 JTBD: ${covered.size}/${actorIds.size}`);
+  if (missing.length === 0) score += 2;
+  else if (missing.length <= Math.ceil(actorIds.size * 0.25)) score += 1;
+
+  // 2. Outcomes are measurable (not vague).
+  const vaguePatterns = [/feel better/i, /be more productive/i, /save time/i, /improve experience/i, /increase efficiency/i];
+  const concreteOutcomes = ex.jobsToBeDone.filter((j) => !vaguePatterns.some((p) => p.test(j.expectedOutcome))).length;
+  evidence.push(`JTBDs with concrete (non-vague) expected outcome: ${concreteOutcomes}/${ex.jobsToBeDone.length}`);
+  const concreteRatio = concreteOutcomes / ex.jobsToBeDone.length;
+  if (concreteRatio >= 0.95) score += 2;
+  else if (concreteRatio >= 0.7) score += 1;
+
+  // 3. Hire-for criteria present.
+  const hireForOk = ex.jobsToBeDone.filter((j) => j.hireForCriteria && j.hireForCriteria.length >= 2).length;
+  evidence.push(`JTBDs with ≥2 hire-for criteria: ${hireForOk}/${ex.jobsToBeDone.length}`);
+  if (hireForOk === ex.jobsToBeDone.length) score += 1;
+
+  const cap =
+    missing.length > Math.ceil(actorIds.size * 0.5)
+      ? { applied: 92, reason: `${missing.length}/${actorIds.size} actors lack a JTBD` }
+      : undefined;
+
+  return { name: 'jtbd-coverage', score: Math.min(5, score), max: 5, evidence, cap };
+}
+
+// E10 (Phase E4). idea-clarity (max 5) — credits non-empty, non-generic critique
+// only when researcher !== 'mock' (synthesizer cannot honestly critique a brief).
+function expertIdeaClarity(ex: ResearchExtractsLite): ExpertScore | undefined {
+  const discovery = ex.meta?.discovery;
+  if (!discovery) return undefined;
+
+  const evidence: string[] = [];
+  let score = 0;
+
+  const vp = discovery.valueProposition;
+  if (vp) {
+    const headline = vp.headline || '';
+    const isGeneric = /the application helps|the system helps|better experience|improved efficiency|streamline/i.test(headline);
+    evidence.push(`headline non-generic: ${!isGeneric}`);
+    if (headline && !isGeneric) score += 1;
+    if ((vp.topThreeOutcomes || []).length >= 3) {
+      evidence.push(`top-three outcomes present: ${vp.topThreeOutcomes!.length}`);
+      score += 1;
+    } else {
+      evidence.push(`top-three outcomes present: ${(vp.topThreeOutcomes || []).length}`);
+    }
+  } else {
+    evidence.push(`valueProposition: missing`);
+  }
+
+  const wn = discovery.whyNow;
+  if (wn && wn.driver && wn.recentChange && wn.risksIfDelayed) {
+    evidence.push(`whyNow complete: yes`);
+    score += 1;
+  } else {
+    evidence.push(`whyNow complete: no`);
+  }
+
+  // Critique only credited for non-synthesizer runs (synth deliberately leaves it empty).
+  const isSynth = ex.meta?.researcher === 'mock';
+  const critique = discovery.ideaCritique || [];
+  const alternatives = discovery.competingAlternatives || [];
+  evidence.push(`researcher: ${ex.meta?.researcher || 'unknown'}, critique entries: ${critique.length}, alternatives: ${alternatives.length}`);
+  if (!isSynth) {
+    if (critique.length >= 3) score += 1;
+    if (alternatives.length >= 1) score += 1;
+  } else {
+    // Acknowledge synth honestly: don't punish, don't reward — record for transparency.
+    evidence.push(`synthesizer run: critique not credited (use real-recipe path for full idea-clarity score)`);
+  }
+
+  return { name: 'idea-clarity', score: Math.min(5, score), max: 5, evidence };
+}
+
 function evaluateExpertRubric(packageRoot: string): NonNullable<AuditResult['expert']> | undefined {
   const ex = loadExtracts(packageRoot);
   if (!ex) return undefined;
@@ -1215,6 +1320,10 @@ function evaluateExpertRubric(packageRoot: string): NonNullable<AuditResult['exp
   if (schemaRealism) dims.push(schemaRealism);
   const testCaseGrounding = expertTestCaseGrounding(ex);
   if (testCaseGrounding) dims.push(testCaseGrounding);
+  const jtbdCoverage = expertJtbdCoverage(ex);
+  if (jtbdCoverage) dims.push(jtbdCoverage);
+  const ideaClarity = expertIdeaClarity(ex);
+  if (ideaClarity) dims.push(ideaClarity);
 
   // Bonus: bonus = round(rawTotal / sumMax × 8). 8-point ceiling because 92 base + 8 = 100.
   const rawTotal = dims.reduce((s, d) => s + d.score, 0);

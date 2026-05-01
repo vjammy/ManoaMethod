@@ -29,11 +29,13 @@ import type {
   AntiFeature,
   Conflict,
   DbType,
+  DiscoveryArtifacts,
   Entity,
   EntityField,
   ForeignKey,
   Gate,
   Integration,
+  JobToBeDone,
   ResearchExtractions,
   ResearchMeta,
   Risk,
@@ -710,6 +712,71 @@ function deriveScreens(
   return out;
 }
 
+// ---------- discovery + JTBD (Phase E4) ----------
+
+function deriveDiscovery(input: ProjectInput): DiscoveryArtifacts {
+  // Lightweight templated stubs from the brief. Real-recipe runs (an LLM agent
+  // executing docs/RESEARCH_RECIPE.md Pass 0) populate richer ideaCritique
+  // and competingAlternatives — synth deliberately leaves those mostly empty.
+  const problem = (input.problemStatement || `Users struggle to ${input.productIdea?.slice(0, 80) || 'accomplish the workflow'}`).trim();
+  const solution = `${input.productName} provides a researched, role-aware workflow that ${input.mustHaveFeatures?.split(/[,;]/)[0]?.trim() || 'covers the must-have feature'}.`;
+  const audienceParts = splitList(input.targetAudience).slice(0, 2);
+  const headline = `${input.productName} for ${audienceParts.join(' and ') || 'the brief audience'}: cut friction in the v1 must-have flow without bolting on speculative scope.`;
+  const outcomes = splitList(input.successMetrics).slice(0, 3).filter(Boolean);
+  const fallbackOutcomes = [
+    `Audience completes the must-have flow on the first attempt.`,
+    `Reviewers can confirm correctness without hidden chat context.`,
+    `No silent failures: every researched failure mode is surfaced to the user.`
+  ];
+  return {
+    valueProposition: {
+      headline,
+      oneLineProblem: problem.length > 200 ? `${problem.slice(0, 197)}…` : problem,
+      oneLineSolution: solution.length > 200 ? `${solution.slice(0, 197)}…` : solution,
+      topThreeOutcomes: (outcomes.length ? outcomes : fallbackOutcomes).slice(0, 3)
+    },
+    whyNow: {
+      driver: `Users articulated this need in the brief; existing tools don't cover the must-have flow end-to-end.`,
+      recentChange: `Brief assembled at ${new Date().toISOString().slice(0, 10)}; the must-have list is current and prioritized.`,
+      risksIfDelayed: `If the must-have flow ships late, ${audienceParts[0] || 'the primary audience'} continues a manual workaround that has no audit trail and no role boundaries.`
+    },
+    // Synthesizer leaves ideaCritique empty by design — only an LLM that has
+    // genuinely critiqued the brief (Pass 0 in the recipe) should fill these.
+    // The audit dimension `idea-clarity` only credits non-empty critique
+    // when researcher !== 'mock'.
+    ideaCritique: [],
+    competingAlternatives: []
+  };
+}
+
+function deriveJtbd(input: ProjectInput, actors: Actor[]): JobToBeDone[] {
+  const out: JobToBeDone[] = [];
+  for (const a of actors) {
+    const responsibility = a.responsibilities[0] || `Use ${input.productName}`;
+    const jtbd = withProvenance(
+      {
+        actorId: a.id,
+        situation: `When ${a.name.toLowerCase()} needs to ${responsibility.replace(/^(Use|Operate)\s+/i, '').replace(/\.$/, '').toLowerCase()}`,
+        motivation: `I want to complete the ${input.productName} workflow I'm responsible for without losing context across sessions or relying on hidden chat history.`,
+        expectedOutcome: `So that the persisted state is reviewable, my role boundary is respected, and a reviewer can trust the audit trail.`,
+        currentWorkaround: `Manual spreadsheets, ad-hoc scripts, or chat threads — none of which produce a consistent audit entry or enforce visibility scope.`,
+        hireForCriteria: [
+          `Workflow completes in fewer steps than the manual workaround.`,
+          `Visibility scope is enforced; ${a.name} never sees data from other actors' scope unintentionally.`,
+          `Every action that mutates state writes an audit entry that survives session boundaries.`
+        ]
+      },
+      {
+        id: `jtbd-${slug(a.name)}`,
+        origin: 'use-case' as const,
+        sources: [briefSourceRef(input, `Audience: ${input.targetAudience}`)]
+      }
+    );
+    out.push(jtbd);
+  }
+  return out;
+}
+
 // ---------- DB types + FKs (Phase E3) ----------
 
 function inferDbType(field: EntityField): DbType {
@@ -892,6 +959,8 @@ export function synthesizeExtractions(input: ProjectInput): ResearchExtractions 
   const screens = deriveScreens(input, actors, entities, workflows);
   const uxFlow = deriveUxFlow(screens);
   const testCases = deriveTestCases(input, entities, workflows);
+  const jobsToBeDone = deriveJtbd(input, actors);
+  const discovery = deriveDiscovery(input);
 
   const briefHash = crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex');
   const meta: ResearchMeta = {
@@ -904,7 +973,8 @@ export function synthesizeExtractions(input: ProjectInput): ResearchExtractions 
     convergedEarly: { useCase: false, domain: false },
     totalTokensUsed: 0,
     modelUsed: 'synthesizer-deterministic',
-    researcher: 'mock'
+    researcher: 'mock',
+    discovery
   };
 
   return {
@@ -920,7 +990,8 @@ export function synthesizeExtractions(input: ProjectInput): ResearchExtractions 
     removed: [],
     screens,
     uxFlow,
-    testCases
+    testCases,
+    jobsToBeDone
   };
 }
 
@@ -985,6 +1056,8 @@ export function writeSynthesizedToWorkspace(workspaceRoot: string, input: Projec
   writeJson(path.join(root, 'extracted', 'uxFlow.json'), ex.uxFlow ?? []);
   // Phase E3: optional test cases.
   writeJson(path.join(root, 'extracted', 'testCases.json'), ex.testCases ?? []);
+  // Phase E4: optional JTBD (discovery lives on meta.json).
+  writeJson(path.join(root, 'extracted', 'jobsToBeDone.json'), ex.jobsToBeDone ?? []);
 }
 
 function main() {

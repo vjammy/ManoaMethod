@@ -33,6 +33,7 @@ research/
     screens.json             (Screen[]) — Phase E2, optional
     uxFlow.json              (UxFlowEdge[]) — Phase E2, optional
     testCases.json           (TestCase[]) — Phase E3, optional
+    jobsToBeDone.json        (JobToBeDone[]) — Phase E4, optional
     integrations.json        (Integration[])
     risks.json               (Risk[])
     gates.json               (Gate[])
@@ -79,6 +80,45 @@ Each Actor / Entity / Workflow / Risk / Integration / Gate carries
 ---
 
 ## Phase 1 — Discovery (1 pass)
+
+### Pass 0: Idea critique + value proposition (Phase E4)
+
+**Goal:** challenge the brief itself before any extraction work begins. The
+generator emits the output as `product-strategy/IDEA_CRITIQUE.md` and
+`product-strategy/VALUE_PROPOSITION.md` so the human sees the questioning
+*before* phase 1 starts.
+
+**Inputs:** the project brief.
+
+**Output (added to `meta.json` as `discovery`):**
+
+```json
+{
+  "valueProposition": {
+    "headline": "<audience-specific outcome — not 'better experience'>",
+    "oneLineProblem": "<one sentence>",
+    "oneLineSolution": "<one sentence>",
+    "topThreeOutcomes": ["<observable post-shipping signal>", "...", "..."]
+  },
+  "whyNow": {
+    "driver": "<what changed in the world that makes this worth shipping now>",
+    "recentChange": "<the recent event/regulation/technology that opens this window>",
+    "risksIfDelayed": "<what would actually slip if we delay 6 months>"
+  },
+  "ideaCritique": [
+    { "weakSpot": "<a real risk in the brief>", "mitigation": "<concrete plan or 'accept and document'>" }
+  ],
+  "competingAlternatives": [
+    { "name": "<actual product, library, or 'paper + spreadsheet'>", "whyInsufficient": "<concrete gap>" }
+  ]
+}
+```
+
+**Validation rules:**
+- `valueProposition.headline` must NOT contain generic phrases ("better experience", "streamline", "improved efficiency"). The audit `idea-clarity` dimension flags these.
+- `topThreeOutcomes[]` must be observable post-shipping — not internal feelings, not vague satisfaction.
+- `ideaCritique[]` should have 3–5 entries. **Synthesizer runs leave this empty by design** — only an LLM agent can honestly critique a brief.
+- `competingAlternatives[]` must include at least one real product or the cheapest option ("paper + spreadsheet"), with a concrete gap.
 
 ### Pass 1: Industry framing + competitor scan
 
@@ -127,6 +167,24 @@ For each actor:
 - ≥ 2 actors. A product with only one actor is almost always a thin brief.
 - IDs are kebab-case and stable: `actor-parent-admin`, `actor-co-parent`, etc.
 - Every actor has ≥ 1 source (brief evidence or domain reasoning).
+
+**Phase E4 — Jobs-to-be-Done per actor (`jobsToBeDone.json`):**
+
+For every actor, write at least one JTBD:
+
+```json
+{
+  "id": "jtbd-<actor-slug>",
+  "actorId": "<actor id from above>",
+  "situation": "When <triggering condition for this actor>",
+  "motivation": "I want to <action they want to take>",
+  "expectedOutcome": "So that <measurable post-condition>",
+  "currentWorkaround": "<what they do today without this product>",
+  "hireForCriteria": ["<adoption signal 1>", "<adoption signal 2>", "..."]
+}
+```
+
+The audit dimension `jtbd-coverage` (max 5) caps when ≥1 actor lacks a JTBD and rewards measurable expected outcomes. Use real, observable post-conditions — not "feel better", "save time", or "be more productive".
 
 ### Pass 3: Entities → `entities.json`
 

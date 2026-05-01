@@ -273,6 +273,45 @@ export type RemovedItem = {
   reason: string;
 };
 
+export type ValueProposition = {
+  headline: string;
+  oneLineProblem: string;
+  oneLineSolution: string;
+  topThreeOutcomes: string[];
+};
+
+export type WhyNow = {
+  driver: string;
+  recentChange: string;
+  risksIfDelayed: string;
+};
+
+export type IdeaCritiquePoint = {
+  weakSpot: string;
+  mitigation: string;
+};
+
+export type CompetingAlternative = {
+  name: string;
+  whyInsufficient: string;
+};
+
+export type DiscoveryArtifacts = {
+  valueProposition?: ValueProposition;
+  whyNow?: WhyNow;
+  ideaCritique?: IdeaCritiquePoint[];
+  competingAlternatives?: CompetingAlternative[];
+};
+
+export type JobToBeDone = WithProvenance & {
+  actorId: string;
+  situation: string;          // when X happens
+  motivation: string;         // I want to Y
+  expectedOutcome: string;    // so that Z
+  currentWorkaround: string;
+  hireForCriteria: string[];  // what would make them adopt this product
+};
+
 export type ResearchMeta = {
   briefHash: string;
   schemaVersion: typeof SCHEMA_VERSION;
@@ -284,6 +323,8 @@ export type ResearchMeta = {
   totalTokensUsed: number;
   modelUsed: string;
   researcher: 'anthropic-sdk' | 'claude-code-session' | 'mock';
+  /** Phase E4: optional product-strategy artifacts surfaced before phase work begins. */
+  discovery?: DiscoveryArtifacts;
 };
 
 export type CritiqueResult = {
@@ -324,6 +365,8 @@ export type ResearchExtractions = {
   uxFlow?: UxFlowEdge[];
   /** Phase E3: optional concrete test cases bound to workflow + sample data. */
   testCases?: TestCase[];
+  /** Phase E4: optional jobs-to-be-done per actor. */
+  jobsToBeDone?: JobToBeDone[];
 };
 
 // ---------- validators ----------
@@ -414,6 +457,14 @@ export function validateExtractions(data: unknown): ValidationIssue[] {
   const actorIds = new Set((d.actors ?? []).map((a) => a.id));
   const entityIds = new Set((d.entities ?? []).map((e) => e.id));
   const gateIds = new Set((d.gates ?? []).map((g) => g.id));
+
+  // Phase E4: optional jobs-to-be-done reference actor IDs.
+  if (Array.isArray(d.jobsToBeDone)) {
+    d.jobsToBeDone.forEach((j, i) => {
+      validateProvenance(j as unknown as Record<string, unknown>, `jobsToBeDone[${i}]`, issues);
+      pushIfBad(issues, actorIds.has(j.actorId), `jobsToBeDone[${i}].actorId`, `unknown actor "${j.actorId}"`);
+    });
+  }
 
   // Phase E3: optional test cases reference workflow IDs.
   if (Array.isArray(d.testCases)) {

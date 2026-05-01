@@ -60,6 +60,8 @@ export function writeResearchToWorkspace(workspaceRoot: string, result: LoopResu
   writeJson(path.join(root, 'extracted', 'uxFlow.json'), result.extractions.uxFlow ?? []);
   // Phase E3: optional test cases.
   writeJson(path.join(root, 'extracted', 'testCases.json'), result.extractions.testCases ?? []);
+  // Phase E4: optional JTBD (discovery lives on meta).
+  writeJson(path.join(root, 'extracted', 'jobsToBeDone.json'), result.extractions.jobsToBeDone ?? []);
 }
 
 function writePass(root: string, topic: 'use-case' | 'domain', pass: PassRecord) {
@@ -120,7 +122,8 @@ export function readExtractions(workspaceRoot: string): ResearchExtractions | nu
       removed: read('_removed.json'),
       screens: optional('screens.json'),
       uxFlow: optional('uxFlow.json'),
-      testCases: optional('testCases.json')
+      testCases: optional('testCases.json'),
+      jobsToBeDone: optional('jobsToBeDone.json')
     };
     return e;
   } catch {

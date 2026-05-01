@@ -36,6 +36,9 @@ import { renderAllScreenSpecs, renderScreenInventoryMarkdown } from './generator
 import { renderUxFlowMarkdown } from './generator/ux-flow';
 import { renderDatabaseSchemaMarkdown, renderDatabaseSchemaSql } from './generator/database-schema';
 import { renderPhaseTestCasesMarkdown } from './generator/test-cases';
+import { renderValuePropositionMarkdown } from './generator/value-proposition';
+import { renderIdeaCritiqueMarkdown } from './generator/idea-critique';
+import { renderJobsToBeDoneMarkdown } from './generator/jobs-to-be-done';
 import { buildQuestionPrompts, CORE_AGENT_OPERATING_RULES, getProfileConfig, slugify } from './templates';
 import {
   buildDomainOntology,
@@ -9300,6 +9303,14 @@ function createGeneratedFiles(bundle: ProjectBundle, input: ProjectInput, contex
     if (hasDbMetadata) {
       add('architecture/DATABASE_SCHEMA.md', renderDatabaseSchemaMarkdown(context.extractions));
       add('architecture/DATABASE_SCHEMA.sql', renderDatabaseSchemaSql(context.extractions));
+    }
+    // Phase E4: product-strategy artifacts when discovery / JTBD are populated.
+    if (context.extractions.meta.discovery) {
+      add('product-strategy/VALUE_PROPOSITION.md', renderValuePropositionMarkdown(context.extractions));
+      add('product-strategy/IDEA_CRITIQUE.md', renderIdeaCritiqueMarkdown(context.extractions));
+    }
+    if (context.extractions.jobsToBeDone && context.extractions.jobsToBeDone.length) {
+      add('product-strategy/JOBS_TO_BE_DONE.md', renderJobsToBeDoneMarkdown(context.extractions));
     }
   }
   add('requirements/OPEN_QUESTIONS.md', buildOpenQuestions(input, context));
