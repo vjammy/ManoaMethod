@@ -1493,6 +1493,9 @@ function buildNonFunctionalRequirements(input: ProjectInput, context: ProjectCon
 }
 
 function buildAcceptanceCriteria(input: ProjectInput, context: ProjectContext, phases?: PhasePlan[]) {
+  if (context.extractions) {
+    return buildAcceptanceCriteriaFromResearch(input, context.extractions, phases);
+  }
   const scenarios: OntologyFeatureScenario[] = context.ontology.featureScenarios.length
     ? context.ontology.featureScenarios
     : [
@@ -1541,6 +1544,67 @@ ${scenarios
       }
     )
     .join('\n\n')}
+`;
+}
+
+function buildAcceptanceCriteriaFromResearch(
+  input: ProjectInput,
+  ex: ResearchExtractions,
+  phases?: PhasePlan[]
+) {
+  const actorById = new Map(ex.actors.map((a) => [a.id, a]));
+  const entityById = new Map(ex.entities.map((e) => [e.id, e]));
+
+  type Flat = {
+    workflow: typeof ex.workflows[number];
+    step: typeof ex.workflows[number]['steps'][number];
+  };
+  const flat: Flat[] = [];
+  for (const wf of ex.workflows) {
+    for (const step of wf.steps) flat.push({ workflow: wf, step });
+  }
+
+  const blocks = flat.map((f, i) => {
+    const reqId = `REQ-${i + 1}`;
+    const actor = actorById.get(f.step.actor);
+    const actorName = actor?.name || f.step.actor;
+    const entityNames = f.workflow.entitiesTouched
+      .map((eid) => entityById.get(eid)?.name)
+      .filter(Boolean) as string[];
+    const primaryEntity = entityNames[0] || 'the relevant entity';
+    const failure = f.workflow.failureModes[0];
+    const phaseSlug = phases && phases.length
+      ? getRequirementPhaseSlug(i, phases)
+      : `phase-${String(Math.min(i + 1, 9)).padStart(2, '0')}`;
+    const branchLine = f.step.branchOn ? `\n- Branch decision: ${f.step.branchOn}` : '';
+    const preconditionLine = f.step.preconditions?.length
+      ? `\n- Preconditions: ${f.step.preconditions.join('; ')}`
+      : '';
+    const postconditionLine = f.step.postconditions?.length
+      ? `\n- Postconditions: ${f.step.postconditions.join('; ')}`
+      : '';
+    return `## ${i + 1}. ${sentenceCase(f.step.action)}
+
+- Requirement ID: ${reqId}
+- Workflow: ${f.workflow.name}
+- Actor: ${actorName}
+- Clear pass/fail check: ${f.workflow.acceptancePattern}
+- Given: ${actorName} has ${primaryEntity} data prepared from SAMPLE_DATA.md "${primaryEntity}" section.
+- When: ${f.step.action}
+- Then: ${f.step.systemResponse}${branchLine}${preconditionLine}${postconditionLine}
+- Negative case: ${failure ? `${failure.trigger} → expect: ${failure.mitigation}` : 'Invalid input or unauthorized actor must be rejected with a visible reason.'}
+- Verification method: Run the step with the happy-path SAMPLE_DATA.md record, then re-run with the negative-case input. Inspect persisted state, audit entry, and the actor's visibility scope.
+- Test or manual verification method: Run the step with the happy-path SAMPLE_DATA.md record, then re-run with the negative-case input. Inspect persisted state, audit entry, and the actor's visibility scope.
+- Sample data: SAMPLE_DATA.md "${primaryEntity}" section
+- Evidence required: For ${reqId} (${f.workflow.name} → ${f.step.action.toLowerCase()}), capture one happy-path observation showing ${primaryEntity} state after the step, plus one negative-path observation proving the trigger "${failure?.trigger || 'invalid input'}" was rejected with the researched mitigation.
+- Related files: FUNCTIONAL_REQUIREMENTS.md (${reqId}), SAMPLE_DATA.md, phases/${phaseSlug}/PHASE_BRIEF.md, phases/${phaseSlug}/TEST_SCRIPT.md`;
+  });
+
+  return `# ACCEPTANCE_CRITERIA
+
+> Generated from research extractions. Each acceptance criterion below is one workflow step rendered as a Given/When/Then block, with the workflow's acceptance pattern as the pass criterion and the workflow's first failure mode as the negative case.
+
+${blocks.join('\n\n')}
 `;
 }
 
@@ -2074,6 +2138,9 @@ ${listToBullets(
 }
 
 function buildDataModel(input: ProjectInput, context: ProjectContext) {
+  if (context.extractions) {
+    return buildDataModelFromResearch(input, context.extractions);
+  }
   const entities = context.ontology.entityTypes;
 
   return `# DATA_MODEL
@@ -2094,7 +2161,108 @@ ${entities
 `;
 }
 
+function buildDataModelFromResearch(input: ProjectInput, ex: ResearchExtractions) {
+  const actorById = new Map(ex.actors.map((a) => [a.id, a]));
+  const entityById = new Map(ex.entities.map((e) => [e.id, e]));
+  const risksByEntity = new Map<string, typeof ex.risks>();
+  for (const r of ex.risks) {
+    for (const eid of r.affectedEntities) {
+      const list = risksByEntity.get(eid) || [];
+      list.push(r);
+      risksByEntity.set(eid, list);
+    }
+  }
+
+  const renderEntity = (e: typeof ex.entities[number]) => {
+    const ownerNames = e.ownerActors
+      .map((aid) => actorById.get(aid)?.name)
+      .filter(Boolean)
+      .join(', ') || '—';
+    const fieldHeader = '| Field | Type | Required | PII | Sensitive | References |\n| --- | --- | --- | --- | --- | --- |';
+    const fieldRows = e.fields
+      .map((f) => {
+        const typeCell = f.type === 'enum' && f.enumValues?.length
+          ? `enum(${f.enumValues.join(', ')})`
+          : f.type;
+        const refCell = f.references
+          ? (entityById.get(f.references)?.name || f.references)
+          : '—';
+        return `| \`${f.name}\` | ${typeCell} | ${f.required ? 'yes' : 'no'} | ${f.pii ? 'yes' : '—'} | ${f.sensitive ? 'yes' : '—'} | ${refCell} |`;
+      })
+      .join('\n');
+    const relationshipsBlock = e.relationships.length
+      ? e.relationships.map((r) => `- ${r}`).join('\n')
+      : '- No declared relationships.';
+    const riskBlock = (risksByEntity.get(e.id) || [])
+      .map((r) => `- **${r.severity}** (${r.category}): ${r.description} Mitigation: ${r.mitigation}.`)
+      .join('\n') || '- No specific risks tied to this entity in research.';
+    const fieldDescriptions = e.fields
+      .filter((f) => f.description && f.description.trim())
+      .slice(0, 6)
+      .map((f) => `- \`${f.name}\` — ${f.description}${f.example ? ` Example: \`${f.example}\`.` : ''}`)
+      .join('\n');
+    const validationLines = e.fields
+      .filter((f) => f.required)
+      .slice(0, 6)
+      .map((f) => `- \`${f.name}\` is required for ${e.name.toLowerCase()} records.`)
+      .concat(
+        e.fields
+          .filter((f) => f.type === 'enum' && Array.isArray(f.enumValues) && f.enumValues.length)
+          .slice(0, 4)
+          .map((f) => `- \`${f.name}\` must be one of ${f.enumValues!.map((v) => `\`${v}\``).join(', ')}.`)
+      );
+    const validationBlock = validationLines.length
+      ? validationLines.join('\n')
+      : '- No additional validation rules surfaced from research.';
+    const sampleJson = JSON.stringify(e.sample, null, 2);
+
+    return `## ${e.name} (\`${e.id}\`)
+
+- Purpose: ${e.description}
+- Owner actors: ${ownerNames}
+- Risk types: ${e.riskTypes.join(', ') || '—'}
+
+### Fields
+
+${fieldHeader}
+${fieldRows}
+
+${fieldDescriptions ? `### Field notes\n\n${fieldDescriptions}\n` : ''}
+### Relationships
+
+${relationshipsBlock}
+
+### Validation rules
+
+${validationBlock}
+
+### Risks tied to this entity
+
+${riskBlock}
+
+### Sample records
+
+\`\`\`json
+${sampleJson}
+\`\`\``;
+  };
+
+  return `# DATA_MODEL
+
+> Generated from research extractions. Each entity below maps to one record in \`research/extracted/entities.json\`. Field-level types, owners, references, and risks are surfaced from the same source so downstream artifacts (SAMPLE_DATA.md, ACCEPTANCE_CRITERIA.md, phase TEST_SCRIPT.md) reuse the same vocabulary.
+
+## Entities
+
+${ex.entities.map((e) => `- **${e.name}** (\`${e.id}\`) — ${e.description}`).join('\n')}
+
+${ex.entities.map(renderEntity).join('\n\n')}
+`;
+}
+
 function buildApiContracts(input: ProjectInput, context: ProjectContext) {
+  if (context.extractions) {
+    return buildApiContractsFromResearch(input, context.extractions);
+  }
   const mainWorkflow = context.ontology.workflowTypes[0];
   const mainEntities = context.ontology.entityTypes.slice(0, 3).map((entity) => entity.name).join(', ');
   return `# API_CONTRACTS
@@ -2109,6 +2277,128 @@ function buildApiContracts(input: ProjectInput, context: ProjectContext) {
 
 ## Future live-service boundaries
 - Do not add live API contracts until the integration folder explicitly approves them.
+`;
+}
+
+function inferHttpMethodForStep(action: string): 'POST' | 'PATCH' | 'DELETE' | 'GET' {
+  const a = action.toLowerCase();
+  if (/\b(create|add|import|enroll|register|submit|capture|log|record)\b/.test(a)) return 'POST';
+  if (/\b(delete|remove|cancel|archive|revoke|unenroll|unsubscribe)\b/.test(a)) return 'DELETE';
+  if (/\b(view|read|inspect|list|browse|review|open|search|filter|see|surface|show)\b/.test(a)) return 'GET';
+  if (/\b(update|edit|change|set|mark|approve|reject|qualify|disqualify|advance|move|assign|reassign|apply|enrich|complete)\b/.test(a)) return 'PATCH';
+  return 'PATCH';
+}
+
+function deriveActionSlug(action: string): string {
+  return action
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .split('-')
+    .slice(0, 4)
+    .join('-') || 'action';
+}
+
+function entitySlug(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+}
+
+function buildApiContractsFromResearch(input: ProjectInput, ex: ResearchExtractions) {
+  const actorById = new Map(ex.actors.map((a) => [a.id, a]));
+  const entityById = new Map(ex.entities.map((e) => [e.id, e]));
+
+  type Endpoint = {
+    method: 'POST' | 'PATCH' | 'DELETE' | 'GET';
+    path: string;
+    workflowName: string;
+    actorName: string;
+    action: string;
+    systemResponse: string;
+    primaryEntity?: string;
+    branchOn?: string;
+    failureModes: string[];
+  };
+
+  const endpoints: Endpoint[] = [];
+  for (const wf of ex.workflows) {
+    const primaryEntityId = wf.entitiesTouched[0];
+    const primaryEntity = primaryEntityId ? entityById.get(primaryEntityId) : undefined;
+    const entityPath = primaryEntity ? entitySlug(primaryEntity.name) : 'records';
+    for (const step of wf.steps) {
+      const method = inferHttpMethodForStep(step.action);
+      const actorName = actorById.get(step.actor)?.name || step.actor;
+      const slug = deriveActionSlug(step.action);
+      const path =
+        method === 'POST'
+          ? `/${entityPath}`
+          : method === 'GET'
+            ? `/${entityPath}`
+            : method === 'DELETE'
+              ? `/${entityPath}/{id}`
+              : `/${entityPath}/{id}/${slug}`;
+      endpoints.push({
+        method,
+        path,
+        workflowName: wf.name,
+        actorName,
+        action: step.action,
+        systemResponse: step.systemResponse,
+        primaryEntity: primaryEntity?.name,
+        branchOn: step.branchOn,
+        failureModes: wf.failureModes.slice(0, 2).map((f) => `${f.trigger} → ${f.mitigation}`)
+      });
+    }
+  }
+
+  const overviewRows = endpoints
+    .map(
+      (e) =>
+        `| ${e.method} | \`${e.path}\` | ${e.actorName} | ${e.workflowName} | ${e.primaryEntity || '—'} |`
+    )
+    .join('\n');
+
+  const detailBlocks = endpoints
+    .map(
+      (e, i) => `### ${i + 1}. ${e.method} ${e.path}
+
+- Workflow: ${e.workflowName}
+- Caller: ${e.actorName}
+- Intent: ${e.action}
+- System response: ${e.systemResponse}
+- Primary entity: ${e.primaryEntity || '—'}${e.branchOn ? `\n- Decision branch: ${e.branchOn}` : ''}
+- Authorization: scope check against caller's actor visibility (see requirements/PERMISSION_MATRIX.md)
+- Common failure handling: ${e.failureModes.length ? e.failureModes.join(' | ') : 'Surface validation errors inline; never silent.'}`
+    )
+    .join('\n\n');
+
+  return `# API_CONTRACTS
+
+> Generated from research extractions. Each endpoint below corresponds to one workflow step that mutates or reads an entity. Method is inferred from the verb of the step action; path is grounded in the entity it touches. Permissions follow PERMISSION_MATRIX.md.
+
+## Endpoint summary
+
+| Method | Path | Caller | Workflow | Primary entity |
+| --- | --- | --- | --- | --- |
+${overviewRows}
+
+## Endpoint detail
+
+${detailBlocks}
+
+## Cross-cutting
+
+- Every endpoint must enforce visibility according to the actor's row in \`requirements/PERMISSION_MATRIX.md\`.
+- Every mutation endpoint must emit an audit entry (see Audit Entry-style entities in DATA_MODEL.md).
+- Live external integrations stay mocked until \`requirements/NON_FUNCTIONAL_REQUIREMENTS.md\` explicitly approves the integration's \`required: true\` flag.
+
+## Conventions
+
+- IDs are entity-native (use \`{id}\` for the primary entity of the endpoint).
+- Success responses include the mutated record plus its updated state machine value.
+- Failures return \`4xx\` for validation/visibility issues, \`409\` for conflicts that match a researched failureMode, and \`5xx\` only for genuine infrastructure problems.
 `;
 }
 
@@ -3585,6 +3875,75 @@ function renderPhaseResearchContext(phase: PhasePlan, context: ProjectContext): 
   lines.push('');
   lines.push('Use these names verbatim when writing requirements, code, or tests for this phase. Do NOT introduce alternate names ("the user", "the system", "the record") — those break traceability against research/extracted/.');
   lines.push('');
+
+  // Phase E1: surface the actual workflow acceptance patterns + failure modes for the
+  // workflows this phase owns, so the agent doesn't have to chase research/extracted/workflows.json.
+  if (context.extractions) {
+    const ex = context.extractions;
+    const flat: Array<{ wf: typeof ex.workflows[number]; step: typeof ex.workflows[number]['steps'][number] }> = [];
+    for (const wf of ex.workflows) for (const step of wf.steps) flat.push({ wf, step });
+    const reqNums = (phase.requirementIds || [])
+      .map((id) => Number.parseInt(String(id).replace(/^REQ-/i, ''), 10))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const ownedWf = new Map<string, typeof ex.workflows[number]>();
+    for (const n of reqNums) {
+      const slot = flat[n - 1];
+      if (slot) ownedWf.set(slot.wf.id, slot.wf);
+    }
+    if (ownedWf.size) {
+      lines.push('### Acceptance patterns for owned workflows');
+      lines.push('');
+      for (const wf of ownedWf.values()) {
+        lines.push(`- **${wf.name}** — Pass criterion: ${wf.acceptancePattern}`);
+      }
+      lines.push('');
+      const failureLines: string[] = [];
+      for (const wf of ownedWf.values()) {
+        for (const fm of wf.failureModes.slice(0, 2)) {
+          failureLines.push(`- *${wf.name}* → on **${fm.trigger}**: effect — ${fm.effect}; required mitigation — ${fm.mitigation}`);
+        }
+      }
+      if (failureLines.length) {
+        lines.push('### Failure modes this phase must defend against');
+        lines.push('');
+        lines.push(...failureLines);
+        lines.push('');
+      }
+      // Risks that affect this phase's owned actors/entities (richer than the name list above).
+      const ownedActorIds = new Set<string>();
+      const ownedEntityIds = new Set<string>();
+      for (const wf of ownedWf.values()) {
+        for (const step of wf.steps) ownedActorIds.add(step.actor);
+        for (const eid of wf.entitiesTouched) ownedEntityIds.add(eid);
+      }
+      const phaseRisks = ex.risks.filter(
+        (r) =>
+          r.affectedActors.some((a) => ownedActorIds.has(a)) ||
+          r.affectedEntities.some((e) => ownedEntityIds.has(e))
+      );
+      if (phaseRisks.length) {
+        lines.push('### Risks tied to this phase\'s actors and entities');
+        lines.push('');
+        for (const r of phaseRisks.slice(0, 4)) {
+          lines.push(`- **${r.severity}** (${r.category}): ${r.description} Mitigation: ${r.mitigation}.`);
+        }
+        lines.push('');
+      }
+      // Gates that block this phase type, with the cited evidence.
+      const phaseGates = ex.gates.filter(
+        (g) => g.blockingPhases.length === 0 || g.blockingPhases.some((p) => phase.phaseType.includes(p) || p.includes(phase.phaseType))
+      );
+      if (phaseGates.length) {
+        lines.push('### Gates that block this phase');
+        lines.push('');
+        for (const g of phaseGates.slice(0, 3)) {
+          lines.push(`- **${g.name}** (${g.mandatedBy}: ${g.mandatedByDetail}) — required evidence: ${g.evidenceRequired.slice(0, 3).join('; ') || 'none specified'}.`);
+        }
+        lines.push('');
+      }
+    }
+  }
+
   return lines.join('\n');
 }
 
@@ -3762,10 +4121,71 @@ ${phase.scopeGuards.map((item) => `- ${item}`).join('\n')}
 `;
 }
 
-function buildPhaseTestPlan(phase: PhasePlan) {
+function buildPhaseTestPlan(phase: PhasePlan, input?: ProjectInput, context?: ProjectContext) {
+  const researchBlock = (() => {
+    if (!context || !context.extractions) return '';
+    const ex = context.extractions;
+    // Map REQ-N owned by this phase → workflow + step using the same flatten as buildFunctionalRequirementsFromResearch
+    const flat: Array<{ wf: typeof ex.workflows[number]; step: typeof ex.workflows[number]['steps'][number] }> = [];
+    for (const wf of ex.workflows) for (const step of wf.steps) flat.push({ wf, step });
+    const reqNums = (phase.requirementIds || [])
+      .map((id) => Number.parseInt(String(id).replace(/^REQ-/i, ''), 10))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const owned = reqNums
+      .map((n) => flat[n - 1])
+      .filter((s): s is typeof flat[number] => Boolean(s));
+    if (!owned.length) return '';
+
+    // Group by workflow so failure modes appear once per workflow rather than per step
+    const wfMap = new Map<string, { wf: typeof ex.workflows[number]; reqIds: string[] }>();
+    owned.forEach((entry, idx) => {
+      const reqId = `REQ-${reqNums[idx]}`;
+      const existing = wfMap.get(entry.wf.id);
+      if (existing) existing.reqIds.push(reqId);
+      else wfMap.set(entry.wf.id, { wf: entry.wf, reqIds: [reqId] });
+    });
+
+    const happyBlocks = Array.from(wfMap.values()).map((entry, i) => {
+      const entityById = new Map(ex.entities.map((e) => [e.id, e]));
+      const primary = entry.wf.entitiesTouched[0]
+        ? entityById.get(entry.wf.entitiesTouched[0])?.name
+        : undefined;
+      return `### Happy-path scenario ${i + 1} — ${entry.wf.name}
+- Covers requirements: ${entry.reqIds.join(', ')}
+- Sample data: SAMPLE_DATA.md "${primary || 'primary entity'}" section, happy-path sample
+- Acceptance pattern: ${entry.wf.acceptancePattern}
+- Pass criterion: persisted state matches the acceptance pattern; an audit entry exists; the actor's visibility scope is respected.
+- Where to record: phases/${phase.slug}/TEST_RESULTS.md`;
+    });
+
+    const failureBlocks: string[] = [];
+    let fIdx = 1;
+    for (const entry of wfMap.values()) {
+      for (const fm of entry.wf.failureModes) {
+        failureBlocks.push(`### Failure-mode scenario ${fIdx} — ${entry.wf.name}: ${fm.trigger}
+- Trigger condition: ${fm.trigger}
+- Expected effect (must not happen silently): ${fm.effect}
+- Required mitigation in build: ${fm.mitigation}
+- Pass criterion: the system surfaces the trigger to the actor and applies the mitigation; no silent state change.
+- Sample data: SAMPLE_DATA.md negative-path sample for the entity touched by ${entry.wf.name}
+- Where to record: phases/${phase.slug}/TEST_RESULTS.md`);
+        fIdx += 1;
+      }
+    }
+
+    return `## Research-driven scenario tests
+The phase owns ${phase.requirementIds?.length || 0} requirement(s). Each happy-path scenario below maps to a workflow this phase is responsible for; each failure-mode scenario maps to a researched \`workflow.failureModes\` entry. Use SAMPLE_DATA.md as the source of test inputs.
+
+${happyBlocks.join('\n\n')}
+
+${failureBlocks.length ? failureBlocks.join('\n\n') : '_No failure modes researched for this phase’s workflows._'}
+
+`;
+  })();
+
   return `# TEST_PLAN
 
-## Scenario 1
+${researchBlock}## Scenario 1
 ${phase.testingRequirements[0] || `Review whether ${phase.name} produced the concrete output this phase promised.`}
 
 ## Steps or inspection method
@@ -6530,6 +6950,70 @@ Regression risk if skipped: ${(scenario.risks[0]?.verification || scenario.failu
     : `## Requirement-driven scenario tests
 This phase has no requirement IDs assigned in PHASE_PLAN.md, so no acceptance scenarios are exercised here. If this is wrong, update PHASE_PLAN.md to add a "Requirement IDs:" line for this phase and re-run \`npm run create-project\` (or hand-edit the phase plan). Always exercise the relevant happy-path and negative-path samples from SAMPLE_DATA.md when implementation phases borrow requirements from later phases.`;
 
+  // Research-driven failure-mode coverage block: maps phase's owned REQs → workflows → workflow.failureModes,
+  // and emits one explicit failure-mode test per researched failure mode using the workflow's acceptance pattern.
+  const researchScenarioSection = (() => {
+    if (!context.extractions) return '';
+    const ex = context.extractions;
+    const flat: Array<{ wf: typeof ex.workflows[number]; step: typeof ex.workflows[number]['steps'][number] }> = [];
+    for (const wf of ex.workflows) for (const step of wf.steps) flat.push({ wf, step });
+    const reqNums = (phase.requirementIds || [])
+      .map((id) => Number.parseInt(String(id).replace(/^REQ-/i, ''), 10))
+      .filter((n) => Number.isFinite(n) && n > 0);
+    const ownedWorkflows = new Map<string, typeof ex.workflows[number]>();
+    for (const n of reqNums) {
+      const slot = flat[n - 1];
+      if (slot && !ownedWorkflows.has(slot.wf.id)) ownedWorkflows.set(slot.wf.id, slot.wf);
+    }
+    if (ownedWorkflows.size === 0) return '';
+
+    const entityById = new Map(ex.entities.map((e) => [e.id, e]));
+    const actorById = new Map(ex.actors.map((a) => [a.id, a]));
+
+    const blocks: string[] = [];
+    let idx = 1;
+    for (const wf of ownedWorkflows.values()) {
+      const primary = wf.entitiesTouched[0] ? entityById.get(wf.entitiesTouched[0]) : undefined;
+      const sampleHint = primary
+        ? Object.entries(primary.sample)
+            .slice(0, 3)
+            .map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`)
+            .join(', ')
+        : 'happy-path sample from SAMPLE_DATA.md';
+      const actor = actorById.get(wf.primaryActor)?.name || wf.primaryActor;
+
+      blocks.push(`### Research scenario ${idx} — ${wf.name} (happy path)
+Workflow: ${wf.name}
+Acceptance pattern: ${wf.acceptancePattern}
+Actor: ${actor}
+Given: ${actor} prepares ${primary?.name || 'the touched entity'} with sample fields ${sampleHint}.
+When: the workflow runs end-to-end as researched.
+Then: every step's systemResponse occurs, an audit entry is written, and the actor's visibility scope is preserved.
+Pass criteria: persisted state matches the acceptance pattern; the next-step queue (if applicable) advances correctly.
+Fail criteria: any researched step's systemResponse is silently skipped, OR the audit entry is missing, OR the visibility scope leaks.
+Where to record: phases/${phase.slug}/TEST_RESULTS.md`);
+      idx += 1;
+
+      for (const fm of wf.failureModes) {
+        blocks.push(`### Research scenario ${idx} — ${wf.name} failure: ${fm.trigger}
+Workflow: ${wf.name}
+Trigger: ${fm.trigger}
+Expected effect (must not happen silently): ${fm.effect}
+Required mitigation in implementation: ${fm.mitigation}
+Sample data: SAMPLE_DATA.md negative-path sample for ${primary?.name || 'the touched entity'}, with the field that triggers "${fm.trigger}" set to the failing value.
+Pass criteria: the system surfaces the trigger to the actor, applies the researched mitigation, and writes an audit entry naming the failure.
+Fail criteria: the system accepts the failing input silently, OR applies a different mitigation than researched, OR exposes a different actor's data.
+Where to record: phases/${phase.slug}/TEST_RESULTS.md`);
+        idx += 1;
+      }
+    }
+    if (!blocks.length) return '';
+    return `\n\n## Research-driven failure-mode coverage
+These scenarios are derived directly from the workflows this phase owns and their researched \`failureModes\` (see research/extracted/workflows.json). Every failure mode must be exercised at least once; a missed failure mode is treated as a regression risk.
+
+${blocks.join('\n\n')}`;
+  })();
+
   // Phase B: surface research-derived vocabulary at the top of the test script so
   // the agent uses the actual entity names, sample IDs, and regulatory citations
   // when writing test commands instead of falling back to "the user" / "the system".
@@ -6579,7 +7063,7 @@ Domain-specific reviewer question: ${c.reviewerQuestion}
 Where to record: phases/${phase.slug}/TEST_RESULTS.md
 What to do if this fails: Record the failure in TEST_RESULTS.md and revise the phase before advancing.`).join('\n\n')}
 
-${requirementSection}
+${requirementSection}${researchScenarioSection}
 
 ## Manual review checks
 ${specificChecks.map((c, i) => `### Manual check ${i + 1}
@@ -6629,6 +7113,9 @@ If this phase produces or depends on a running application, also append \`npm ru
 }
 
 function buildSampleData(input: ProjectInput, context: ProjectContext, phases: PhasePlan[]) {
+  if (context.extractions) {
+    return buildSampleDataFromResearch(input, context.extractions, phases);
+  }
   const entities = context.ontology.entityTypes;
   const scenarios = context.ontology.featureScenarios;
   const reqIndexByEntity = new Map<string, number[]>();
@@ -6701,6 +7188,143 @@ ${entities.map(renderEntityBlock).join('\n')}
 - Add a new section here when you introduce a new entity in DATA_MODEL.md.
 - Keep field names identical to DATA_MODEL.md.
 - Keep at least one happy-path and one negative-path sample per entity.
+`;
+}
+
+function buildSampleDataFromResearch(
+  input: ProjectInput,
+  ex: ResearchExtractions,
+  phases: PhasePlan[]
+) {
+  const actorById = new Map(ex.actors.map((a) => [a.id, a]));
+  const entityById = new Map(ex.entities.map((e) => [e.id, e]));
+
+  // Map REQ-N → entity primary touched. REQ-N flattening matches buildFunctionalRequirementsFromResearch.
+  const reqIndexByEntityId = new Map<string, number[]>();
+  let reqIdx = 0;
+  for (const wf of ex.workflows) {
+    for (let s = 0; s < wf.steps.length; s += 1) {
+      const primary = wf.entitiesTouched[0];
+      if (primary) {
+        const list = reqIndexByEntityId.get(primary) || [];
+        list.push(reqIdx);
+        reqIndexByEntityId.set(primary, list);
+      }
+      reqIdx += 1;
+    }
+  }
+
+  const renderBlock = (e: typeof ex.entities[number]) => {
+    const reqIds = (reqIndexByEntityId.get(e.id) || []).map((idx) => `REQ-${idx + 1}`);
+    const reqLine = reqIds.length ? reqIds.join(', ') : 'No direct requirement reference yet.';
+    const owningPhases = unique(
+      (reqIndexByEntityId.get(e.id) || []).map((idx) => getRequirementPhaseSlug(idx, phases))
+    );
+    const phasesLine = owningPhases.length ? owningPhases.join(', ') : 'no phase has assigned this entity yet';
+    const ownerNames = e.ownerActors
+      .map((aid) => actorById.get(aid)?.name)
+      .filter(Boolean)
+      .join(', ') || '—';
+
+    // Happy-path: as researched
+    const happy = e.sample as Record<string, unknown>;
+    const happyJson = JSON.stringify(happy, null, 2);
+
+    // Variant records: cycle each enum field through its values to give the agent
+    // realistic boundary records for state-machine tests.
+    const enumFields = e.fields.filter((f) => f.type === 'enum' && Array.isArray(f.enumValues) && f.enumValues.length > 1);
+    const variants: Record<string, unknown>[] = [];
+    for (const enumField of enumFields.slice(0, 2)) {
+      const currentValue = happy[enumField.name];
+      const altValue = (enumField.enumValues || []).find((v) => v !== currentValue);
+      if (altValue === undefined) continue;
+      const variant: Record<string, unknown> = { ...happy };
+      // mutate the id-like field to make the record distinct
+      const idField = e.fields.find((f) => /^id$|Id$/.test(f.name)) || e.fields[0];
+      if (idField) {
+        const baseId = String(happy[idField.name] ?? `${entitySlug(e.name)}-001`);
+        variant[idField.name] = `${baseId}-${altValue}`;
+      }
+      variant[enumField.name] = altValue;
+      variants.push(variant);
+    }
+
+    // Negative-path: blank out the first required string-like field; null-out the first id field
+    const negative: Record<string, unknown> = { ...happy };
+    const firstRequiredString = e.fields.find((f) => f.required && f.type === 'string' && !f.references);
+    const firstIdField = e.fields.find((f) => /^id$|Id$/.test(f.name) && !f.references);
+    if (firstRequiredString) negative[firstRequiredString.name] = '';
+    if (firstIdField && firstIdField.required) negative[firstIdField.name] = null;
+    const negativeJson = JSON.stringify(negative, null, 2);
+
+    // FK cross-link list
+    const fks = e.fields
+      .filter((f) => f.references)
+      .map((f) => {
+        const target = entityById.get(f.references!);
+        return target
+          ? `\`${f.name}\` → ${target.name} (\`${target.id}\`).`
+          : `\`${f.name}\` → \`${f.references}\`.`;
+      });
+
+    const variantsBlock = variants.length
+      ? variants
+          .map(
+            (v, i) => `### Variant ${i + 1} sample (use to test enum/state branching)
+\`\`\`json
+${JSON.stringify(v, null, 2)}
+\`\`\``
+          )
+          .join('\n\n')
+      : '';
+
+    return `## ${e.name} (\`${e.id}\`)
+
+- Purpose: ${e.description}
+- Owner actors: ${ownerNames}
+- Used by requirements: ${reqLine}
+- Owning phases: ${phasesLine}
+- Foreign keys: ${fks.length ? fks.join(' ') : 'none declared'}
+- Validation rules: ${e.fields.filter((f) => f.required).slice(0, 4).map((f) => `\`${f.name}\` is required`).join('; ') || 'none recorded'}.
+
+### Happy-path sample (use as the realistic input in tests)
+\`\`\`json
+${happyJson}
+\`\`\`
+${variantsBlock ? `\n${variantsBlock}\n` : ''}
+### Negative-path sample (use to prove the system rejects invalid input)
+\`\`\`json
+${negativeJson}
+\`\`\`
+`;
+  };
+
+  return `# SAMPLE_DATA for ${input.productName}
+
+> Generated from research extractions. Each entity below maps directly to one record in \`research/extracted/entities.json\`. Variant samples cycle the entity's enum fields so tests can prove state-machine transitions; the negative-path sample blanks a required field so the rejection path can be exercised.
+
+## How to use this file
+- For each requirement, find the entity it touches (see "Used by requirements").
+- Copy the happy-path sample into your test as the realistic input.
+- Use the variant samples to exercise enum / state-machine branches.
+- Copy the negative-path sample to prove the system rejects invalid input.
+- Do not edit this file mid-test. If a sample is wrong, revise here and re-run the affected tests.
+
+## Foreign keys at a glance
+${ex.entities
+    .flatMap((e) =>
+      e.fields
+        .filter((f) => f.references)
+        .map((f) => `- ${e.name}.\`${f.name}\` → ${entityById.get(f.references!)?.name || f.references}`)
+    )
+    .join('\n') || '- None declared in research extractions.'}
+
+${ex.entities.map(renderBlock).join('\n')}
+
+## What this file is NOT
+- Not a production seed file.
+- Not a substitute for live integration data once a service is approved.
+- Not a place to store secrets, real personal data, or production identifiers.
 `;
 }
 
@@ -9028,7 +9652,7 @@ ${listToBullets(bundle.unresolvedWarnings.map((warning) => `[${warning.severity}
     add(`phases/${phase.slug}/VERIFICATION_REPORT.md`, buildVerificationReport(phase, input));
     add(`phases/${phase.slug}/EVIDENCE_CHECKLIST.md`, buildEvidenceChecklist(phase, input));
     add(`phases/${phase.slug}/EXIT_GATE.md`, buildPhaseExitGate(phase, context));
-    add(`phases/${phase.slug}/TEST_PLAN.md`, buildPhaseTestPlan(phase));
+    add(`phases/${phase.slug}/TEST_PLAN.md`, buildPhaseTestPlan(phase, input, context));
     add(`phases/${phase.slug}/TEST_SCRIPT.md`, buildPhaseTestScript(phase, input, context));
     add(`phases/${phase.slug}/TEST_RESULTS.md`, buildPhaseTestResults(phase));
     add(`phases/${phase.slug}/HANDOFF_SUMMARY.md`, buildPhaseHandoffSummary(phase, input, context));
