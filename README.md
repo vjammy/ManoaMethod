@@ -20,11 +20,16 @@ Requires Node 20+.
 
 ## 5-minute tour
 
+`create-project` requires research extractions. The fastest demo path uses the synthesizer bridge:
+
 ```bash
-npm run create-project -- --input=examples/family-task-app.json --out=.tmp-demo
+npx tsx scripts/synthesize-research-ontology.ts --input=examples/family-task-app.json --out=.tmp-demo/research
+npm run create-project -- --input=examples/family-task-app.json --out=.tmp-demo --research-from=.tmp-demo/research
 npm run validate -- --package=.tmp-demo/mvp-builder-workspace
 npm run status -- --package=.tmp-demo/mvp-builder-workspace
 ```
+
+For real projects, run the recipe in [docs/RESEARCH_RECIPE.md](docs/RESEARCH_RECIPE.md) inside your coding agent (Claude Code, Codex, Kimi, OpenCode). The agent produces richer extractions in its own LLM context — no API key on this side.
 
 Open `.tmp-demo/mvp-builder-workspace/START_HERE.md`. That's the entry point of every generated workspace.
 
@@ -35,6 +40,7 @@ For the full walkthrough see [docs/QUICKSTART.md](docs/QUICKSTART.md).
 | If you want to… | Read |
 |---|---|
 | Try it in 5 minutes | [docs/QUICKSTART.md](docs/QUICKSTART.md) |
+| Understand how the agent does research before generation | [docs/RESEARCH_RECIPE.md](docs/RESEARCH_RECIPE.md) |
 | Understand the 9-step workflow | [docs/WORKFLOW.md](docs/WORKFLOW.md) |
 | See every npm command | [docs/COMMANDS.md](docs/COMMANDS.md) |
 | Understand auto-regression scoring + browser loop | [docs/AUTO_REGRESSION.md](docs/AUTO_REGRESSION.md) |

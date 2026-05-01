@@ -10,9 +10,32 @@ A linear 5-minute tour. Each step has a command, what to expect, and what to do 
 
 ## 1. Generate a sample workspace
 
+`create-project` requires research extractions. There are two ways to produce them:
+
+### Option A — agent-driven (recommended for real projects)
+
+Inside your coding agent (Claude Code, Codex, Kimi, OpenCode), follow the recipe in [docs/RESEARCH_RECIPE.md](RESEARCH_RECIPE.md). The agent uses its own LLM context — no API key on this side — to write `<dir>/research/extracted/*.json`. Then:
+
 ```bash
-npm run create-project -- --input=examples/family-task-app.json --out=.tmp-demo
+npm run create-project -- --input=brief.json --out=.tmp-demo --research-from=<dir>
 ```
+
+### Option B — synthesizer bridge (for the harness, demos, and CI)
+
+```bash
+npx tsx scripts/synthesize-research-ontology.ts --input=examples/family-task-app.json --out=.tmp-demo/research-input
+npm run create-project -- --input=examples/family-task-app.json --out=.tmp-demo --research-from=.tmp-demo/research-input
+```
+
+The synthesizer is deterministic and free but mechanical — it produces brief-derived extractions that pass the schema, but the depth comes from the brief, not from real domain research. Use it for tests; use Option A for real work.
+
+### Option C — deprecated archetype path
+
+```bash
+npm run create-project -- --input=examples/family-task-app.json --out=.tmp-demo --allow-templated
+```
+
+Skips research. The manifest is marked `lifecycleStatus: Blocked` and the audit caps the score below 85. Will be removed in Phase A3c.
 
 **You should see:** `Created artifact package at .tmp-demo/mvp-builder-workspace`.
 
