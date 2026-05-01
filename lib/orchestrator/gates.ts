@@ -381,12 +381,18 @@ function exitGate(repoState: RepoState, scorecard?: Scorecard): GateResult {
     },
     {
       label: 'Lifecycle and score do not contradict each other',
-      passed: !scorecard || blockedLifecycle !== 'Blocked' || scorecard.cappedTotal < 70,
+      passed:
+        !scorecard ||
+        blockedLifecycle !== 'Blocked' ||
+        scorecard.cappedTotal < 70 ||
+        scorecard.releaseBlocker.blocked,
       detail:
         !scorecard
           ? 'Scorecard not available yet.'
           : blockedLifecycle !== 'Blocked'
             ? 'Lifecycle is not blocked.'
+            : scorecard.releaseBlocker.blocked
+              ? 'Blocked lifecycle is expected because release approval is intentionally withheld.'
             : `Blocked lifecycle paired with score ${scorecard.cappedTotal}.`
     },
     {

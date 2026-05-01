@@ -18,7 +18,7 @@ import {
 import { buildRecoveryPlan } from '../lib/orchestrator/recovery';
 import { orchestrate } from '../lib/orchestrator/runner';
 import { ensureDir } from '../lib/orchestrator/utils';
-import type { CommandResult, GateResult } from '../lib/orchestrator/types';
+import type { CommandResult, GateResult, Scorecard } from '../lib/orchestrator/types';
 
 function assert(condition: unknown, message: string) {
   if (!condition) throw new Error(message);
@@ -395,6 +395,20 @@ export async function runReleaseBlockerVerdictRegressionChecks() {
   assert(
     releaseOnlyRecommendation !== 'PASS',
     'Recommendation must NOT be a plain PASS while the release gate is failing.'
+  );
+
+  const syntheticBlockedRepoState = {
+    ...buildRepoState(process.cwd()),
+    manifest: { lifecycleStatus: 'Blocked', approvedForBuild: false },
+    mvpBuilderState: { lifecycleStatus: 'Blocked' }
+  };
+  const releaseOnlyExitGate = findGate(
+    runGateChecks(syntheticBlockedRepoState, [], releaseOnlyScorecard as Scorecard),
+    'exit gate'
+  );
+  assert(
+    releaseOnlyExitGate.status === 'pass',
+    'A release-only approval blocker must not also fail the exit gate for lifecycle/score contradiction.'
   );
 
   // Scenario B: release gate fails for a NON-approval reason (e.g., release

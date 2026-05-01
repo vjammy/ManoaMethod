@@ -101,7 +101,7 @@ type AggregateSummary = {
 };
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const swarmRoot = path.join(repoRoot, 'swarm-builds');
+const swarmRoot = path.join(repoRoot, '.tmp', 'swarm-builds');
 const reportsRoot = path.join(swarmRoot, 'reports');
 
 const APPS: AppDefinition[] = [
@@ -784,6 +784,8 @@ function renderAppPackage(app: AppDefinition, appDir: string) {
   const input = mergeInput(app.exampleFile, app.inputOverrides);
   const bundle = generateProjectBundle(input);
   const createdFiles: string[] = [];
+  const repoFromAppDir = path.relative(appDir, repoRoot).replace(/\\/g, '/');
+  const repoFromNestedAppDir = path.relative(path.join(appDir, 'app'), repoRoot).replace(/\\/g, '/');
 
   for (const file of bundle.files) {
     const destination = path.join(appDir, file.path);
@@ -846,17 +848,17 @@ function renderAppPackage(app: AppDefinition, appDir: string) {
     name: `${app.id}-workspace-root`,
     private: true,
     scripts: {
-      validate: 'node ../../node_modules/tsx/dist/cli.mjs ../../scripts/mvp-builder-validate.ts --package=.',
-      status: 'node ../../node_modules/tsx/dist/cli.mjs ../../scripts/mvp-builder-status.ts --package=.',
+      validate: `node ${repoFromAppDir}/node_modules/tsx/dist/cli.mjs ${repoFromAppDir}/scripts/mvp-builder-validate.ts --package=.`,
+      status: `node ${repoFromAppDir}/node_modules/tsx/dist/cli.mjs ${repoFromAppDir}/scripts/mvp-builder-status.ts --package=.`,
       typecheck: 'npm --prefix app run typecheck',
       build: 'npm --prefix app run build',
       smoke: 'npm --prefix app run smoke',
       test: 'npm --prefix app run test',
       'test:quality-regression': 'npm --prefix app run test:quality-regression',
       regression: 'npm --prefix app run regression',
-      score: 'node ../../node_modules/tsx/dist/cli.mjs ../../scripts/mvp-builder-score.ts --repo=. --package=.',
-      gates: 'node ../../node_modules/tsx/dist/cli.mjs ../../scripts/mvp-builder-gates.ts --repo=. --package=.',
-      orchestrate: 'node ../../node_modules/tsx/dist/cli.mjs ../../scripts/mvp-builder-orchestrate.ts --repo=. --package=. --target-score=90 --max-rounds=5'
+      score: `node ${repoFromAppDir}/node_modules/tsx/dist/cli.mjs ${repoFromAppDir}/scripts/mvp-builder-score.ts --repo=. --package=.`,
+      gates: `node ${repoFromAppDir}/node_modules/tsx/dist/cli.mjs ${repoFromAppDir}/scripts/mvp-builder-gates.ts --repo=. --package=.`,
+      orchestrate: `node ${repoFromAppDir}/node_modules/tsx/dist/cli.mjs ${repoFromAppDir}/scripts/mvp-builder-orchestrate.ts --repo=. --package=. --target-score=90 --max-rounds=5`
     }
   }));
   createdFiles.push('package.json');
@@ -866,17 +868,17 @@ function renderAppPackage(app: AppDefinition, appDir: string) {
     private: true,
     type: 'module',
     scripts: {
-      typecheck: 'node ../../../node_modules/typescript/bin/tsc --noEmit -p tsconfig.json',
-      build: 'node ../../../node_modules/typescript/bin/tsc -p tsconfig.json && node scripts/postbuild.mjs',
+      typecheck: `node ${repoFromNestedAppDir}/node_modules/typescript/bin/tsc --noEmit -p tsconfig.json`,
+      build: `node ${repoFromNestedAppDir}/node_modules/typescript/bin/tsc -p tsconfig.json && node scripts/postbuild.mjs`,
       smoke: 'node scripts/smoke.mjs',
       test: 'node --test tests/*.test.mjs',
       'test:quality-regression': 'node scripts/quality-regression.mjs',
-      validate: 'node ../../../node_modules/tsx/dist/cli.mjs ../../../scripts/mvp-builder-validate.ts --package=..',
-      status: 'node ../../../node_modules/tsx/dist/cli.mjs ../../../scripts/mvp-builder-status.ts --package=..',
+      validate: `node ${repoFromNestedAppDir}/node_modules/tsx/dist/cli.mjs ${repoFromNestedAppDir}/scripts/mvp-builder-validate.ts --package=..`,
+      status: `node ${repoFromNestedAppDir}/node_modules/tsx/dist/cli.mjs ${repoFromNestedAppDir}/scripts/mvp-builder-status.ts --package=..`,
       regression: 'node scripts/regression.mjs',
-      score: 'node ../../../node_modules/tsx/dist/cli.mjs ../../../scripts/mvp-builder-score.ts --repo=.. --package=..',
-      gates: 'node ../../../node_modules/tsx/dist/cli.mjs ../../../scripts/mvp-builder-gates.ts --repo=.. --package=..',
-      orchestrate: 'node ../../../node_modules/tsx/dist/cli.mjs ../../../scripts/mvp-builder-orchestrate.ts --repo=.. --package=.. --target-score=90 --max-rounds=5'
+      score: `node ${repoFromNestedAppDir}/node_modules/tsx/dist/cli.mjs ${repoFromNestedAppDir}/scripts/mvp-builder-score.ts --repo=.. --package=..`,
+      gates: `node ${repoFromNestedAppDir}/node_modules/tsx/dist/cli.mjs ${repoFromNestedAppDir}/scripts/mvp-builder-gates.ts --repo=.. --package=..`,
+      orchestrate: `node ${repoFromNestedAppDir}/node_modules/tsx/dist/cli.mjs ${repoFromNestedAppDir}/scripts/mvp-builder-orchestrate.ts --repo=.. --package=.. --target-score=90 --max-rounds=5`
     }
   }));
   createdFiles.push('app/package.json');
@@ -1672,7 +1674,7 @@ ${commandsSection}
    Evidence: architecture/, integrations/, security-risk/
 5. Risk Review
    Action taken: let the generator critique the brief and emit warnings, critique items, and readiness scoring.
-   Modules: lib/generator.ts -> scoring.ts, semantic-fit.ts, archetype-detection.ts
+   Modules: lib/generator.ts -> scoring.ts, semantic-fit.ts (archetype-detection.ts removed in A3c)
    Evidence: PLAN_CRITIQUE.md, SCORECARD.md, 00_APPROVAL_GATE.md
 6. Phase Plan
    Action taken: generated the full multi-phase markdown workspace with per-phase gates, tests, and handoff docs.
@@ -2031,7 +2033,7 @@ ${appSummaries
 - Aggregate recommendation: ${aggregate.recommendation}
 
 ## Modules intentionally exercised
-- Generator path: lib/generator.ts, lib/templates.ts, lib/workflow.ts, lib/scoring.ts, lib/semantic-fit.ts, lib/archetype-detection.ts
+- Generator path: lib/generator.ts, lib/templates.ts, lib/workflow.ts, lib/scoring.ts, lib/semantic-fit.ts (archetype-detection.ts removed in A3c)
 - Validation path: scripts/mvp-builder-validate.ts, scripts/mvp-builder-status.ts
 - Orchestrator path: scripts/mvp-builder-orchestrate.ts, lib/orchestrator/scanner.ts, criteria.ts, prompts.ts, commands.ts, gates.ts, score.ts, recovery.ts, reports.ts, runner.ts
 - Evidence path: orchestrator/reports/TEST_RESULTS.md, GATE_RESULTS.md, OBJECTIVE_SCORECARD.md, FINAL_ORCHESTRATOR_REPORT.md
