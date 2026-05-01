@@ -157,6 +157,66 @@ function countOccurrences(needle: string, haystack: string): number {
   return (haystack.match(re) || []).length;
 }
 
+/**
+ * Phase B: load research-derived token vocabulary from research/extracted/ if it
+ * exists. Returns an empty array when research is absent, which means the
+ * downstream checks gracefully fall back to brief-only behavior.
+ */
+function loadResearchVocab(packageRoot: string): { tokens: string[]; present: boolean } {
+  const root = path.join(packageRoot, 'research', 'extracted');
+  if (!fs.existsSync(path.join(root, 'meta.json'))) return { tokens: [], present: false };
+  const safeRead = (name: string): unknown => {
+    try {
+      return JSON.parse(fs.readFileSync(path.join(root, name), 'utf8'));
+    } catch {
+      return undefined;
+    }
+  };
+  const actors = (safeRead('actors.json') as Array<{ name: string }> | undefined) || [];
+  const entities = (safeRead('entities.json') as Array<{ name: string; fields?: Array<{ name: string }>; sample?: Record<string, unknown> }> | undefined) || [];
+  const workflows = (safeRead('workflows.json') as Array<{ name: string }> | undefined) || [];
+  const risks = (safeRead('risks.json') as Array<{ category: string }> | undefined) || [];
+  const gates = (safeRead('gates.json') as Array<{ name: string; mandatedByDetail?: string }> | undefined) || [];
+
+  const citations: string[] = [];
+  for (const g of gates) {
+    if (!g.mandatedByDetail) continue;
+    const matches = g.mandatedByDetail.match(
+      /\b(GDPR(?:\s+Art\.?\s*\d+)?|CAN-SPAM|HIPAA(?:\s+[A-Z][a-z]+\s+Rule)?(?:\s+§\d[\d.]*)?|CPRA(?:\s+§\d[\d.]*)?|CCPA|FERPA|PCI(?:\s+DSS)?|SOC\s*2|TCPA|CASL|COPPA)\b/gi
+    );
+    if (matches) citations.push(...matches);
+  }
+  const sampleIds: string[] = [];
+  for (const e of entities) {
+    if (!e.sample) continue;
+    for (const v of Object.values(e.sample)) {
+      if (typeof v === 'string' && /[a-z]+-[a-z0-9]+/i.test(v)) sampleIds.push(v);
+    }
+  }
+
+  const raw = [
+    ...actors.map((a) => a.name),
+    ...entities.map((e) => e.name),
+    ...entities.flatMap((e) => (e.fields || []).map((f) => f.name)),
+    ...workflows.map((w) => w.name),
+    ...risks.map((r) => r.category),
+    ...gates.map((g) => g.name),
+    ...citations,
+    ...sampleIds
+  ];
+
+  // Tokenize the names — multi-word names like "Sales Development Rep" produce three
+  // tokens "sales", "development", "rep" that we look for individually in artifacts.
+  const tokens = uniq(
+    raw
+      .flatMap((s) => (s || '').split(/[\s\/_-]+/))
+      .map((t) => t.toLowerCase().replace(/[^a-z0-9]/g, ''))
+      .filter((t) => t.length >= 3 && !STOP_WORDS.has(t))
+  );
+
+  return { tokens, present: true };
+}
+
 function readBrief(packageRoot: string): { productName: string; briefText: string } {
   const briefPath = path.join(packageRoot, 'PROJECT_BRIEF.md');
   const brief = readSafe(briefPath);
@@ -174,10 +234,17 @@ function readBrief(packageRoot: string): { productName: string; briefText: strin
   return { productName, briefText: brief };
 }
 
-// 1. Domain vocabulary penetration
-function auditDomainVocabulary(packageRoot: string, tokens: string[]): DimensionScore {
+// 1. Domain vocabulary penetration (Phase B: brief tokens ∪ research tokens)
+function auditDomainVocabulary(
+  packageRoot: string,
+  briefTokens: string[],
+  researchVocab: { tokens: string[]; present: boolean }
+): DimensionScore {
   const findings: Finding[] = [];
   const evidence: string[] = [];
+  // Combined vocabulary: brief + research. Research adds entity/actor/workflow/regulatory
+  // names that may not appear in the brief but are domain-correct.
+  const combinedTokens = uniq([...briefTokens, ...researchVocab.tokens]);
   const targets = [
     'PHASE_PLAN.md',
     'requirements/FUNCTIONAL_REQUIREMENTS.md',
@@ -193,10 +260,10 @@ function auditDomainVocabulary(packageRoot: string, tokens: string[]): Dimension
       findings.push({ dimension: 'domain-vocabulary', severity: 'warning', message: `Missing ${target}` });
       continue;
     }
-    const distinctTokensFound = tokens.filter((t) => countOccurrences(t, content) >= 1).length;
+    const distinctTokensFound = combinedTokens.filter((t) => countOccurrences(t, content) >= 1).length;
     totalHits += distinctTokensFound;
     totalChecked += 1;
-    evidence.push(`${target}: ${distinctTokensFound}/${tokens.length} brief tokens present`);
+    evidence.push(`${target}: ${distinctTokensFound}/${combinedTokens.length} combined tokens present`);
   }
   // Phase briefs: each phase must have ≥3 distinct domain tokens
   const phasesDir = path.join(packageRoot, 'phases');
@@ -207,21 +274,65 @@ function auditDomainVocabulary(packageRoot: string, tokens: string[]): Dimension
     const briefContent = readSafe(path.join(phaseDir, 'PHASE_BRIEF.md'));
     if (!briefContent) continue;
     phasesScored += 1;
-    const found = tokens.filter((t) => countOccurrences(t, briefContent) >= 1).length;
+    const found = combinedTokens.filter((t) => countOccurrences(t, briefContent) >= 1).length;
     if (found >= 3) phasesPassed += 1;
   }
-  evidence.push(`phase briefs with ≥3 brief tokens: ${phasesPassed}/${phasesScored}`);
+  evidence.push(`phase briefs with ≥3 combined tokens: ${phasesPassed}/${phasesScored}`);
   if (phasesScored > 0 && phasesPassed / phasesScored < 0.8) {
     findings.push({
       dimension: 'domain-vocabulary',
       severity: phasesPassed / phasesScored < 0.5 ? 'blocker' : 'warning',
-      message: `${phasesPassed}/${phasesScored} phase briefs contain ≥3 distinct brief tokens`
+      message: `${phasesPassed}/${phasesScored} phase briefs contain ≥3 distinct combined tokens`
     });
   }
+
+  // Phase B enforcement: when research is present, measure how much of the
+  // research vocabulary actually penetrates the artifacts. Cap the score if
+  // penetration is poor — research that's collected and then ignored should
+  // not be rewarded.
+  let researchPenetrationCap = 20;
+  if (researchVocab.present && researchVocab.tokens.length > 0) {
+    const aggregateContent = targets.map((t) => readSafe(path.join(packageRoot, t))).join('\n');
+    const phaseBriefContent = listFiles(phasesDir)
+      .filter((p) => fs.statSync(p).isDirectory())
+      .map((p) => readSafe(path.join(p, 'PHASE_BRIEF.md')))
+      .join('\n');
+    const allContent = `${aggregateContent}\n${phaseBriefContent}`;
+    const researchHits = researchVocab.tokens.filter((t) => countOccurrences(t, allContent) >= 1).length;
+    const researchCoverage = researchHits / researchVocab.tokens.length;
+    evidence.push(
+      `research-token coverage across phase-briefs + 5 root files: ${researchHits}/${researchVocab.tokens.length} (${(researchCoverage * 100).toFixed(0)}%)`
+    );
+    if (researchCoverage < 0.3) {
+      findings.push({
+        dimension: 'domain-vocabulary',
+        severity: 'blocker',
+        message: `Research present but only ${(researchCoverage * 100).toFixed(0)}% of research vocabulary lands in artifacts (need ≥30% for full credit)`,
+        detail: `Cap applied: max 14/20 until artifact renderers consume more research tokens.`
+      });
+      researchPenetrationCap = 14;
+    } else if (researchCoverage < 0.5) {
+      findings.push({
+        dimension: 'domain-vocabulary',
+        severity: 'warning',
+        message: `Research-token coverage is ${(researchCoverage * 100).toFixed(0)}% (target ≥50% for full credit)`
+      });
+      researchPenetrationCap = 17;
+    }
+  }
+
   // Score: 60% weight to phase coverage, 40% to top-level files
+  // File score: target 30 distinct domain tokens per file = full 8 points. The
+  // denominator is a stable target rather than vocabulary size, so growing the
+  // vocabulary (e.g. by adding research tokens) doesn't punish workspaces that
+  // had good brief-only coverage. Workspaces with research that lands in
+  // artifacts will easily clear the threshold.
   const phaseScore = phasesScored ? (phasesPassed / phasesScored) * 12 : 0;
-  const fileScore = totalChecked ? Math.min(8, (totalHits / (tokens.length * totalChecked)) * 16) : 0;
-  const score = Math.round(phaseScore + fileScore);
+  const TARGET_HITS_PER_FILE = 30;
+  const fileScore = totalChecked
+    ? Math.min(8, (totalHits / (totalChecked * TARGET_HITS_PER_FILE)) * 8)
+    : 0;
+  const score = Math.min(researchPenetrationCap, Math.round(phaseScore + fileScore));
   return { name: 'domain-vocabulary', score, max: 20, weight: 20, findings, evidence };
 }
 
@@ -560,14 +671,19 @@ function rate(score: number): AuditResult['rating'] {
 
 export function runAudit(packageRoot: string): AuditResult {
   const { productName, briefText } = readBrief(packageRoot);
-  const tokens = domainTokens(briefText, productName);
+  const briefTokenList = domainTokens(briefText, productName);
+  const researchVocab = loadResearchVocab(packageRoot);
+  // Combined vocabulary used by sample-data / requirement-specificity / test-script
+  // checks: brief tokens give a portable baseline; research tokens reward
+  // workspaces that use the agent-extracted ontology.
+  const combinedTokens = uniq([...briefTokenList, ...researchVocab.tokens]);
   const dimensions: DimensionScore[] = [
-    auditDomainVocabulary(packageRoot, tokens),
+    auditDomainVocabulary(packageRoot, briefTokenList, researchVocab),
     auditAntiGeneric(packageRoot),
-    auditSampleData(packageRoot, tokens),
-    auditRequirements(packageRoot, tokens),
+    auditSampleData(packageRoot, combinedTokens),
+    auditRequirements(packageRoot, combinedTokens),
     auditPhaseDistinctness(packageRoot),
-    auditTestScripts(packageRoot, tokens),
+    auditTestScripts(packageRoot, combinedTokens),
     auditConsistency(packageRoot, productName)
   ];
   let total = dimensions.reduce((sum, d) => sum + d.score, 0);

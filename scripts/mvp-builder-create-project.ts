@@ -18,6 +18,16 @@ function writeFileRecursive(filePath: string, content: string) {
   fs.writeFileSync(filePath, content, 'utf8');
 }
 
+function copyDirRecursive(src: string, dest: string) {
+  fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const s = path.join(src, entry.name);
+    const d = path.join(dest, entry.name);
+    if (entry.isDirectory()) copyDirRecursive(s, d);
+    else if (entry.isFile()) fs.copyFileSync(s, d);
+  }
+}
+
 export function loadInput(inputPath?: string): ProjectInput {
   if (!inputPath) {
     return baseProjectInput();
@@ -83,6 +93,18 @@ export async function createArtifactPackage(options: {
 
   for (const file of bundle.files) {
     writeFileRecursive(path.join(rootDir, file.path), file.content);
+  }
+
+  // Phase B: copy the research/ directory from --research-from into the workspace
+  // so the workspace is self-contained. The audit reads research/extracted/ to
+  // build its research-token vocabulary; without this copy the audit treats
+  // research-grounded workspaces as if they had no research vocabulary at all.
+  if (options.researchFrom) {
+    const sourceResearch = path.resolve(options.researchFrom, 'research');
+    const targetResearch = path.join(rootDir, 'research');
+    if (fs.existsSync(sourceResearch) && !fs.existsSync(targetResearch)) {
+      copyDirRecursive(sourceResearch, targetResearch);
+    }
   }
 
   let zipPath = '';

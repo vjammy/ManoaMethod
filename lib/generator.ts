@@ -2,6 +2,12 @@ import { reconcileScoreWithLifecycle, scoreProject, withSemanticFit } from './sc
 import { detectArchetype, type ArchetypeDetection } from './archetype-detection';
 import { computeSemanticFit, type SemanticFit } from './semantic-fit';
 import type { ResearchExtractions } from './research/schema';
+import {
+  buildResearchTokenPack,
+  deriveBriefTokens,
+  selectPhaseRelevant,
+  type ResearchTokenPack
+} from './generator/research-token-pack';
 import { buildQuestionPrompts, CORE_AGENT_OPERATING_RULES, getProfileConfig, slugify } from './templates';
 import {
   buildDomainOntology,
@@ -90,6 +96,8 @@ type ProjectContext = {
   uiRelevant: boolean;
   ontology: DomainOntology;
   extractions?: ResearchExtractions;
+  /** Phase B — flat enrichment vocabulary derived from extractions. Empty pack when extractions are absent. */
+  tokenPack: ResearchTokenPack;
 };
 
 type AgentName = 'Codex' | 'Claude Code' | 'OpenCode';
@@ -934,6 +942,23 @@ function buildContext(input: ProjectInput, extractions?: ResearchExtractions): P
     inferredAssumptions.push('Please review and confirm: the business value and operating model are inferred rather than explicitly justified.');
   }
 
+  // Phase B: build the enrichment token vocabulary once per context. Used by
+  // artifact renderers to inject brief- and research-derived names into copy
+  // that today emits generic placeholders.
+  const briefText = [
+    input.productIdea,
+    input.targetAudience,
+    input.problemStatement,
+    input.mustHaveFeatures,
+    input.dataAndIntegrations,
+    input.risks,
+    input.successMetrics
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const briefTokens = deriveBriefTokens(input.productName, briefText);
+  const tokenPack = buildResearchTokenPack(extractions, briefTokens);
+
   return {
     profile,
     mustHaves,
@@ -959,7 +984,8 @@ function buildContext(input: ProjectInput, extractions?: ResearchExtractions): P
     riskFlags,
     uiRelevant,
     ontology,
-    extractions
+    extractions,
+    tokenPack
   };
 }
 
@@ -3831,6 +3857,44 @@ ${listToBullets(
 `;
 }
 
+function renderPhaseResearchContext(phase: PhasePlan, context: ProjectContext): string {
+  if (!context.tokenPack.present) return '';
+  const relevant = selectPhaseRelevant(context.extractions, phase.requirementIds);
+  const lines: string[] = [];
+  lines.push('## Research context for this phase');
+  lines.push('');
+  if (relevant.actors.length) {
+    lines.push(`- **Actors involved**: ${relevant.actors.join(', ')}`);
+  }
+  if (relevant.entities.length) {
+    lines.push(`- **Entities touched**: ${relevant.entities.join(', ')}`);
+  }
+  if (relevant.workflows.length) {
+    lines.push(`- **Workflows owned**: ${relevant.workflows.join('; ')}`);
+  }
+  if (relevant.risks.length) {
+    lines.push(`- **Risks that apply**: ${relevant.risks.slice(0, 3).join(' | ')}`);
+  }
+  if (relevant.gates.length) {
+    lines.push(`- **Gates that block this phase type**: ${relevant.gates.join(', ')}`);
+  }
+  // Always emit the regulatory citations section if any exist — relevant to almost every phase.
+  if (context.tokenPack.categorized.regulatoryCitations.length) {
+    lines.push(`- **Regulatory citations to honor**: ${context.tokenPack.categorized.regulatoryCitations.join(', ')}`);
+  }
+  // If this phase has no owned reqs, surface global research context so the agent still has the vocabulary.
+  if (!relevant.actors.length && !relevant.entities.length) {
+    const globalActors = context.tokenPack.categorized.actorNames.slice(0, 4).join(', ');
+    const globalEntities = context.tokenPack.categorized.entityNames.slice(0, 5).join(', ');
+    if (globalActors) lines.push(`- **Global actor vocabulary**: ${globalActors}`);
+    if (globalEntities) lines.push(`- **Global entity vocabulary**: ${globalEntities}`);
+  }
+  lines.push('');
+  lines.push('Use these names verbatim when writing requirements, code, or tests for this phase. Do NOT introduce alternate names ("the user", "the system", "the record") — those break traceability against research/extracted/.');
+  lines.push('');
+  return lines.join('\n');
+}
+
 function buildPhaseBrief(
   phase: PhasePlan,
   input: ProjectInput,
@@ -3865,7 +3929,7 @@ ${phase.goal}
 ## Why this phase exists
 ${phase.focusSummary}
 
-## Phase type
+${renderPhaseResearchContext(phase, context)}## Phase type
 ${phase.phaseType}
 
 ## What you should do now
@@ -6873,6 +6937,27 @@ Regression risk if skipped: ${(scenario.risks[0]?.verification || scenario.failu
     : `## Requirement-driven scenario tests
 This phase has no requirement IDs assigned in PHASE_PLAN.md, so no acceptance scenarios are exercised here. If this is wrong, update PHASE_PLAN.md to add a "Requirement IDs:" line for this phase and re-run \`npm run create-project\` (or hand-edit the phase plan). Always exercise the relevant happy-path and negative-path samples from SAMPLE_DATA.md when implementation phases borrow requirements from later phases.`;
 
+  // Phase B: surface research-derived vocabulary at the top of the test script so
+  // the agent uses the actual entity names, sample IDs, and regulatory citations
+  // when writing test commands instead of falling back to "the user" / "the system".
+  const researchVocabBlock = (() => {
+    if (!context.tokenPack.present) return '';
+    const phaseRelevant = selectPhaseRelevant(context.extractions, phase.requirementIds);
+    const tp = context.tokenPack.categorized;
+    const lines: string[] = ['## Research vocabulary to use in this test script'];
+    if (phaseRelevant.actors.length) lines.push(`- Actors: ${phaseRelevant.actors.join(', ')}`);
+    if (phaseRelevant.entities.length) lines.push(`- Entities: ${phaseRelevant.entities.join(', ')}`);
+    if (tp.sampleIds.length) lines.push(`- Sample IDs (use these in inputs): ${tp.sampleIds.slice(0, 8).join(', ')}`);
+    if (phaseRelevant.workflows.length) lines.push(`- Workflows owned by this phase: ${phaseRelevant.workflows.join('; ')}`);
+    if (tp.regulatoryCitations.length) lines.push(`- Regulatory citations to check against: ${tp.regulatoryCitations.join(', ')}`);
+    if (phaseRelevant.risks.length) lines.push(`- Risks to verify: ${phaseRelevant.risks.slice(0, 2).join(' | ')}`);
+    if (lines.length === 1) return '';
+    lines.push('');
+    lines.push('Every test step below should reference one of these by name. Generic phrases like "the user", "the system", or "the record" are not acceptable.');
+    lines.push('');
+    return lines.join('\n');
+  })();
+
   return `# TEST_SCRIPT for ${phase.name}
 
 ## What this file is for
@@ -6881,7 +6966,7 @@ This file provides the concrete test steps for ${phase.name}. Run or follow thes
 ## Phase
 ${phase.name}
 
-## Phase requirement coverage
+${researchVocabBlock}## Phase requirement coverage
 - Phase type: ${phase.phaseType}
 - Requirement IDs owned by this phase: ${(phase.requirementIds && phase.requirementIds.length) ? phase.requirementIds.join(', ') : 'none'}
 - Sample data source: SAMPLE_DATA.md (root of workspace)
