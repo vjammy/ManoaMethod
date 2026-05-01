@@ -29,15 +29,9 @@ npm run create-project -- --input=examples/family-task-app.json --out=.tmp-demo 
 
 The synthesizer is deterministic and free but mechanical — it produces brief-derived extractions that pass the schema, but the depth comes from the brief, not from real domain research. Use it for tests; use Option A for real work.
 
-### Option C — deprecated archetype path
-
-```bash
-npm run create-project -- --input=examples/family-task-app.json --out=.tmp-demo --allow-templated
-```
-
-Skips research. The manifest is marked `lifecycleStatus: Blocked` and the audit caps the score below 85. Will be removed in Phase A3c.
-
 **You should see:** `Created artifact package at .tmp-demo/mvp-builder-workspace`.
+
+> Phase A3c removed the legacy `--allow-templated` keyword-router escape hatch. `create-project` requires `--research-from=<dir>` (Option A or Option B above). Workspaces generated without research extractions hit the generic baseline only through library callers (smoke/regression harnesses); end-user CLI runs strictly require research.
 
 A folder appears at `.tmp-demo/mvp-builder-workspace/` with phase folders, support folders (requirements, architecture, security, integrations, ui-ux), and root-level guides.
 

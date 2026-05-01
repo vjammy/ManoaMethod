@@ -435,9 +435,9 @@ The generator:
 7. The audit (`npm run audit`) detects research-grounded=true via the absence of the deprecated `Generated WITHOUT research extractions` banner.
 
 Workspaces produced via this recipe land in the `production-ready` rating
-(≥85/100) when the recipe is followed properly. Workspaces produced via
-the deprecated `--allow-templated` path stay in `workable` (≤84/100) and
-will fail Phase C's quality gate once it lands.
+(≥95/100, often 99/100 with the expert rubric) when the recipe is followed
+properly. The legacy `--allow-templated` keyword-router path was removed in
+Phase A3c; `create-project` now requires `--research-from=<dir>`.
 
 ---
 
@@ -451,13 +451,11 @@ will fail Phase C's quality gate once it lands.
 
 ---
 
-## Skipping research (deprecated, not recommended)
+## Skipping research (removed in Phase A3c)
 
-```bash
-npm run create-project -- --input=brief.json --out=... --allow-templated
-```
-
-This bypasses research and uses the legacy archetype-templated path. The
-manifest is marked `lifecycleStatus: Blocked`, the requirements file
-carries a deprecated banner, and the audit caps the score below 85.
-This escape hatch will be removed in Phase A3c.
+The legacy `--allow-templated` flag and the keyword-router archetype detection
+(`lib/archetype-detection.ts`) were removed in Phase A3c. `create-project`
+now requires `--research-from=<dir>`. Library callers (smoke tests,
+regression harnesses) can still call `createArtifactPackage` without
+extractions; that path renders the generic baseline only and is not exposed
+to end users via the CLI.

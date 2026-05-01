@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import JSZip from 'jszip';
 import { generateProjectBundle } from '../lib/generator';
 import { readExtractions } from '../lib/research/persistence';
+import type { ResearchExtractions } from '../lib/research/schema';
 import { baseProjectInput } from '../lib/templates';
 import type { ProjectInput } from '../lib/types';
 
@@ -73,15 +74,18 @@ export async function createArtifactPackage(options: {
   outDir: string;
   zip?: boolean | string;
   researchFrom?: string;
+  /** In-memory extractions (smoke/orchestrator harnesses use this to avoid round-tripping JSON to disk). */
+  extractions?: ResearchExtractions;
 }) {
   // Hydrate extractions if the caller passed --research-from. Library callers
-  // (smoke test, autoresearch, orchestrator harness) may omit it and fall back
-  // to the deprecated archetype-templated path; the CLI in main() enforces the
-  // research-required check so end users go through the recipe.
-  const extractions = options.researchFrom
+  // may also pass `extractions` in-memory. When neither is supplied we fall
+  // back to the legacy generic templated path; archetype keyword routing was
+  // removed in A3c, so the templated fallback always renders the 'general'
+  // baseline. The CLI in main() enforces --research-from for end users.
+  const extractions = options.extractions ?? (options.researchFrom
     ? readExtractions(path.resolve(options.researchFrom))
-    : undefined;
-  if (options.researchFrom && !extractions) {
+    : undefined);
+  if (options.researchFrom && !options.extractions && !extractions) {
     throw new Error(
       `[create-project] --research-from=${options.researchFrom} did not contain valid research/extracted/*.json. ` +
         `Run the research recipe first (docs/RESEARCH_RECIPE.md) or, in the harness, scripts/synthesize-research-ontology.ts.`
@@ -122,23 +126,19 @@ export async function createArtifactPackage(options: {
 async function main() {
   const input = loadInput(getArg('input'));
   const researchFrom = getArg('research-from');
-  const allowTemplatedFlag =
-    process.argv.includes('--allow-templated') || (getArg('allow-templated') || '').toLowerCase() === 'true';
 
-  // Phase A3a guardrail: the CLI now requires research extractions by default.
-  // Real users get them by running the recipe in docs/RESEARCH_RECIPE.md inside
-  // their coding agent (Claude Code, Codex, Kimi, OpenCode) and passing
-  // --research-from=<dir>. The harness uses scripts/synthesize-research-
-  // ontology.ts as a deterministic bridge. Pass --allow-templated to fall
-  // back to the deprecated archetype path during the A3 cutover.
-  if (!researchFrom && !allowTemplatedFlag) {
+  // Phase A3c: --research-from is required. The legacy --allow-templated escape
+  // hatch was removed; archetype keyword routing was deleted with it. Real users
+  // get extractions by running docs/RESEARCH_RECIPE.md inside their coding agent
+  // (Claude Code, Codex, Kimi, OpenCode); harnesses use
+  // scripts/synthesize-research-ontology.ts as a deterministic bridge.
+  if (!researchFrom) {
     console.error(
       '[create-project] research extractions are required.\n' +
         '  - Recommended: run the recipe in docs/RESEARCH_RECIPE.md inside your coding agent,\n' +
         '    then pass --research-from=<dir> pointing at the produced research/extracted/.\n' +
         '  - Harness/test: pass --research-from=<dir> after running\n' +
-        '    `tsx scripts/synthesize-research-ontology.ts --input=<brief.json> --out=<dir>`.\n' +
-        '  - Deprecated escape hatch (archetype templates): --allow-templated. Will be removed in A3c.'
+        '    `tsx scripts/synthesize-research-ontology.ts --input=<brief.json> --out=<dir>`.'
     );
     process.exit(1);
   }

@@ -1,6 +1,28 @@
 import { reconcileScoreWithLifecycle, scoreProject, withSemanticFit } from './scoring';
-import { detectArchetype, type ArchetypeDetection } from './archetype-detection';
 import { computeSemanticFit, type SemanticFit } from './semantic-fit';
+
+// Phase A3c: the keyword-router archetype detector (formerly lib/archetype-detection.ts)
+// is removed. Research extractions are the only source of truth for domain. Anything
+// that runs without extractions falls through to the 'general' archetype with no
+// keyword inference. ArchetypeDetection is retained as a stable shape for manifests
+// and scorecards that historically surfaced it; values are now constant.
+type ArchetypeDetectionMethod = 'fallback';
+type ArchetypeDetection = {
+  archetype: DomainArchetype;
+  confidence: number;
+  method: ArchetypeDetectionMethod;
+  matchedKeyword?: string;
+  rationale: string;
+  antiMatched?: string;
+  candidateScores: Array<{ archetype: DomainArchetype; score: number; topKeyword?: string }>;
+};
+const NEUTRAL_ARCHETYPE_DETECTION: ArchetypeDetection = {
+  archetype: 'general',
+  confidence: 1,
+  method: 'fallback',
+  rationale: 'Archetype keyword router removed (A3c). All workspaces use the general archetype; research extractions drive entities, actors, workflows when present.',
+  candidateScores: []
+};
 import type { ResearchExtractions } from './research/schema';
 import {
   buildResearchTokenPack,
@@ -902,20 +924,12 @@ function buildContext(input: ProjectInput, extractions?: ResearchExtractions): P
   const answers = input.questionnaireAnswers;
   const keywords = extractKeywords(input);
   const riskFlags = detectRiskFlags(input);
-  // Phase A3b: when research extractions are present, the keyword-router-based
-  // archetype decision becomes irrelevant. Pin it to 'general' so the archetype-
-  // specific code paths (quality checks, domain ontology fallbacks) don't fire
-  // on outputs the research path is already producing. The keyword router stays
-  // alive only for the deprecated --allow-templated path until A3c.
-  const archetypeDetection: ArchetypeDetection = extractions
-    ? {
-        archetype: 'general',
-        confidence: 1,
-        candidateScores: [],
-        method: 'fallback',
-        rationale: 'Pinned to general because research extractions are present (A3b).'
-      }
-    : detectArchetype(input);
+  // Phase A3c: archetype detection is removed. Every workspace uses the 'general'
+  // archetype; research extractions (when present) populate entities/actors/workflows
+  // through the research-token pack and the research-driven code paths below. The
+  // archetypeDetection field stays in ProjectContext for manifest stability but is
+  // a constant value.
+  const archetypeDetection: ArchetypeDetection = NEUTRAL_ARCHETYPE_DETECTION;
   const domainArchetype = archetypeDetection.archetype;
   const domainSignals = getDomainSignals(input, riskFlags);
   const uiRelevant = detectUiRelevance(input, domainArchetype);
@@ -7888,22 +7902,15 @@ function buildFinalScorecard(bundle?: ProjectBundle) {
 
 ## Why two scores
 
-Build readiness measures whether the workspace is structurally complete and well-formed (problem framing, audience clarity, workflow detail, constraints, implementation readiness, handoff completeness). Product fit measures whether the workspace actually describes the right product (risk coverage, acceptance quality, testability, semantic fit between brief and generated requirements).${bundle.hasResearchExtractions ? '' : ' High build readiness with low product fit means the workspace looks polished but may have been generated against the wrong domain archetype.'}
+Build readiness measures whether the workspace is structurally complete and well-formed (problem framing, audience clarity, workflow detail, constraints, implementation readiness, handoff completeness). Product fit measures whether the workspace actually describes the right product (risk coverage, acceptance quality, testability, semantic fit between brief and generated requirements).${bundle.hasResearchExtractions ? '' : ' High build readiness with low product fit means the workspace looks polished but the brief lacked research extractions to ground entities, actors, and workflows.'}
 
 ${bundle.hasResearchExtractions
     ? `## Source of truth
 
-This workspace was generated from research extractions in \`research/extracted/\`. Entities, actors, workflows, and requirements come from the research, not from a keyword-routed archetype template. The archetype tag is therefore pinned to \`general\` (informational only) and the legacy archetype-detection / Jaccard-confidence sections below do not apply.`
-    : `## Domain archetype detection
+This workspace was generated from research extractions in \`research/extracted/\`. Entities, actors, workflows, and requirements come from the research. Run \`npm run audit\` to verify the extractions hold up against the expert rubric and audit-exit criteria (see docs/RESEARCH_RECIPE.md).`
+    : `## Source of truth
 
-- Archetype picked: **${det.archetype}**
-- Method: ${det.method}
-- Confidence: ${det.confidence.toFixed(2)}
-${det.matchedKeyword ? `- Matched keyword: \`${det.matchedKeyword}\`` : ''}
-${det.antiMatched ? `- Anti-matched (vetoed): \`${det.antiMatched}\`` : ''}
-- Rationale: ${det.rationale}
-
-If the archetype above is wrong for this product, the generated phases, requirements, and entities are likely wrong. Adjust the brief or pick a closer example before regenerating.
+This workspace was generated **without research extractions** via the legacy templated path. The supported path is to run docs/RESEARCH_RECIPE.md inside your coding agent and regenerate with \`--research-from=<dir>\`. Without research, requirements and sample data use a generic baseline.
 
 ## Semantic fit between brief and generated requirements
 
@@ -7912,11 +7919,9 @@ If the archetype above is wrong for this product, the generated phases, requirem
 - Output tokens: ${fit.outputTokenCount}
 - Overlap tokens: ${fit.overlapTokenCount}
 
-The verdict combines this Jaccard score with the archetype-detection confidence above. The framework's templated requirements echo the must-have feature names verbatim, which gives every workspace a baseline overlap regardless of archetype, so Jaccard alone cannot separate "right archetype" from "wrong archetype" — it has to be paired with archetype confidence.
-
-- \`high\` — archetype confidence and overlap together suggest the requirements describe the same product as the brief.
-- \`low\` — Jaccard < 0.13 and archetype confidence < 0.6: the generated requirements may describe a related-but-different product.
-- \`critical\` — Jaccard < 0.10 and archetype confidence < 0.4: archetype routing likely failed; regenerate after fixing the brief or archetype.`}
+- \`high\` — overlap is healthy; the generic baseline mostly tracks the brief.
+- \`low\` — overlap is weak; produce research extractions before treating the package as build-capable.
+- \`critical\` — overlap is far below threshold; do not build from this workspace.`}
 
 ## Category breakdown
 
@@ -9550,55 +9555,35 @@ export function generateProjectBundle(
           semanticFit.verdict === 'critical'
             ? 'Generated requirements describe a different product'
             : 'Generated requirements drift from brief',
-        message: `Semantic fit between the brief and the generated FUNCTIONAL_REQUIREMENTS.md is ${semanticFit.score.toFixed(2)} (Jaccard token overlap). The picked archetype may be wrong for this product.`,
-        action:
-          'Review repo/manifest.json#archetypeDetection. If the archetype is wrong, adjust the brief (or override) and regenerate before treating the package as build-capable.',
+        message: `Semantic fit between the brief and the generated FUNCTIONAL_REQUIREMENTS.md is ${semanticFit.score.toFixed(2)} (Jaccard token overlap).`,
+        action: context.extractions
+          ? 'Re-run the research recipe to produce richer extractions, then regenerate the workspace.'
+          : 'Run docs/RESEARCH_RECIPE.md to produce research extractions before regenerating; templated generation is the deprecated path.',
         source: 'generator',
-        openQuestion: 'Is the picked domain archetype actually the right one for this product?',
-        assumption: `Archetype detected: ${context.archetypeDetection.archetype} (${context.archetypeDetection.method}, confidence ${context.archetypeDetection.confidence.toFixed(2)}).`
+        openQuestion: 'Are the brief and the generated requirements describing the same product?',
+        assumption: context.extractions
+          ? 'Research extractions are present; low semantic fit indicates thin extractions or a brief mismatch.'
+          : 'No research extractions are present; the workspace falls back to the generic templated path.'
       });
     }
   }
-  // Only emit the low-confidence warning when semantic-fit didn't already raise the alarm,
-  // to avoid double-counting the same underlying signal.
-  if (
-    context.archetypeDetection.confidence < 0.4 &&
-    context.archetypeDetection.method === 'keyword' &&
-    semanticFit.verdict === 'high'
-  ) {
-    const id = 'archetype-low-confidence';
-    if (!warnings.some((w) => w.id === id)) {
-      warnings.push({
-        id,
-        severity: 'warning',
-        title: 'Domain archetype low confidence',
-        message: `Picked ${context.archetypeDetection.archetype} on keyword "${context.archetypeDetection.matchedKeyword ?? 'n/a'}" with confidence ${context.archetypeDetection.confidence.toFixed(2)}.`,
-        action:
-          'Confirm the domain archetype before approving the package. If wrong, edit the brief or pick the closest matching example before regenerating.',
-        source: 'generator',
-        openQuestion: 'Does this archetype match the actual product?',
-        assumption: context.archetypeDetection.rationale
-      });
-    }
-  }
-  // Phase A3b: only warn about the generic-archetype fallback when research
-  // extractions are absent. With research present, the archetype tag is pinned
-  // to 'general' by design (research is the source of truth for entities,
-  // actors, workflows) and the generic-placeholder warning would be misleading.
-  if (context.archetypeDetection.archetype === 'general' && !context.extractions) {
+  // Phase A3c: warn when generation runs without research extractions. The
+  // research-driven path is the supported path; the templated path is legacy
+  // and produces a generic, low-quality baseline.
+  if (!context.extractions) {
     const id = 'archetype-general-fallback';
     if (!warnings.some((w) => w.id === id)) {
       warnings.push({
         id,
         severity: 'info',
-        title: 'Domain archetype is general (no specialized template)',
+        title: 'Generated without research extractions (legacy templated path)',
         message:
-          'No domain archetype anchored against this brief. Generated requirements, entities, and sample data will use generic placeholders rather than domain-specific terms.',
+          'No research extractions were provided. Generated requirements, entities, and sample data use the generic baseline rather than domain-specific terms.',
         action:
-          'Either accept the generic baseline and refine the requirements/entities by hand, or run docs/RESEARCH_RECIPE.md to produce research extractions before regenerating.',
+          'Run docs/RESEARCH_RECIPE.md inside your coding agent to produce research extractions, then regenerate with --research-from=<dir>.',
         source: 'generator',
         openQuestion: 'Is the generic baseline acceptable, or should research extractions be produced first?',
-        assumption: context.archetypeDetection.rationale
+        assumption: 'Research extractions are the supported source of truth for entities, actors, and workflows.'
       });
     }
   }
