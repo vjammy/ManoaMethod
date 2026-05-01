@@ -1496,7 +1496,7 @@ This folder turns the idea into build-ready requirements. It is the guardrail th
 `;
 }
 
-const FALLBACK_REQUIREMENTS_BANNER = `> ⚠️ Generated WITHOUT research extractions. Entities, actors, and sample data are templated from an 11-archetype keyword router and may not match the actual product. Run \`npm run research --input=<brief.json> --out=<workspace>\` and regenerate with \`--research-from=<workspace>\` before treating this workspace as build-ready.\n\n`;
+const FALLBACK_REQUIREMENTS_BANNER = `> ⚠️ DEPRECATED PATH. Generated via the archetype-template fallback. Research extractions are required for production-ready output. Run the recipe in docs/RESEARCH_RECIPE.md (in your coding agent) or scripts/synthesize-research-ontology.ts (harness only) and regenerate with \`--research-from=<dir>\`. The archetype path will be removed once A3c completes.\n\n`;
 
 function buildFunctionalRequirements(input: ProjectInput, context: ProjectContext) {
   if (context.extractions) {
