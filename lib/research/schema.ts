@@ -165,6 +165,69 @@ export type Conflict = {
   sources: SourceRef[];
 };
 
+// ---------- screens (Phase E2) ----------
+
+export type ScreenSectionKind = 'header' | 'list' | 'form' | 'detail' | 'summary' | 'navigation';
+
+export type ScreenSection = {
+  kind: ScreenSectionKind;
+  title: string;
+  purpose: string;
+};
+
+export type ScreenFieldKind = 'input' | 'display' | 'action';
+
+export type ScreenField = {
+  name: string;
+  kind: ScreenFieldKind;
+  label: string;
+  refEntityField?: string;     // "<entityId>.<fieldName>" reference to lib data model
+  validation?: string;
+  copy?: string;
+};
+
+export type ScreenStates = {
+  empty: string;
+  loading: string;
+  error: string;
+  populated: string;
+};
+
+export type ScreenActionKind = 'primary' | 'secondary' | 'destructive' | 'navigation';
+
+export type ScreenAction = {
+  label: string;
+  kind: ScreenActionKind;
+  refWorkflowStep?: string;    // "<workflowId>:<stepOrder>"
+  navTo?: string;              // screen id
+};
+
+export type ScreenNavRef = {
+  screen: string;              // screen id
+  via: string;                 // action label or workflow step
+};
+
+export type Screen = WithProvenance & {
+  name: string;
+  route: string;
+  primaryActor: string;        // actor id
+  secondaryActors: string[];   // actor ids
+  purpose: string;
+  sections: ScreenSection[];
+  fields: ScreenField[];
+  states: ScreenStates;
+  actions: ScreenAction[];
+  navIn: ScreenNavRef[];
+  navOut: ScreenNavRef[];
+};
+
+export type UxFlowEdge = {
+  fromScreen: string;          // screen id
+  toScreen: string;            // screen id
+  viaAction: string;           // action label or workflow step
+  condition?: string;          // optional guard / branch description
+};
+
 export type RemovedItem = {
   itemType: 'actor' | 'entity' | 'workflow' | 'integration' | 'risk' | 'gate' | 'anti-feature';
   itemId: string;
@@ -217,6 +280,10 @@ export type ResearchExtractions = {
   antiFeatures: AntiFeature[];
   conflicts: Conflict[];
   removed: RemovedItem[];
+  /** Phase E2: optional screen catalog. Generated into ui-ux/screens/*.md when present. */
+  screens?: Screen[];
+  /** Phase E2: optional UX-flow edges between screens. Generated into ui-ux/UX_FLOW.md. */
+  uxFlow?: UxFlowEdge[];
 };
 
 // ---------- validators ----------
@@ -307,6 +374,24 @@ export function validateExtractions(data: unknown): ValidationIssue[] {
   const actorIds = new Set((d.actors ?? []).map((a) => a.id));
   const entityIds = new Set((d.entities ?? []).map((e) => e.id));
   const gateIds = new Set((d.gates ?? []).map((g) => g.id));
+
+  // Phase E2: optional screens carry provenance and reference actor IDs.
+  if (Array.isArray(d.screens)) {
+    d.screens.forEach((s, i) => {
+      validateProvenance(s as unknown as Record<string, unknown>, `screens[${i}]`, issues);
+      pushIfBad(issues, actorIds.has(s.primaryActor), `screens[${i}].primaryActor`, `unknown actor "${s.primaryActor}"`);
+      (s.secondaryActors ?? []).forEach((aid, j) => {
+        pushIfBad(issues, actorIds.has(aid), `screens[${i}].secondaryActors[${j}]`, `unknown actor "${aid}"`);
+      });
+    });
+    const screenIds = new Set(d.screens.map((s) => s.id));
+    if (Array.isArray(d.uxFlow)) {
+      d.uxFlow.forEach((e, i) => {
+        pushIfBad(issues, screenIds.has(e.fromScreen), `uxFlow[${i}].fromScreen`, `unknown screen "${e.fromScreen}"`);
+        pushIfBad(issues, screenIds.has(e.toScreen), `uxFlow[${i}].toScreen`, `unknown screen "${e.toScreen}"`);
+      });
+    }
+  }
 
   (d.entities ?? []).forEach((entity, i) => {
     entity.ownerActors.forEach((aid, j) => {

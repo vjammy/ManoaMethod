@@ -30,6 +30,8 @@ research/
     actors.json              (Actor[])
     entities.json            (Entity[])
     workflows.json           (Workflow[])
+    screens.json             (Screen[]) — Phase E2, optional
+    uxFlow.json              (UxFlowEdge[]) — Phase E2, optional
     integrations.json        (Integration[])
     risks.json               (Risk[])
     gates.json               (Gate[])
@@ -158,6 +160,48 @@ For each workflow:
 - Every step's `actor` is in `actors.json`.
 - Every `entitiesTouched` is in `entities.json`.
 - `failureModes[].mitigation` is concrete, not "handle gracefully".
+
+### Pass 4.5: Screens → `screens.json` (Phase E2)
+
+**Goal:** every distinct screen the user sees. Each screen is the place a workflow step (or set of steps) actually happens.
+
+For each screen:
+- `id`: stable kebab-case (`screen-lead-detail`, `screen-cadence-runner`).
+- `name`: human-readable, in title case.
+- `route`: URL path with parameter placeholders (`/leads/:id`, `/dashboard`).
+- `primaryActor`: actor ID from Pass 2.
+- `secondaryActors[]`: other actors who reach this screen, ID-referenced.
+- `purpose`: one sentence covering why the screen exists. Mention the workflow it serves.
+- `sections[]`: 2–5 sections, each `{ kind: 'header'|'list'|'form'|'detail'|'summary'|'navigation', title, purpose }`.
+- `fields[]`: each `{ name, kind: 'input'|'display'|'action', label, refEntityField?: '<entityId>.<fieldName>', validation?, copy? }`. Tie display fields to entity field IDs verbatim — the audit cross-checks them.
+- `states`: object with non-empty strings for `empty`, `loading`, `error`, `populated`. The audit `screen-depth` dimension caps the score if any of these is missing.
+- `actions[]`: 1–3 buttons, each `{ label, kind: 'primary'|'secondary'|'destructive'|'navigation', refWorkflowStep?: '<workflowId>:<order>', navTo?: '<screenId>' }`.
+- `navIn[]`, `navOut[]`: `{ screen: '<screenId>', via: '<action label>' }`. Inbound and outbound must be symmetric across screens — the audit credits symmetry.
+
+**Validation rules:**
+- ≥ 1 entry / authentication screen.
+- ≥ 1 dashboard or list screen per primary actor.
+- ≥ 1 detail screen per primary entity.
+- ≥ 1 screen per workflow that takes user input.
+- Every action's `refWorkflowStep` resolves to a real `workflowId:stepOrder`.
+- Every action's `navTo` and every nav entry's `screen` resolves to an existing screen ID.
+
+### Pass 4.7: UX flow → `uxFlow.json` (Phase E2)
+
+**Goal:** the directed graph of screen transitions. The generator emits this as a Mermaid state diagram in `ui-ux/UX_FLOW.md`.
+
+For each edge:
+- `fromScreen`: screen ID (must exist in `screens.json`).
+- `toScreen`: screen ID (must exist in `screens.json`).
+- `viaAction`: action label (typically the button copy on `fromScreen` that triggers the navigation, or the workflow step name).
+- `condition`: optional guard like `lead.stage === 'qualified'` or `validation.passed`.
+
+**Validation rules:**
+- ≥ 1 edge from the entry screen.
+- No orphans: every non-entry screen has at least one inbound edge.
+- No dead ends: every non-terminal screen has at least one outbound edge.
+
+If you don't fill `uxFlow.json`, the generator falls back to `screens[].navOut`, but populating `uxFlow.json` lets you encode conditional navigation that screen-level metadata can't express.
 
 ### Pass 5: Risks → `risks.json`
 

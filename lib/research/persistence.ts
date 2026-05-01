@@ -55,6 +55,9 @@ export function writeResearchToWorkspace(workspaceRoot: string, result: LoopResu
   writeJson(path.join(root, 'extracted', 'antiFeatures.json'), result.extractions.antiFeatures);
   writeJson(path.join(root, 'extracted', 'conflicts.json'), result.extractions.conflicts);
   writeJson(path.join(root, 'extracted', '_removed.json'), result.extractions.removed);
+  // Phase E2: optional artifacts. Write empty arrays so downstream readers see the keys consistently.
+  writeJson(path.join(root, 'extracted', 'screens.json'), result.extractions.screens ?? []);
+  writeJson(path.join(root, 'extracted', 'uxFlow.json'), result.extractions.uxFlow ?? []);
 }
 
 function writePass(root: string, topic: 'use-case' | 'domain', pass: PassRecord) {
@@ -92,6 +95,15 @@ export function readExtractions(workspaceRoot: string): ResearchExtractions | nu
   const root = path.join(workspaceRoot, 'research', 'extracted');
   if (!fs.existsSync(path.join(root, 'meta.json'))) return null;
   const read = <T>(name: string): T => JSON.parse(fs.readFileSync(path.join(root, name), 'utf8')) as T;
+  const optional = <T>(name: string): T | undefined => {
+    const p = path.join(root, name);
+    if (!fs.existsSync(p)) return undefined;
+    try {
+      return JSON.parse(fs.readFileSync(p, 'utf8')) as T;
+    } catch {
+      return undefined;
+    }
+  };
   try {
     const e: ResearchExtractions = {
       meta: read('meta.json'),
@@ -103,7 +115,9 @@ export function readExtractions(workspaceRoot: string): ResearchExtractions | nu
       gates: read('gates.json'),
       antiFeatures: read('antiFeatures.json'),
       conflicts: read('conflicts.json'),
-      removed: read('_removed.json')
+      removed: read('_removed.json'),
+      screens: optional('screens.json'),
+      uxFlow: optional('uxFlow.json')
     };
     return e;
   } catch {

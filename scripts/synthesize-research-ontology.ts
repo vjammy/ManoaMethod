@@ -35,7 +35,12 @@ import type {
   ResearchExtractions,
   ResearchMeta,
   Risk,
+  Screen,
+  ScreenAction,
+  ScreenField,
+  ScreenSection,
   SourceRef,
+  UxFlowEdge,
   Workflow,
   WorkflowFailure,
   WorkflowStep
@@ -459,6 +464,263 @@ function deriveConflicts(): Conflict[] {
 }
 
 // ---------- top-level ----------
+// ---------- screens (Phase E2) ----------
+
+function deriveScreens(
+  input: ProjectInput,
+  actors: Actor[],
+  entities: Entity[],
+  workflows: Workflow[]
+): Screen[] {
+  const out: Screen[] = [];
+  const primaryActor = actors[0]?.id || 'actor-primary-user';
+  const primaryEntity = entities[0];
+
+  // Entry screen — sign-in / orient
+  out.push(
+    withProvenance(
+      {
+        name: `${input.productName} entry`,
+        route: '/',
+        primaryActor,
+        secondaryActors: actors.filter((a) => a.id !== primaryActor).map((a) => a.id),
+        purpose: `Authenticate and orient the user before any ${input.productName} workflow begins.`,
+        sections: [
+          { kind: 'header', title: 'Welcome', purpose: `Restate the value of ${input.productName} in one sentence.` },
+          { kind: 'form', title: 'Sign in', purpose: 'Capture credentials or magic-link request.' },
+          { kind: 'navigation', title: 'Continue', purpose: 'Route the authenticated user to the dashboard.' }
+        ] as ScreenSection[],
+        fields: [
+          { name: 'email', kind: 'input', label: 'Work email', validation: 'required, email format', copy: 'We use this only to send the sign-in link.' },
+          { name: 'continueButton', kind: 'action', label: 'Continue', copy: 'Sign in to continue.' }
+        ] as ScreenField[],
+        states: {
+          empty: 'Show the welcome message, single email field, and one continue button.',
+          loading: 'Disable the continue button and show "Sending sign-in link…".',
+          error: 'Show the email field with the validation error inline; keep the form usable.',
+          populated: 'On success, redirect to the dashboard.'
+        },
+        actions: [
+          { label: 'Continue', kind: 'primary', navTo: 'screen-dashboard' }
+        ] as ScreenAction[],
+        navIn: [],
+        navOut: [{ screen: 'screen-dashboard', via: 'Continue' }]
+      },
+      {
+        id: 'screen-entry',
+        origin: 'use-case',
+        sources: [briefSourceRef(input, `Entry experience for ${input.productName}`)]
+      }
+    )
+  );
+
+  // Dashboard screen — single source of "what's next"
+  out.push(
+    withProvenance(
+      {
+        name: `${input.productName} dashboard`,
+        route: '/dashboard',
+        primaryActor,
+        secondaryActors: actors.filter((a) => a.id !== primaryActor).map((a) => a.id),
+        purpose: `Single screen the actor lands on; surfaces the next action and recent ${primaryEntity?.name || 'records'}.`,
+        sections: [
+          { kind: 'header', title: 'Greeting and next action', purpose: 'Tell the actor what to do next.' },
+          { kind: 'list', title: `Recent ${primaryEntity?.name || 'records'}`, purpose: `Show the latest ${primaryEntity?.name || 'records'} owned by the actor.` },
+          { kind: 'summary', title: 'Status summary', purpose: 'Show counts grouped by status enum.' }
+        ] as ScreenSection[],
+        fields: primaryEntity
+          ? primaryEntity.fields.slice(0, 4).map((f) => ({
+              name: f.name,
+              kind: 'display' as const,
+              label: titleCase(f.name),
+              refEntityField: `${primaryEntity.id}.${f.name}`,
+              copy: f.description
+            })) as ScreenField[]
+          : [],
+        states: {
+          empty: `No ${primaryEntity?.name || 'records'} yet — show a primary call to create the first one.`,
+          loading: 'Skeleton rows for the recent list; counts show "—".',
+          error: 'Show a banner with the failure reason; keep the create action usable.',
+          populated: `Show recent ${primaryEntity?.name || 'records'} sorted by most recent, plus per-status counts.`
+        },
+        actions: [
+          { label: `Create ${primaryEntity?.name || 'record'}`, kind: 'primary', navTo: 'screen-create' },
+          { label: `Open ${primaryEntity?.name || 'record'}`, kind: 'navigation', navTo: 'screen-detail' }
+        ] as ScreenAction[],
+        navIn: [{ screen: 'screen-entry', via: 'Continue' }],
+        navOut: [
+          { screen: 'screen-create', via: `Create ${primaryEntity?.name || 'record'}` },
+          { screen: 'screen-detail', via: `Open ${primaryEntity?.name || 'record'}` }
+        ]
+      },
+      {
+        id: 'screen-dashboard',
+        origin: 'use-case',
+        sources: [briefSourceRef(input, `Dashboard for ${input.productName}`)]
+      }
+    )
+  );
+
+  // One screen per workflow (the "do the workflow" surface)
+  for (let i = 0; i < workflows.length; i += 1) {
+    const wf = workflows[i];
+    const wfActor = wf.primaryActor || primaryActor;
+    const wfEntityId = wf.entitiesTouched[0];
+    const wfEntity = wfEntityId ? entities.find((e) => e.id === wfEntityId) : primaryEntity;
+    const inputStep = wf.steps.find((s) => /\b(create|edit|enroll|capture|log|update|qualify|approve|review|set|mark)\b/i.test(s.action));
+    const screenId = `screen-${slug(wf.name).slice(0, 24) || `workflow-${i + 1}`}-${i + 1}`;
+    const fields: ScreenField[] = wfEntity
+      ? wfEntity.fields.slice(0, 6).map((f) => ({
+          name: f.name,
+          kind: 'input' as const,
+          label: titleCase(f.name),
+          refEntityField: `${wfEntity.id}.${f.name}`,
+          validation: f.required ? 'required' : 'optional',
+          copy: f.description
+        }))
+      : [];
+    if (inputStep) {
+      fields.push({
+        name: 'submit',
+        kind: 'action',
+        label: inputStep.action.length > 40 ? `${inputStep.action.slice(0, 37)}…` : inputStep.action,
+        copy: inputStep.systemResponse
+      });
+    }
+    out.push(
+      withProvenance(
+        {
+          name: `${wf.name} screen`,
+          route: `/${slug(wf.name).slice(0, 24)}`,
+          primaryActor: wfActor,
+          secondaryActors: wf.secondaryActors,
+          purpose: `Surface where the actor performs ${wf.name}. ${wf.acceptancePattern}`,
+          sections: [
+            { kind: 'header', title: wf.name, purpose: 'Title plus a one-line intent.' },
+            { kind: 'form', title: 'Inputs', purpose: `Capture the fields required to advance ${wf.name}.` },
+            { kind: 'detail', title: 'Outcome', purpose: 'Show the system response after the action.' },
+            { kind: 'navigation', title: 'Next', purpose: 'Either return to dashboard or proceed to detail.' }
+          ] as ScreenSection[],
+          fields,
+          states: {
+            empty: `Show the form pre-populated only with safe defaults from research; ${primaryEntity?.name || 'record'} not yet created.`,
+            loading: 'Disable the primary action while the system response is in flight.',
+            error: wf.failureModes[0]
+              ? `Surface the trigger "${wf.failureModes[0].trigger}" inline with the researched mitigation message.`
+              : 'Show a clear validation banner naming the failing field.',
+            populated: 'Show the persisted record with the resulting state and a link to the detail screen.'
+          },
+          actions: [
+            { label: inputStep ? inputStep.action.slice(0, 40) : `Run ${wf.name}`, kind: 'primary', refWorkflowStep: inputStep ? `${wf.id}:${inputStep.order}` : `${wf.id}:1`, navTo: 'screen-detail' },
+            { label: 'Back to dashboard', kind: 'secondary', navTo: 'screen-dashboard' }
+          ] as ScreenAction[],
+          navIn: [{ screen: 'screen-dashboard', via: 'Open workflow' }],
+          navOut: [
+            { screen: 'screen-detail', via: inputStep ? inputStep.action.slice(0, 40) : 'Continue' },
+            { screen: 'screen-dashboard', via: 'Back to dashboard' }
+          ]
+        },
+        {
+          id: screenId,
+          origin: 'use-case',
+          sources: [briefSourceRef(input, `Screen for ${wf.name}`)]
+        }
+      )
+    );
+  }
+
+  // One detail screen per primary entity (capped at 3 to keep scope honest)
+  for (const e of entities.slice(0, 3)) {
+    const fields: ScreenField[] = e.fields.slice(0, 8).map((f) => ({
+      name: f.name,
+      kind: 'display' as const,
+      label: titleCase(f.name),
+      refEntityField: `${e.id}.${f.name}`,
+      copy: f.description
+    }));
+    out.push(
+      withProvenance(
+        {
+          name: `${e.name} detail`,
+          route: `/${slug(e.name)}/:id`,
+          primaryActor,
+          secondaryActors: actors.filter((a) => a.id !== primaryActor).map((a) => a.id),
+          purpose: `Show one ${e.name} record with all fields visible and history of edits.`,
+          sections: [
+            { kind: 'header', title: 'Record header', purpose: `Show ${e.name} title and current state.` },
+            { kind: 'detail', title: 'Fields', purpose: 'Read-only view of the entity fields.' },
+            { kind: 'list', title: 'Audit history', purpose: 'Show recent changes from Audit Entry records.' }
+          ] as ScreenSection[],
+          fields,
+          states: {
+            empty: `Record not found — show a "Back to dashboard" link and the requested ID.`,
+            loading: 'Skeleton rows for fields and audit history.',
+            error: 'Show the failure reason inline; offer a retry.',
+            populated: 'Show all fields with their values and the last 5 audit entries.'
+          },
+          actions: [
+            { label: 'Edit', kind: 'primary', navTo: 'screen-dashboard' },
+            { label: 'Back to dashboard', kind: 'secondary', navTo: 'screen-dashboard' }
+          ] as ScreenAction[],
+          navIn: [{ screen: 'screen-dashboard', via: `Open ${e.name}` }],
+          navOut: [{ screen: 'screen-dashboard', via: 'Back to dashboard' }]
+        },
+        {
+          id: `screen-detail-${slug(e.name)}`,
+          origin: 'use-case',
+          sources: [briefSourceRef(input, `Detail for ${e.name}`)]
+        }
+      )
+    );
+  }
+
+  // Map any navTo: 'screen-detail' / 'screen-create' literal refs to actual screen ids when present.
+  const detailScreen = out.find((s) => s.id.startsWith('screen-detail-'));
+  const firstWorkflowScreen = out.find((s) => s.id !== 'screen-entry' && s.id !== 'screen-dashboard' && !s.id.startsWith('screen-detail-'));
+
+  for (const s of out) {
+    for (const a of s.actions) {
+      if (a.navTo === 'screen-create' && firstWorkflowScreen) a.navTo = firstWorkflowScreen.id;
+      if (a.navTo === 'screen-detail' && detailScreen) a.navTo = detailScreen.id;
+    }
+    for (const n of s.navOut) {
+      if (n.screen === 'screen-create' && firstWorkflowScreen) n.screen = firstWorkflowScreen.id;
+      if (n.screen === 'screen-detail' && detailScreen) n.screen = detailScreen.id;
+    }
+  }
+
+  // Populate navIn[] from every other screen's navOut so the audit credits symmetry.
+  // We rebuild navIn for each screen as: ∀ s', for each entry in s'.navOut targeting s, add {screen: s'.id, via}.
+  for (const s of out) {
+    const incoming: typeof s.navIn = [];
+    for (const other of out) {
+      if (other.id === s.id) continue;
+      for (const n of other.navOut) {
+        if (n.screen === s.id) {
+          incoming.push({ screen: other.id, via: n.via });
+        }
+      }
+    }
+    s.navIn = incoming;
+  }
+
+  return out;
+}
+
+function deriveUxFlow(screens: Screen[]): UxFlowEdge[] {
+  const edges: UxFlowEdge[] = [];
+  for (const s of screens) {
+    for (const out of s.navOut) {
+      edges.push({
+        fromScreen: s.id,
+        toScreen: out.screen,
+        viaAction: out.via
+      });
+    }
+  }
+  return edges;
+}
+
 export function synthesizeExtractions(input: ProjectInput): ResearchExtractions {
   const actors = deriveActors(input);
   const entities = deriveEntities(input, actors);
@@ -468,6 +730,8 @@ export function synthesizeExtractions(input: ProjectInput): ResearchExtractions 
   const gates = deriveGates(input, risks);
   const antiFeatures = deriveAntiFeatures(input);
   const conflicts = deriveConflicts();
+  const screens = deriveScreens(input, actors, entities, workflows);
+  const uxFlow = deriveUxFlow(screens);
 
   const briefHash = crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex');
   const meta: ResearchMeta = {
@@ -493,7 +757,9 @@ export function synthesizeExtractions(input: ProjectInput): ResearchExtractions 
     gates,
     antiFeatures,
     conflicts,
-    removed: []
+    removed: [],
+    screens,
+    uxFlow
   };
 }
 
@@ -553,6 +819,9 @@ export function writeSynthesizedToWorkspace(workspaceRoot: string, input: Projec
   writeJson(path.join(root, 'extracted', 'antiFeatures.json'), ex.antiFeatures);
   writeJson(path.join(root, 'extracted', 'conflicts.json'), ex.conflicts);
   writeJson(path.join(root, 'extracted', '_removed.json'), ex.removed);
+  // Phase E2: optional screens + uxFlow.
+  writeJson(path.join(root, 'extracted', 'screens.json'), ex.screens ?? []);
+  writeJson(path.join(root, 'extracted', 'uxFlow.json'), ex.uxFlow ?? []);
 }
 
 function main() {

@@ -712,6 +712,17 @@ type ResearchExtractsLite = {
   risks: Array<{ category: string; description: string; mitigation: string; affectedEntities: string[] }>;
   gates: Array<{ name: string; mandatedBy: string; mandatedByDetail?: string; evidenceRequired: string[] }>;
   antiFeatures: Array<{ description: string }>;
+  screens?: Array<{
+    id: string;
+    name: string;
+    sections: Array<{ kind: string; title: string }>;
+    fields: Array<{ name: string; kind: string; refEntityField?: string }>;
+    states: { empty: string; loading: string; error: string; populated: string };
+    actions: Array<{ label: string; kind: string; navTo?: string; refWorkflowStep?: string }>;
+    navIn: Array<{ screen: string }>;
+    navOut: Array<{ screen: string }>;
+  }>;
+  uxFlow?: Array<{ fromScreen: string; toScreen: string; viaAction: string }>;
 };
 
 function loadExtracts(packageRoot: string): ResearchExtractsLite | undefined {
@@ -730,7 +741,9 @@ function loadExtracts(packageRoot: string): ResearchExtractsLite | undefined {
     workflows: (safe('workflows.json') as ResearchExtractsLite['workflows']) || [],
     risks: (safe('risks.json') as ResearchExtractsLite['risks']) || [],
     gates: (safe('gates.json') as ResearchExtractsLite['gates']) || [],
-    antiFeatures: (safe('antiFeatures.json') as ResearchExtractsLite['antiFeatures']) || []
+    antiFeatures: (safe('antiFeatures.json') as ResearchExtractsLite['antiFeatures']) || [],
+    screens: (safe('screens.json') as ResearchExtractsLite['screens']) || undefined,
+    uxFlow: (safe('uxFlow.json') as ResearchExtractsLite['uxFlow']) || undefined
   };
 }
 
@@ -984,6 +997,84 @@ function expertRealisticSampleData(ex: ResearchExtractsLite): ExpertScore {
   return { name: 'realistic-sample-data', score: Math.min(5, score), max: 5, evidence, cap };
 }
 
+// E6 (Phase E2). screen-depth (max 10) — only scored when extractions include screens.
+function expertScreenDepth(ex: ResearchExtractsLite, packageRoot: string): ExpertScore | undefined {
+  if (!ex.screens || ex.screens.length === 0) return undefined;
+  const evidence: string[] = [];
+  let score = 0;
+
+  const totalScreens = ex.screens.length;
+  const totalSections = ex.screens.reduce((s, x) => s + (x.sections?.length || 0), 0);
+  const totalFields = ex.screens.reduce((s, x) => s + (x.fields?.length || 0), 0);
+  const totalActions = ex.screens.reduce((s, x) => s + (x.actions?.length || 0), 0);
+  evidence.push(
+    `screens: ${totalScreens}, avg sections=${(totalSections / totalScreens).toFixed(1)}, avg fields=${(totalFields / totalScreens).toFixed(1)}, avg actions=${(totalActions / totalScreens).toFixed(1)}`
+  );
+
+  // Reward avg section/field/action depth (up to 4 points)
+  const avgSections = totalSections / totalScreens;
+  const avgFields = totalFields / totalScreens;
+  const avgActions = totalActions / totalScreens;
+  if (avgSections >= 3) score += 1;
+  if (avgFields >= 4) score += 2;
+  if (avgActions >= 2) score += 1;
+
+  // All four states must be filled per screen (up to 2 points). If any screen
+  // is missing a state, the screen is partially scored.
+  const stateKeys: Array<keyof ResearchExtractsLite['screens'] extends Array<infer S> ? (S extends { states: infer T } ? keyof T : never) : never> =
+    ['empty', 'loading', 'error', 'populated'] as never[];
+  let fullyStated = 0;
+  for (const screen of ex.screens) {
+    let filled = 0;
+    for (const k of stateKeys) {
+      if ((screen.states as unknown as Record<string, unknown>)?.[k as string]) filled += 1;
+    }
+    if (filled === 4) fullyStated += 1;
+  }
+  evidence.push(`screens with all four states defined: ${fullyStated}/${totalScreens}`);
+  if (fullyStated === totalScreens) score += 2;
+  else if (fullyStated >= totalScreens * 0.8) score += 1;
+
+  // Navigation symmetry: every action with navTo should have a matching navOut entry, and
+  // every navOut should be reachable as a navIn on the target screen (up to 2 points).
+  let symmetricEdges = 0;
+  let totalEdges = 0;
+  for (const s of ex.screens) {
+    for (const out of s.navOut || []) {
+      totalEdges += 1;
+      const target = ex.screens.find((x) => x.id === out.screen);
+      if (target && (target.navIn || []).some((i) => i.screen === s.id)) symmetricEdges += 1;
+    }
+  }
+  evidence.push(`navigation edges: ${totalEdges}, symmetric: ${symmetricEdges}`);
+  if (totalEdges > 0) {
+    const ratio = symmetricEdges / totalEdges;
+    if (ratio >= 0.8) score += 2;
+    else if (ratio >= 0.5) score += 1;
+  }
+
+  // UX_FLOW.md presence (1 point)
+  const uxFlowPresent = fs.existsSync(path.join(packageRoot, 'ui-ux/UX_FLOW.md'));
+  if (uxFlowPresent) score += 1;
+  evidence.push(`ui-ux/UX_FLOW.md present: ${uxFlowPresent}`);
+
+  // Per-screen specs present (already 0/1 contributed; cap on missing files)
+  let specFilesPresent = 0;
+  for (const s of ex.screens) {
+    if (fs.existsSync(path.join(packageRoot, 'ui-ux', 'screens', `${s.id}.md`))) specFilesPresent += 1;
+  }
+  evidence.push(`per-screen spec files present: ${specFilesPresent}/${totalScreens}`);
+
+  // Cap when ≥1 screen is missing all four states (the empty/loading/error/populated contract)
+  const missingStates = totalScreens - fullyStated;
+  const cap =
+    missingStates > 0 && missingStates / totalScreens >= 0.5
+      ? { applied: 89, reason: `${missingStates}/${totalScreens} screens missing required state contract (empty/loading/error/populated)` }
+      : undefined;
+
+  return { name: 'screen-depth', score: Math.min(10, score), max: 10, evidence, cap };
+}
+
 function evaluateExpertRubric(packageRoot: string): NonNullable<AuditResult['expert']> | undefined {
   const ex = loadExtracts(packageRoot);
   if (!ex) return undefined;
@@ -995,6 +1086,8 @@ function evaluateExpertRubric(packageRoot: string): NonNullable<AuditResult['exp
     expertRegulatoryMapping(ex, packageRoot),
     expertRealisticSampleData(ex)
   ];
+  const screenDepth = expertScreenDepth(ex, packageRoot);
+  if (screenDepth) dims.push(screenDepth);
 
   // Bonus: bonus = round(rawTotal / sumMax × 8). 8-point ceiling because 92 base + 8 = 100.
   const rawTotal = dims.reduce((s, d) => s + d.score, 0);

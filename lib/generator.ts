@@ -32,6 +32,8 @@ import {
 } from './generator/research-token-pack';
 import { renderPermissionMatrixMarkdown } from './generator/permission-matrix';
 import { renderRegulatoryNotesMarkdown } from './generator/regulatory-notes';
+import { renderAllScreenSpecs, renderScreenInventoryMarkdown } from './generator/screen-specs';
+import { renderUxFlowMarkdown } from './generator/ux-flow';
 import { buildQuestionPrompts, CORE_AGENT_OPERATING_RULES, getProfileConfig, slugify } from './templates';
 import {
   buildDomainOntology,
@@ -9279,6 +9281,14 @@ function createGeneratedFiles(bundle: ProjectBundle, input: ProjectInput, contex
   if (context.extractions) {
     add('requirements/PERMISSION_MATRIX.md', renderPermissionMatrixMarkdown(context.extractions));
     add('requirements/REGULATORY_NOTES.md', renderRegulatoryNotesMarkdown(context.extractions));
+    // Phase E2: per-screen specs + UX flow when the recipe extracted screens.
+    if (context.extractions.screens && context.extractions.screens.length) {
+      add('ui-ux/SCREEN_INVENTORY.md', renderScreenInventoryMarkdown(context.extractions));
+      add('ui-ux/UX_FLOW.md', renderUxFlowMarkdown(context.extractions));
+      for (const file of renderAllScreenSpecs(context.extractions)) {
+        add(file.path, file.content);
+      }
+    }
   }
   add('requirements/OPEN_QUESTIONS.md', buildOpenQuestions(input, context));
   add('requirements/REQUIREMENTS_RISK_REVIEW.md', buildRequirementsRiskReview(input, context));
@@ -9308,7 +9318,12 @@ function createGeneratedFiles(bundle: ProjectBundle, input: ProjectInput, contex
   add('architecture/ARCHITECTURE_GATE.md', buildArchitectureGate());
   add('ui-ux/UI_UX_START_HERE.md', buildUiUxStartHere(input, context, uiWorkflows));
   add('ui-ux/USER_WORKFLOWS.md', `# USER_WORKFLOWS\n\n${uiWorkflows.map(renderUiWorkflowMarkdown).join('\n')}`);
-  add('ui-ux/SCREEN_INVENTORY.md', `# SCREEN_INVENTORY\n\n${uiScreens.map(renderUiScreenMarkdown).join('\n')}`);
+  // Phase E2: when research extractions include screens, the per-screen specs
+  // and a research-driven SCREEN_INVENTORY.md are already emitted above. Skip
+  // the templated inventory in that case so it doesn't overwrite the richer one.
+  if (!(context.extractions?.screens && context.extractions.screens.length)) {
+    add('ui-ux/SCREEN_INVENTORY.md', `# SCREEN_INVENTORY\n\n${uiScreens.map(renderUiScreenMarkdown).join('\n')}`);
+  }
   add('ui-ux/UX_REVIEW_CHECKLIST.md', buildUxReviewChecklist(context));
   add('ui-ux/UI_IMPLEMENTATION_GUIDE.md', buildUiImplementationGuide(input, context, uiScreens));
   add('ui-ux/ACCESSIBILITY_CHECKLIST.md', buildAccessibilityChecklist());
