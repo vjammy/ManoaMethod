@@ -18,7 +18,7 @@ The MVP Builder is **release-ready** as a research-driven workspace generator. T
 - Audit-exit end-to-end test (E2): **retry budget exhausts cleanly when threshold is impossible**
 - All workspace assertions in smoke and quality-regression now travel the research-driven path.
 
-Recommendation: **RELEASE CANDIDATE WITH MINOR DOC ISSUES** (the archetype-specific dead branches in `lib/generator.ts` are unreachable but not yet deleted; tracked as a follow-up in `A3C_ARCHETYPE_CLEANUP_REPORT.md`).
+Recommendation: **RELEASE CANDIDATE WITH MINOR DOC ISSUES** at the time this report was written. **Updated to RELEASE CANDIDATE** in `A3C_FINAL_HARDENING_REPORT.md` after the dead archetype branches in `lib/generator.ts` were removed and a fresh 50-iteration aggregate landed at mean 98 / min 97 / max 99 with 50/50 all-green steps.
 
 ---
 
@@ -161,10 +161,10 @@ Historical reports (`PHASE_B_*`, `PHASE_D_*`, `A4_REAL_RECIPE_EXECUTION_REPORT.m
 
 ## 10. Release recommendation
 
-**RELEASE CANDIDATE WITH MINOR DOC ISSUES.**
+**RELEASE CANDIDATE** (revised — see `docs/A3C_FINAL_HARDENING_REPORT.md`).
 
 - Quality bars met. The audit-exit recipe step is documented and tested. The legacy archetype path is gone. CI-relevant tests and validations all pass.
-- Minor issue: dead archetype branches still live in `lib/generator.ts` and could be deleted in a follow-up. They are unreachable, harmless, and not on the release-blocker path.
-- Minor issue: the 50-iteration aggregate audit was deferred to the next maintenance pass; single-brief proof and test-quality-regression substitute as evidence.
+- ~~Minor issue: dead archetype branches still live in `lib/generator.ts`~~ → resolved in the final hardening pass; ~570 lines of dead branches deleted; quality unchanged or improved (mean 98 / min 97 / max 99 across 50 iterations).
+- ~~Minor issue: 50-iteration aggregate deferred~~ → resolved in the final hardening pass; full run completed 50/50 all-green.
 
 **Threshold rebaseline:** existing thresholds are already aligned with the post-A3c standard (`autoresearch.TARGET_SCORE = 95`, audit-exit-e2e asserts `>= 95`). No constants were updated in this pass — they were already correct.

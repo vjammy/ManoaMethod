@@ -1,17 +1,12 @@
 import type { ProjectInput } from './types';
 
-export type DomainArchetype =
-  | 'family-task'
-  | 'family-readiness'
-  | 'sdr-sales'
-  | 'restaurant-ordering'
-  | 'budget-planner'
-  | 'clinic-scheduler'
-  | 'hoa-maintenance'
-  | 'school-club'
-  | 'volunteer-manager'
-  | 'inventory'
-  | 'general';
+// Phase A3c (final hardening): the archetype keyword router was deleted.
+// DomainArchetype is now a single-member union. The type alias stays only so
+// existing call sites (e.g. ProjectContext.domainArchetype, manifest fields)
+// don't have to change shape; the compiler will flag any remaining dead
+// branch that still references a removed archetype literal as a "never"
+// comparison, which is exactly the cleanup signal we want.
+export type DomainArchetype = 'general';
 
 export type RiskFlag =
   | 'children'

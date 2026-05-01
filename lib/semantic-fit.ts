@@ -57,25 +57,23 @@ function inputCorpus(input: ProjectInput): string {
 }
 
 /**
- * Classify the fit using both the Jaccard score and the archetype-detection confidence.
- * Empirically the framework's templated requirements echo the must-have feature names
- * verbatim, which gives every workspace a baseline Jaccard around 0.15 regardless of
- * archetype. So Jaccard alone cannot separate "right archetype" from "wrong archetype".
- * The real discriminator is archetype-detection confidence — when an archetype was
- * picked with high confidence (anchor keyword matched the brief strongly), the product
- * fit is good even at low Jaccard. When confidence is low *and* Jaccard is low, the
- * archetype was likely wrong and the requirements describe a different product.
+ * Classify the fit using the Jaccard score plus a confidence signal that callers
+ * supply (defaults to 1). Phase A3c removed the archetype keyword router, so
+ * the second argument is now always `1` from generator.ts; the threshold logic
+ * is retained because external callers can still pass a lower confidence to
+ * widen the `critical` / `low` bands when scoring against research-grounded
+ * extractions of varying depth.
  */
-function classify(score: number, archetypeConfidence: number): SemanticFitVerdict {
-  if (score < 0.10 && archetypeConfidence < 0.4) return 'critical';
-  if (score < 0.13 && archetypeConfidence < 0.6) return 'low';
+function classify(score: number, confidence: number): SemanticFitVerdict {
+  if (score < 0.10 && confidence < 0.4) return 'critical';
+  if (score < 0.13 && confidence < 0.6) return 'low';
   return 'high';
 }
 
 export function computeSemanticFit(
   input: ProjectInput,
   generatedRequirementsBody: string,
-  archetypeConfidence: number = 1
+  confidence: number = 1
 ): SemanticFit {
   const inputTokens = tokenize(inputCorpus(input));
   const outputTokens = tokenize(generatedRequirementsBody);
@@ -93,7 +91,7 @@ export function computeSemanticFit(
 
   return {
     score: Math.round(score * 10000) / 10000,
-    verdict: classify(score, archetypeConfidence),
+    verdict: classify(score, confidence),
     inputTokenCount: inputTokens.size,
     outputTokenCount: outputTokens.size,
     overlapTokenCount: overlap.size,

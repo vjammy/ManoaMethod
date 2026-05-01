@@ -155,40 +155,13 @@ function truncateText(value: string, _maxWords: number) {
   return value.trim();
 }
 
-const crossDomainEchoTerms: Record<string, string[]> = {
-  medical: [
-    'clinical',
-    'patient',
-    'provider',
-    'physician',
-    'health record',
-    'hipaa',
-    'medication',
-    'healthcare'
-  ],
-  sdr: [
-    'sales qualification',
-    'lead scoring',
-    'lead qualification',
-    'rep handoff',
-    'sales pipeline',
-    'prospecting'
-  ]
-};
-
-function sanitizeCrossDomainEcho(text: string, domainArchetype: ProjectContext['domainArchetype']): string {
-  const isMedical = domainArchetype === 'clinic-scheduler';
-  const isSdr = domainArchetype === 'sdr-sales';
-  let result = text;
-  for (const [domain, terms] of Object.entries(crossDomainEchoTerms)) {
-    if ((domain === 'medical' && isMedical) || (domain === 'sdr' && isSdr)) continue;
-    for (const term of terms) {
-      const pattern = new RegExp(`\\b${term}\\b`, 'gi');
-      result = result.replace(pattern, '[non-applicable domain reference]');
-    }
-  }
-  return result;
-}
+// Phase A3c (final hardening): the cross-domain echo sanitizer was archetype-
+// driven — it muted medical / SDR terminology for all archetypes other than
+// clinic-scheduler / sdr-sales. With the keyword router gone, archetype is
+// always 'general' and the sanitizer would have wiped legitimate domain
+// terminology out of every research-grounded workspace. Function and caller
+// removed; the research-token pack (lib/generator/research-token-pack.ts)
+// now governs which domain vocabulary appears in generated artifacts.
 
 function normalizeTokens(value: string) {
   return value
@@ -203,78 +176,15 @@ function unique<T>(items: T[]) {
 }
 
 function getDomainFillerNames(
-  domainArchetype: ProjectContext['domainArchetype'],
+  _domainArchetype: ProjectContext['domainArchetype'],
   input: ProjectInput
 ): Array<{ tag: PhaseBlueprint['tag']; name: string; rationale: string; phaseType: PhasePlan['phaseType'] }> {
   const base = input.productName;
-  switch (domainArchetype) {
-    case 'family-task':
-      return [
-        { tag: 'review', name: `${base} Household Routine Dry Run`, rationale: `Walk through a typical weekday and weekend routine to confirm task assignments, reminders, and parent approvals behave realistically before implementation.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Chore Change Review`, rationale: `Review what happens when a chore is added, removed, or reassigned mid-week so the household workflow does not break.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Child Visibility Spot Check`, rationale: `Confirm that child users see only their own tasks and cannot access parent-only settings or other children's data.`, phaseType: 'verification' }
-      ];
-    case 'family-readiness':
-      return [
-        { tag: 'review', name: `${base} Emergency Access Readiness Review`, rationale: `Verify that emergency contacts are current, document references are reachable, and the emergency-mode boundary language is still accurate.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Legal Caveat Refresh`, rationale: `Re-read the disclaimers and boundary notes to confirm they have not drifted into implied legal or emergency authority.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Household Role Handoff Check`, rationale: `Confirm that co-parents and caregivers understand their roles and can access the readiness information they need.`, phaseType: 'verification' }
-      ];
-    case 'sdr-sales':
-      return [
-        { tag: 'review', name: `${base} Lead Qualification Edge Case Review`, rationale: `Test the qualification rules against borderline leads to confirm the SDR knows when to advance, block, or escalate.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Sequence Follow-Through Audit`, rationale: `Check that outreach sequences include realistic follow-up timing and do not drop leads silently.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} AE Handoff Context Check`, rationale: `Verify that the handoff to account executives includes enough context for the AE to continue the conversation.`, phaseType: 'verification' }
-      ];
-    case 'restaurant-ordering':
-      return [
-        { tag: 'review', name: `${base} Kitchen Workflow Dry Run`, rationale: `Simulate a rush-hour order flow to confirm kitchen queue states and handoff timing do not collapse under volume.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Menu Change Review`, rationale: `Review what happens when a menu item is removed or modified mid-service so the ordering flow stays coherent.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Pickup Timing Stress Test`, rationale: `Check that ready-for-pickup notifications and customer timing expectations remain accurate when the kitchen is behind.`, phaseType: 'verification' }
-      ];
-    case 'budget-planner':
-      return [
-        { tag: 'review', name: `${base} Spending Threshold Reality Check`, rationale: `Compare the budget thresholds against actual household spending patterns to confirm alerts fire at useful moments.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Non-Advice Boundary Review`, rationale: `Re-read any language that could be interpreted as financial advice and confirm the disclaimer is still prominent.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Shared Budget Visibility Review`, rationale: `Confirm that household members see only the budget data they should and sensitive details remain hidden.`, phaseType: 'verification' }
-      ];
-    case 'clinic-scheduler':
-      return [
-        { tag: 'review', name: `${base} Provider Availability Stress Check`, rationale: `Test scheduling conflicts and double-booking scenarios to confirm the clinic can recover gracefully.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Reminder Privacy Scrub`, rationale: `Review reminder wording to confirm no sensitive clinical details leak into patient-facing notifications.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Waitlist Handoff Review`, rationale: `Verify that waitlist notifications respect patient priority and do not create confusion when slots open.`, phaseType: 'verification' }
-      ];
-    case 'hoa-maintenance':
-      return [
-        { tag: 'review', name: `${base} Resident Request Triage Review`, rationale: `Review how maintenance requests are categorized, assigned, and tracked so residents understand status without calling.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Vendor Escalation Path Check`, rationale: `Confirm that stalled requests escalate to the board after a defined timeout and do not disappear.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Status Update Continuity Audit`, rationale: `Verify that residents receive updates at key stages and that status language is consistent across all phases.`, phaseType: 'verification' }
-      ];
-    case 'school-club':
-      return [
-        { tag: 'review', name: `${base} Student Privacy Boundary Review`, rationale: `Confirm that students see only events and content appropriate to their role and that advisor oversight is preserved.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Event Sign-Up Edge Case Check`, rationale: `Test what happens when events reach capacity, are cancelled, or have conflicting times.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Club Exit Access Review`, rationale: `Verify that a student who leaves a club loses access to private content and announcements promptly.`, phaseType: 'verification' }
-      ];
-    case 'volunteer-manager':
-      return [
-        { tag: 'review', name: `${base} Shift Coverage Gap Review`, rationale: `Check how the organizer discovers and fills gaps when volunteers cancel or fail to show up.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} No-Show Response Drill`, rationale: `Walk through the no-show workflow to confirm the organizer can recover without scrambling.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Check-In Accuracy Spot Check`, rationale: `Verify that check-in status reflects reality and that volunteers who checked in are correctly recorded.`, phaseType: 'verification' }
-      ];
-    case 'inventory':
-      return [
-        { tag: 'review', name: `${base} Low Stock Reorder Review`, rationale: `Review low-stock alerts and purchase-plan deferrals to confirm they match real reorder needs.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Adjustment Trust Check`, rationale: `Verify that adjustments require a reason and timestamp and that the history is reviewable without ambiguity.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Stock State Boundary Audit`, rationale: `Confirm that stock states are defined clearly enough that a new employee can understand them without training.`, phaseType: 'verification' }
-      ];
-    default:
-      return [
-        { tag: 'review', name: `${base} Workflow Edge Case Review`, rationale: `Test the core workflow against at least one realistic failure path to confirm the plan handles friction, not just the happy path.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Scope Drift Check`, rationale: `Re-read the current plan against the original brief to confirm no unjustified expansion or silent deferral has occurred.`, phaseType: 'verification' },
-        { tag: 'review', name: `${base} Evidence Quality Audit`, rationale: `Verify that evidence files name actual files, scenarios, or decisions instead of placeholder claims.`, phaseType: 'verification' }
-      ];
-  }
+  return [
+    { tag: 'review', name: `${base} Workflow Edge Case Review`, rationale: `Test the core workflow against at least one realistic failure path to confirm the plan handles friction, not just the happy path.`, phaseType: 'verification' },
+    { tag: 'review', name: `${base} Scope Drift Check`, rationale: `Re-read the current plan against the original brief to confirm no unjustified expansion or silent deferral has occurred.`, phaseType: 'verification' },
+    { tag: 'review', name: `${base} Evidence Quality Audit`, rationale: `Verify that evidence files name actual files, scenarios, or decisions instead of placeholder claims.`, phaseType: 'verification' }
+  ];
 }
 
 function getPhaseTypeSpecificChecks(
@@ -359,90 +269,13 @@ function getPhaseTypeSpecificChecks(
     });
   }
 
-  // Domain-specific additional checks
-  if (context.domainArchetype === 'restaurant-ordering') {
-    checks.push({
-      check: `Confirm the order state map includes at least these states: created, acknowledged, in-progress, ready, picked-up, and cancelled.`,
-      pass: `All required states are named with clear transitions.`,
-      fail: `States are missing or transitions between kitchen and customer are vague.`,
-      artifact: `phases/${slug}/PHASE_BRIEF.md or workflow notes`,
-      goodLooks: `A state diagram or list showing exactly how an order moves from phone to pickup.`,
-      failureLooks: `A paragraph describing ordering without named states or transitions.`,
-      evidence: `List the states and transitions in TEST_RESULTS.md.`,
-      regressionRisk: `Missing order states cause kitchen confusion and wrong pickup updates.`,
-      domainScenario: `A kitchen staff member asks: "How do I know when to start cooking?" The state map must answer this.`
-    });
-  }
-
-  if (context.domainArchetype === 'sdr-sales') {
-    checks.push({
-      check: `Confirm the qualification criteria name at least one signal that blocks a lead from advancing and one signal that advances it.`,
-      pass: `Clear advance/block signals are documented with examples.`,
-      fail: `Qualification is described as "SDR decides" without criteria.`,
-      artifact: `phases/${slug}/PHASE_BRIEF.md or qualification notes`,
-      goodLooks: `A checklist with concrete examples, e.g., "Has budget authority = advance; No response after 3 touches = block."`,
-      failureLooks: `Vague guidance like "qualify based on fit."`,
-      evidence: `Paste the advance/block criteria into TEST_RESULTS.md.`,
-      regressionRisk: `Vague qualification criteria cause inconsistent pipeline and poor AE handoffs.`,
-      domainScenario: `An SDR asks: "This lead replied once but didn't book a meeting. What do I do?" The criteria must answer this.`
-    });
-  }
-
-  if (context.domainArchetype === 'inventory') {
-    checks.push({
-      check: `Confirm low-stock thresholds include the metric (units, days, or ratio) and the person responsible for review.`,
-      pass: `Thresholds are numeric or time-based and an owner role is named.`,
-      fail: `Thresholds are vague like "when low" and no one is assigned to review.`,
-      artifact: `phases/${slug}/PHASE_BRIEF.md or threshold notes`,
-      goodLooks: `A table with item category, threshold value, and reviewer role.`,
-      failureLooks: `A sentence like "alert when stock is low" without numbers or owners.`,
-      evidence: `Copy the threshold table into TEST_RESULTS.md.`,
-      regressionRisk: `Unclear thresholds cause stockouts or over-ordering.`,
-      domainScenario: `A store manager asks: "How low is 'low' for seasonal items vs. daily staples?" The threshold table must answer this.`
-    });
-  }
-
-  if (context.domainArchetype === 'family-readiness') {
-    checks.push({
-      check: `Confirm emergency-mode boundaries explicitly state what the product does NOT provide (legal advice, emergency dispatch, medical diagnosis).`,
-      pass: `A clear do-not-claim list is visible in the phase output.`,
-      fail: `The output implies authority or help it cannot deliver.`,
-      artifact: `phases/${slug}/PHASE_BRIEF.md or boundary notes`,
-      goodLooks: `A bulleted boundary list: "This product does not provide legal advice, call 911, or replace insurance documents."`,
-      failureLooks: `Language like "protect your family legally" or "emergency response guide."`,
-      evidence: `Copy the boundary list into TEST_RESULTS.md.`,
-      regressionRisk: `Overclaiming legal or emergency authority creates liability and erodes trust.`,
-      domainScenario: `A parent asks during a real emergency: "Will this call an ambulance?" The boundary list must prevent that assumption.`
-    });
-  }
-
-  if (context.domainArchetype === 'family-task') {
-    checks.push({
-      check: `Confirm child visibility rules state exactly what a child user can see, edit, and complete, and what is parent-only.`,
-      pass: `A role matrix or list separates child actions from parent actions.`,
-      fail: `Permissions are described as "kids can see their tasks" without defining "their" or what they cannot do.`,
-      artifact: `phases/${slug}/PHASE_BRIEF.md or permission notes`,
-      goodLooks: `A table: Child can view assigned tasks, mark complete, upload photo proof. Cannot edit due date, assign others, or view parent dashboard.`,
-      failureLooks: `A vague sentence like "children have limited access."`,
-      evidence: `Paste the role matrix into TEST_RESULTS.md.`,
-      regressionRisk: `Ambiguous child permissions leak data or create household conflict.`,
-      domainScenario: `A child asks: "Why can I see my sister's chores but not my allowance?" The role matrix must explain the boundary.`
-    });
-  }
-
-  if (context.domainArchetype === 'clinic-scheduler') {
-    checks.push({
-      check: `Confirm reminder wording is shown in the artifact and contains no sensitive clinical details (diagnosis, medication, procedure).`,
-      pass: `A sample reminder is provided and scrubbed for clinical content.`,
-      fail: `Reminder content is not shown, or it includes clinical details that should stay private.`,
-      artifact: `phases/${slug}/PHASE_BRIEF.md or reminder notes`,
-      goodLooks: `A sample reminder: "You have an appointment tomorrow at 2 PM with Dr. Smith." No diagnosis or treatment mentioned.`,
-      failureLooks: `A reminder like "Remember to take your blood pressure medication before your cardiology follow-up."`,
-      evidence: `Copy the sample reminder into TEST_RESULTS.md.`,
-      regressionRisk: `Sensitive details in reminders violate privacy and create HIPAA risk.`,
-      domainScenario: `A patient forwards their reminder to a coworker. What do they reveal? The sample reminder must be safe.`
-    });
-  }
+  // Phase A3c (final hardening): the six archetype-specific phase-type checks
+  // (restaurant order states, SDR qualification, inventory thresholds, family-
+  // readiness emergency boundaries, family-task child permissions, clinic
+  // reminder privacy) lived under unreachable `context.domainArchetype === '…'`
+  // gates. The risk-flag-driven checks below — money / privacy / sensitive-data
+  // / children / medical / legal / emergency — already cover the same review
+  // angles for any brief that names those concerns, regardless of archetype.
 
   if (context.riskFlags.includes('money')) {
     checks.push({
@@ -620,99 +453,14 @@ function getPhaseTestProcedures(
 }
 
 function getDomainTestScenarios(
-  domainArchetype: ProjectContext['domainArchetype'],
+  _domainArchetype: ProjectContext['domainArchetype'],
   riskFlags: ProjectContext['riskFlags']
 ): string[] {
-  const scenarios: string[] = [];
-
-  switch (domainArchetype) {
-    case 'family-task':
-      scenarios.push(
-        'A parent assigns a chore to a child and confirms the child can only see their own tasks.',
-        'A kid marks a task complete and the parent receives a notification for approval.',
-        'A co-parent joins the workspace and sees the same household view as the primary parent.',
-        'Reminder timing is reviewed to confirm it does not spam family members.'
-      );
-      break;
-    case 'family-readiness':
-      scenarios.push(
-        'A family member opens the emergency contact list and confirms all numbers are current.',
-        'The readiness package clearly states it is not legal advice and does not dispatch emergency services.',
-        'A parent organizer updates a document reference and the change is visible to other adults.',
-        'Outdated readiness information is flagged during review.'
-      );
-      break;
-    case 'sdr-sales':
-      scenarios.push(
-        'An SDR captures a lead and selects the correct outreach sequence.',
-        'A lead responds to an email and the SDR updates qualification signals.',
-        'A qualified lead is handed off to an AE with full interaction history.',
-        'A blocked lead is documented with clear follow-up rules instead of being dropped.'
-      );
-      break;
-    case 'restaurant-ordering':
-      scenarios.push(
-        'A customer places a pickup order and receives an estimated ready time.',
-        'The kitchen acknowledges the order and updates the order state.',
-        'The customer receives a notification when the order is ready for pickup.',
-        'An order cancellation updates the kitchen queue without confusion.'
-      );
-      break;
-    case 'budget-planner':
-      scenarios.push(
-        'A budget manager enters income and expenses and sees a monthly summary.',
-        'An alert fires when a category exceeds its threshold.',
-        'A household member views the budget without seeing sensitive details from other members.',
-        'The product displays a clear disclaimer that it is not financial advice.'
-      );
-      break;
-    case 'clinic-scheduler':
-      scenarios.push(
-        'A scheduler books an appointment and the provider calendar shows the conflict check.',
-        'A reminder is drafted and reviewed to confirm no sensitive clinical details are exposed.',
-        'A patient cancels and the waitlist is notified in priority order.',
-        'A double-booking attempt is blocked with a clear error message.'
-      );
-      break;
-    case 'hoa-maintenance':
-      scenarios.push(
-        'A resident submits a maintenance request with a photo and description.',
-        'A board member triages the request and assigns a vendor.',
-        'The resident receives status updates at key stages.',
-        'A stalled request is escalated to the board after a defined timeout.'
-      );
-      break;
-    case 'school-club':
-      scenarios.push(
-        'A student joins a club and sees only events they are allowed to view.',
-        'An advisor reviews event sign-ups and confirms student privacy boundaries.',
-        'A club organizer posts an announcement and targets the correct audience.',
-        'A student leaves a club and loses access to private club content.'
-      );
-      break;
-    case 'volunteer-manager':
-      scenarios.push(
-        'An organizer creates event shifts with required roles and times.',
-        'A volunteer signs up for a shift and receives a confirmation.',
-        'A no-show is recorded and the organizer sees a gap in the dashboard.',
-        'Check-in status is tracked and visible to the organizer in real time.'
-      );
-      break;
-    case 'inventory':
-      scenarios.push(
-        'A manager reviews stock states and sees low-stock items highlighted.',
-        'An adjustment is recorded with a reason and timestamp.',
-        'A purchase plan is created for low-stock items and deferred items are noted.',
-        'Stock history shows who changed what and when.'
-      );
-      break;
-    default:
-      scenarios.push(
-        'The core workflow is tested end-to-end with realistic inputs.',
-        'A failure path is exercised and the system handles it gracefully.',
-        'Role boundaries are tested to confirm users see only what they should.'
-      );
-  }
+  const scenarios: string[] = [
+    'The core workflow is tested end-to-end with realistic inputs.',
+    'A failure path is exercised and the system handles it gracefully.',
+    'Role boundaries are tested to confirm users see only what they should.'
+  ];
 
   if (riskFlags.includes('children')) {
     scenarios.push('Child visibility is tested: a child user sees only allowed content and cannot access parent-only features.');
@@ -761,13 +509,12 @@ function detectRiskFlags(input: ProjectInput): ProjectContext['riskFlags'] {
   return unique(flags);
 }
 
-// Archetype detection moved to lib/archetype-detection.ts. Detection results are
-// surfaced into ProjectContext.archetypeDetection so manifests and scorecards can
-// explain which archetype was picked, why, and with what confidence.
+// Phase A3c (final hardening): archetype detection was deleted in A3c. The
+// `domainArchetype` parameter is retained on this signature only so the
+// existing call site can be removed without churn; the archetype-driven early
+// return is gone. UI relevance is now decided purely from brief content.
 
-function detectUiRelevance(input: ProjectInput, domainArchetype: ProjectContext['domainArchetype']) {
-  if (domainArchetype !== 'general') return true;
-
+function detectUiRelevance(input: ProjectInput, _domainArchetype: ProjectContext['domainArchetype']) {
   const source = [
     input.productName,
     input.productIdea,
@@ -2860,12 +2607,9 @@ function getRiskTriggeredBlueprints(input: ProjectInput, context: ProjectContext
 
   if (
     context.riskFlags.includes('children') &&
-    (context.domainArchetype === 'family-task' ||
-      context.domainArchetype === 'family-readiness' ||
-      context.domainArchetype === 'school-club' ||
-      /(kid|kids|child|children|parent|family|student|school|minor)/i.test(
-        `${input.productName} ${input.productIdea}`
-      ))
+    /(kid|kids|child|children|parent|family|student|school|minor)/i.test(
+      `${input.productName} ${input.productIdea}`
+    )
   ) {
     blueprints.push(
       createBlueprint(
@@ -2883,10 +2627,9 @@ function getRiskTriggeredBlueprints(input: ProjectInput, context: ProjectContext
 
   if (
     context.riskFlags.includes('medical') &&
-    (context.domainArchetype === 'clinic-scheduler' ||
-      /(clinic|medical|patient|healthcare|physician|doctor|nurse)/i.test(
-        `${input.productName} ${input.productIdea}`
-      ))
+    /(clinic|medical|patient|healthcare|physician|doctor|nurse)/i.test(
+      `${input.productName} ${input.productIdea}`
+    )
   ) {
     blueprints.push(
       createBlueprint(
@@ -2918,25 +2661,18 @@ function getRiskTriggeredBlueprints(input: ProjectInput, context: ProjectContext
   }
 
   if (context.riskFlags.includes('money')) {
-    const isBudgetDomain = context.domainArchetype === 'budget-planner';
+    // Phase A3c (final hardening): the budget-planner archetype branch was deleted;
+    // the cost / spending-review framing applies to any money-flagged brief.
     blueprints.push(
       createBlueprint(
         'budgeting',
-        isBudgetDomain
-          ? `${input.productName} budgeting assumptions and non-advice boundaries`
-          : `${input.productName} cost boundaries and spending review limits`,
-        isBudgetDomain
-          ? `Make the collaboration, spending review, and non-advice boundary explicit so the plan does not drift into financial-advice claims.`
-          : `Make cost boundaries, spending review limits, and purchase decision rules explicit so the plan does not overclaim financial authority.`,
+        `${input.productName} cost boundaries and spending review limits`,
+        `Make cost boundaries, spending review limits, and purchase decision rules explicit so the plan does not overclaim financial authority.`,
         [input.risks, input.constraints, context.answers.acceptance || '', input.mustHaveFeatures],
-        isBudgetDomain
-          ? ['Where must the product stop at budgeting support and avoid presenting financial advice?']
-          : ['Where must the product stop at cost tracking and avoid presenting financial advice or purchase authority?'],
+        ['Where must the product stop at cost tracking and avoid presenting financial advice or purchase authority?'],
         'design',
-        isBudgetDomain
-          ? ['Budget review boundary notes', 'Shared decision review rules']
-          : ['Cost boundary notes', 'Purchase decision review rules'],
-        isBudgetDomain ? ['Budgeting policy notes'] : ['Cost and spending policy notes']
+        ['Cost boundary notes', 'Purchase decision review rules'],
+        ['Cost and spending policy notes']
       )
     );
   }
@@ -2960,77 +2696,19 @@ function getRiskTriggeredBlueprints(input: ProjectInput, context: ProjectContext
 }
 
 function getDomainBlueprints(input: ProjectInput, context: ProjectContext): PhaseBlueprint[] {
-  switch (context.domainArchetype) {
-    case 'family-task':
-      return [
-        createBlueprint('brief', `${input.productName} family workflow brief and scope cut`, `Lock the household task workflow, v1 scope cut, and child-safe constraints before deeper planning starts.`, [input.productIdea, input.problemStatement, context.answers['scope-cut'] || ''], ['Is the family workflow specific enough to survive without chat context?'], 'planning', ['Scope cut notes', 'Primary family workflow summary']),
-        createBlueprint('permissions', `${input.productName} role and child visibility matrix`, `Define exactly what parents, co-parents, caregivers, and child users can see, change, approve, or never access.`, [input.targetAudience, context.answers['data-boundaries'] || '', input.constraints], ['Can each role be explained in one sentence without ambiguity?'], 'design', ['Role matrix', 'Child visibility rules']),
-        createBlueprint('workflow', `${input.productName} task lifecycle and approval flow`, `Map task creation, assignment, completion, parent review, and reminder edge cases so the family task flow is operational instead of aspirational.`, [context.answers['primary-workflow'] || '', context.answers['failure-modes'] || '', input.mustHaveFeatures], ['Where can the task lifecycle confuse a child or create extra parent work?'], 'design', ['Task state flow', 'Reminder deferrals and edge cases']),
-        createBlueprint('testing', `${input.productName} mobile, reminder, and privacy proof plan`, `Turn the hard parts of the family task experience into concrete review scenarios with mobile and privacy checks.`, [input.risks, context.answers['test-proof'] || '', input.successMetrics], ['What evidence proves the mobile child flow and privacy rules actually make sense?'], 'verification', ['Scenario-based proof list'])
-      ];
-    case 'family-readiness':
-      return [
-        createBlueprint('brief', `${input.productName} readiness brief and family emergency scope`, `Define what the readiness product does, what it never promises, and which family decisions must stay explicit.`, [input.productIdea, input.constraints, input.risks], ['Is the readiness scope clear about what is planning support versus urgent real-world action?'], 'planning', ['Scope statement', 'Boundary notes']),
-        createBlueprint('emergency', `${input.productName} emergency mode trust boundaries`, `Document what emergency mode can surface, what it cannot decide, and how the package avoids overclaiming legal or operational authority.`, [input.risks, input.constraints, context.answers.acceptance || ''], ['Which emergency claims would become unsafe if left vague?'], 'verification', ['Emergency boundary checklist', 'Explicit do-not-claim list']),
-        createBlueprint('workflow', `${input.productName} family readiness workflow and escalation paths`, `Clarify the path from preparation to emergency use, including blockers, outdated information, and handoff responsibilities.`, [context.answers['primary-workflow'] || '', context.answers['operating-risks'] || '', input.teamContext], ['What happens when a family member finds missing or outdated readiness information?'], 'design', ['Escalation flow', 'Ownership notes']),
-        createBlueprint('handoff', `${input.productName} family recap and release caveats`, `Package the readiness rules, disclaimers, and caveats so the final handoff does not look like a generic planning packet.`, [input.desiredOutput, input.successMetrics, input.teamContext], ['What caveats must stay visible in the final release recap?'], 'finalization', ['Release caveats', 'Final family recap'])
-      ];
-    case 'sdr-sales':
-      return [
-        createBlueprint('brief', `${input.productName} sales qualification brief`, `Lock the lead qualification problem, buyer handoff expectations, and v1 operating scope before the plan expands.`, [input.productIdea, input.problemStatement, input.mustHaveFeatures], ['Is the qualification target specific enough to prevent generic CRM planning?'], 'planning', ['Qualification problem summary']),
-        createBlueprint('qualification', `${input.productName} qualification signals and rep handoff rules`, `Define which signals count as qualified, which rep actions are required, and what must be handed to the next sales owner.`, [context.answers['primary-workflow'] || '', input.successMetrics, input.teamContext], ['What exact information must move from qualification to the next sales rep?'], 'design', ['Qualification criteria', 'Rep handoff checklist']),
-        createBlueprint('operations', `${input.productName} objection, follow-up, and blocked-lead review`, `Convert sales edge cases into reviewable follow-up rules instead of generic business-value filler.`, [input.risks, context.answers['operating-risks'] || '', context.answers['adoption-risks'] || ''], ['Which lead states or objections must block automated progression?'], 'verification', ['Blocked lead scenarios', 'Follow-up rules'])
-      ];
-    case 'restaurant-ordering':
-      return [
-        createBlueprint('brief', `${input.productName} pickup ordering scope and service boundaries`, `Lock the first-release order types, service boundaries, and kitchen assumptions before later phases add unsupported fulfillment modes.`, [input.constraints, input.mustHaveFeatures, input.nonGoals], ['Is pickup-first scope explicit, including what is deferred?'], 'planning', ['Service boundary summary']),
-        createBlueprint('ordering', `${input.productName} order states, kitchen handoff, and customer updates`, `Define how an order moves from creation to kitchen acknowledgment, ready state, pickup, or failure handling.`, [context.answers['primary-workflow'] || '', input.mustHaveFeatures, input.risks], ['Which order state transitions would confuse staff or customers if left vague?'], 'design', ['Order state map', 'Kitchen handoff notes']),
-        createBlueprint('testing', `${input.productName} order failure, pickup, and continuity checks`, `Turn menu, kitchen, and pickup failure handling into concrete review scenarios with evidence expectations.`, [input.risks, input.successMetrics, context.answers['failure-modes'] || ''], ['What evidence proves the kitchen workflow works when something goes wrong?'], 'verification', ['Pickup and failure scenarios'])
-      ];
-    case 'budget-planner':
-      return [
-        createBlueprint('brief', `${input.productName} household budgeting scope and collaboration brief`, `Lock the budgeting use case, shared review flow, and non-advice guardrails before implementation assumptions appear.`, [input.productIdea, input.constraints, input.risks], ['Is the product framed as planning support rather than financial advice?'], 'planning', ['Budgeting scope summary']),
-        createBlueprint('budgeting', `${input.productName} budget categories, review cadence, and collaboration rules`, `Define who reviews spending, how adjustments are proposed, and which budgeting states matter in v1.`, [context.answers['primary-workflow'] || '', input.mustHaveFeatures, input.targetAudience], ['Which household collaboration decisions must be visible before coding starts?'], 'design', ['Budget review flow', 'Adjustment rules']),
-        createBlueprint('testing', `${input.productName} non-advice, visibility, and review evidence`, `Require explicit proof that the package stays inside budgeting support and documents what counts as a failed or misleading planning flow.`, [input.risks, input.successMetrics, context.answers.acceptance || ''], ['What evidence proves the plan avoids overclaiming advice?'], 'verification', ['Non-advice review scenarios'])
-      ];
-    case 'clinic-scheduler':
-      return [
-        createBlueprint('brief', `${input.productName} clinic scheduling brief and privacy boundaries`, `Lock the first-release scheduling scope, staff roles, and patient-visible boundaries before implementation detail creates unsafe assumptions.`, [input.productIdea, input.constraints, input.risks], ['Is the scheduler scope clear about staff actions, patient impact, and privacy limits?'], 'planning', ['Scheduling scope summary']),
-        createBlueprint('scheduling', `${input.productName} provider availability and conflict rules`, `Define provider availability, booking conflicts, reminder boundaries, and explicit deferrals for anything the first release cannot safely handle.`, [context.answers['primary-workflow'] || '', context.answers['operating-risks'] || '', input.mustHaveFeatures], ['Which scheduling conflicts are handled now, and which are explicitly deferred?'], 'design', ['Conflict rules', 'Reminder constraints']),
-        createBlueprint('security', `${input.productName} reminder wording and sensitive-data minimization`, `Turn privacy and reminder risk into explicit do-not-send and do-not-store rules that reviewers can check.`, [input.risks, input.constraints, input.dataAndIntegrations], ['What reminder content must never contain sensitive clinic details?'], 'verification', ['Reminder wording rules', 'Sensitive-data checklist'])
-      ];
-    case 'hoa-maintenance':
-      return [
-        createBlueprint('brief', `${input.productName} maintenance request scope and resident expectations`, `Lock the resident, board, and vendor workflow so the package focuses on maintenance operations instead of generic portal planning.`, [input.productIdea, input.problemStatement, input.mustHaveFeatures], ['Are request intake and status update expectations concrete enough?'], 'planning', ['Request scope summary']),
-        createBlueprint('maintenance', `${input.productName} request triage, vendor, and status-update flow`, `Define request states, vendor involvement, and resident status updates so the workflow is operational and auditable.`, [context.answers['primary-workflow'] || '', input.risks, input.dataAndIntegrations], ['Where can a maintenance request stall without the resident understanding what happened?'], 'design', ['Request state flow', 'Vendor handoff notes']),
-        createBlueprint('testing', `${input.productName} backlog, handoff, and continuity checks`, `Require evidence that request ownership, status updates, and deferred cases remain explicit across phases.`, [context.answers['test-proof'] || '', input.successMetrics, context.answers['operating-risks'] || ''], ['What evidence proves the request status flow still makes sense after triage?'], 'verification', ['Triage and status scenarios'])
-      ];
-    case 'school-club':
-      return [
-        createBlueprint('brief', `${input.productName} student role and event scope brief`, `Lock the club roles, event scope, and student privacy boundaries before the package drifts into generic school admin work.`, [input.productIdea, input.targetAudience, input.constraints], ['Are student, advisor, and organizer roles explicit enough?'], 'planning', ['Student role summary']),
-        createBlueprint('events', `${input.productName} student roles, event sign-up, and privacy rules`, `Define who can create events, who can sign up, and what student information should or should not be visible.`, [context.answers['primary-workflow'] || '', input.risks, input.mustHaveFeatures], ['Which student data or event actions need extra visibility limits?'], 'design', ['Event sign-up rules', 'Visibility limits']),
-        createBlueprint('testing', `${input.productName} advisor review and student visibility proof`, `Turn student-role and privacy concerns into concrete review scenarios instead of generic acceptance bullets.`, [input.successMetrics, input.risks, context.answers.acceptance || ''], ['What evidence proves the student-facing flow stays within allowed boundaries?'], 'verification', ['Student privacy scenarios'])
-      ];
-    case 'volunteer-manager':
-      return [
-        createBlueprint('brief', `${input.productName} volunteer ops brief and first-release scope`, `Lock the volunteer coordination problem, shift ownership, and day-of operations scope before generic admin phases crowd it out.`, [input.productIdea, input.problemStatement, input.nonGoals], ['Is the volunteer operations problem stated in day-of terms instead of generic coordination terms?'], 'planning', ['Volunteer ops scope']),
-        createBlueprint('events', `${input.productName} shift coverage, no-show, and check-in flow`, `Define shift states, organizer intervention points, no-show handling, and day-of check-in expectations.`, [context.answers['primary-workflow'] || '', input.risks, input.mustHaveFeatures], ['What happens when a volunteer cannot make a shift or fails to check in?'], 'design', ['Shift state map', 'No-show response notes']),
-        createBlueprint('testing', `${input.productName} organizer dashboard and continuity checks`, `Require scenario-based proof that organizers can see gaps, handle no-shows, and preserve the event plan without guessing.`, [input.successMetrics, context.answers['failure-modes'] || '', context.answers['operating-risks'] || ''], ['What evidence proves organizers can recover from missing volunteers?'], 'verification', ['Gap and no-show scenarios'])
-      ];
-    case 'inventory':
-      return [
-        createBlueprint('brief', `${input.productName} inventory scope and stock-state brief`, `Lock the first-release stock tracking scope, excluded edge cases, and basic inventory terminology before later phases drift.`, [input.productIdea, input.mustHaveFeatures, input.nonGoals], ['Is the inventory problem stated in stock-state terms rather than generic dashboard language?'], 'planning', ['Inventory scope summary']),
-        createBlueprint('inventory', `${input.productName} stock states, thresholds, and adjustment rules`, `Define item states, low-stock thresholds, adjustments, and purchase planning boundaries so inventory behavior is reviewable.`, [context.answers['primary-workflow'] || '', input.risks, input.dataAndIntegrations], ['Which inventory transitions or adjustments would create trust problems if they stayed vague?'], 'design', ['Stock state rules', 'Threshold and adjustment notes']),
-        createBlueprint('testing', `${input.productName} low-stock, continuity, and deferred-scope checks`, `Turn inventory edge cases and deferrals into concrete review scenarios with real evidence expectations.`, [input.successMetrics, input.risks, context.answers['test-proof'] || ''], ['What evidence proves low-stock and adjustment flows are handled or explicitly deferred?'], 'verification', ['Low-stock and adjustment scenarios'])
-      ];
-    default:
-      return [
-        createBlueprint('brief', `${input.productName} brief and planning guardrails`, `Lock the problem, audience, constraints, and output expectations for ${input.productName} before build work starts.`, [input.productIdea, input.problemStatement, input.desiredOutput], ['Is the brief specific enough to survive without chat history?'], 'planning', ['Updated brief summary']),
-        createBlueprint('audience', `${context.primaryAudience} user, customer, and stakeholder map`, `Clarify who ${input.productName} serves first and who else influences approval or rollout.`, [input.targetAudience, context.answers['user-segments'] || '', context.answers['stakeholder-workflow'] || ''], ['Which audience matters first, and which stakeholders only review or approve?'], 'planning', ['Audience priority notes']),
-        createBlueprint('workflow', `${input.productName} workflow and failure-path plan`, `Map the core path, support path, and failure path for ${context.primaryAudience}.`, [context.answers['primary-workflow'] || input.desiredOutput, context.answers['failure-modes'] || context.answers['customer-pain'] || ''], ['Where does the workflow fail, stall, or create support load?'], 'design', ['Workflow and failure-path notes']),
-        createBlueprint('scope', `MVP scope and non-goals for ${context.primaryFeature}`, `Protect the first release by separating ${context.primaryFeature} from later ideas and optional extras.`, [input.mustHaveFeatures, input.nonGoals, context.answers['scope-cut'] || ''], ['If time shrinks, what stays in v1 and what moves out?'], 'planning', ['Scope cut and deferral list'])
-      ];
-  }
+  // Phase A3c (final hardening): the per-archetype blueprint switch (10 cases:
+  // family-task, family-readiness, sdr-sales, restaurant-ordering, budget-
+  // planner, clinic-scheduler, hoa-maintenance, school-club, volunteer-manager,
+  // inventory) was deleted with the keyword router. Domain-specific phase
+  // shapes now come from research extractions (entities, workflows, gates) via
+  // research-token pack and the renderers in lib/generator/. The generic
+  // blueprint set below is the fallback when extractions are absent.
+  return [
+    createBlueprint('brief', `${input.productName} brief and planning guardrails`, `Lock the problem, audience, constraints, and output expectations for ${input.productName} before build work starts.`, [input.productIdea, input.problemStatement, input.desiredOutput], ['Is the brief specific enough to survive without chat history?'], 'planning', ['Updated brief summary']),
+    createBlueprint('audience', `${context.primaryAudience} user, customer, and stakeholder map`, `Clarify who ${input.productName} serves first and who else influences approval or rollout.`, [input.targetAudience, context.answers['user-segments'] || '', context.answers['stakeholder-workflow'] || ''], ['Which audience matters first, and which stakeholders only review or approve?'], 'planning', ['Audience priority notes']),
+    createBlueprint('workflow', `${input.productName} workflow and failure-path plan`, `Map the core path, support path, and failure path for ${context.primaryAudience}.`, [context.answers['primary-workflow'] || input.desiredOutput, context.answers['failure-modes'] || context.answers['customer-pain'] || ''], ['Where does the workflow fail, stall, or create support load?'], 'design', ['Workflow and failure-path notes']),
+    createBlueprint('scope', `MVP scope and non-goals for ${context.primaryFeature}`, `Protect the first release by separating ${context.primaryFeature} from later ideas and optional extras.`, [input.mustHaveFeatures, input.nonGoals, context.answers['scope-cut'] || ''], ['If time shrinks, what stays in v1 and what moves out?'], 'planning', ['Scope cut and deferral list'])
+  ];
 }
 
 function getTrackBlueprints(input: ProjectInput, context: ProjectContext): PhaseBlueprint[] {
@@ -3257,17 +2935,18 @@ function getPhaseSpecificNouns(blueprint: PhaseBlueprint, context: ProjectContex
 
 function getRiskChecksForPhase(blueprint: PhaseBlueprint, context: ProjectContext, input: ProjectInput) {
   const checks: string[] = [];
-  const isChildDomain =
-    context.domainArchetype === 'family-task' ||
-    context.domainArchetype === 'family-readiness' ||
-    context.domainArchetype === 'school-club' ||
-    /(kid|kids|child|children|parent|family|student|school|minor)/i.test(`${input.productName} ${input.productIdea}`);
+  // Phase A3c (final hardening): archetype-disjuncts dropped — the regex over the
+  // brief already covers any child- or medical-relevant product, regardless of
+  // whether a (now-removed) archetype label would have matched.
+  const isChildDomain = /(kid|kids|child|children|parent|family|student|school|minor)/i.test(
+    `${input.productName} ${input.productIdea}`
+  );
   if (context.riskFlags.includes('children') && isChildDomain) {
     checks.push('Prove child users only see allowed items and parent or admin control boundaries stay explicit.');
   }
-  const isMedicalDomain =
-    context.domainArchetype === 'clinic-scheduler' ||
-    /(clinic|medical|patient|healthcare|physician|doctor|nurse)/i.test(`${input.productName} ${input.productIdea}`);
+  const isMedicalDomain = /(clinic|medical|patient|healthcare|physician|doctor|nurse)/i.test(
+    `${input.productName} ${input.productIdea}`
+  );
   if (context.riskFlags.includes('medical') && isMedicalDomain) {
     checks.push('Prove reminder wording and scheduling artifacts avoid sensitive clinical details unless the package explicitly supports them.');
   }
@@ -3396,14 +3075,12 @@ function buildPhaseContent(
       `A blocker or risk note tied to ${context.domainSignals[0] || input.productName}`
     ].concat(getRiskChecksForPhase(blueprint, context, input))
   );
-  const isChildDomain =
-    context.domainArchetype === 'family-task' ||
-    context.domainArchetype === 'family-readiness' ||
-    context.domainArchetype === 'school-club' ||
-    /(kid|kids|child|children|parent|family|student|school|minor)/i.test(`${input.productName} ${input.productIdea}`);
-  const isMedicalDomain =
-    context.domainArchetype === 'clinic-scheduler' ||
-    /(clinic|medical|patient|healthcare|physician|doctor|nurse)/i.test(`${input.productName} ${input.productIdea}`);
+  const isChildDomain = /(kid|kids|child|children|parent|family|student|school|minor)/i.test(
+    `${input.productName} ${input.productIdea}`
+  );
+  const isMedicalDomain = /(clinic|medical|patient|healthcare|physician|doctor|nurse)/i.test(
+    `${input.productName} ${input.productIdea}`
+  );
   const failureConditions = unique(
     [
       `the output stays generic instead of naming ${nouns.slice(0, 3).join(', ')}`,
@@ -5533,153 +5210,53 @@ function getUiWorkflowSet(input: ProjectInput, context: ProjectContext): UiWorkf
     ];
   }
 
-  switch (context.domainArchetype) {
-    case 'family-task':
-      return [
-        {
-          name: 'Parent creates and assigns a task',
-          targetUser: 'Parent organizer',
-          goal: 'Create a household task quickly and assign it to the right child without confusion.',
-          startPoint: 'Parent opens the household dashboard.',
-          happyPath: [
-            'Parent sees today’s household snapshot and chooses Create task.',
-            'Parent enters task name, due date, assignee, and reward or priority details.',
-            'Parent reviews the assignment summary and confirms.',
-            'Child sees the task in their own limited task view.'
-          ],
-          edgeCases: ['Parent assigns the task to multiple children.', 'Parent creates a recurring chore instead of a one-time task.'],
-          failureCases: ['Assignee visibility is unclear.', 'Parent cannot tell whether the child has already completed the task.'],
-          requiredScreens: ['Household dashboard', 'Task creation form', 'Child task list', 'Task detail view'],
-          successCriteria: 'A parent can create and verify a task assignment in under two minutes without checking hidden admin settings.',
-          businessRisk: 'If assignment flow is confusing, parents stop trusting the system and revert to text messages or paper lists.'
-        },
-        {
-          name: 'Child completes a task',
-          targetUser: 'Child user',
-          goal: 'Mark a task complete with a clear success state and no access to parent-only controls.',
-          startPoint: 'Child opens their task list.',
-          happyPath: [
-            'Child sees only their tasks and the current status.',
-            'Child opens a task, completes it, and submits proof if required.',
-            'System confirms completion and shows what happens next.'
-          ],
-          edgeCases: ['Child completes the task offline and syncs later.', 'Task needs parent approval before rewards unlock.'],
-          failureCases: ['Completion state is ambiguous.', 'Child sees settings or notes meant only for parents.'],
-          requiredScreens: ['Child task list', 'Task detail view', 'Completion confirmation state'],
-          successCriteria: 'The child can finish a task without needing an adult to explain the next step.',
-          businessRisk: 'If the child flow is confusing, adoption collapses because the household routine becomes harder, not easier.'
-        },
-        {
-          name: 'Parent reviews progress and blockers',
-          targetUser: 'Parent organizer',
-          goal: 'Understand task progress quickly and spot missing or stuck tasks.',
-          startPoint: 'Parent returns to the dashboard later in the day.',
-          happyPath: [
-            'Parent sees status summaries for overdue, pending, and completed tasks.',
-            'Parent opens blocked items and follows the recommended next action.',
-            'Parent confirms the household plan is still on track.'
-          ],
-          edgeCases: ['Multiple children have overdue tasks.', 'A recurring task failed because no assignee was active.'],
-          failureCases: ['Dashboard hides the real blocker.', 'The primary action for fixing overdue work is unclear.'],
-          requiredScreens: ['Household dashboard', 'Task detail view', 'Notification or reminder panel'],
-          successCriteria: 'The parent can identify the next action for any blocked task within one screen.',
-          businessRisk: 'If progress is hard to read, the dashboard becomes decoration instead of an operating tool.'
-        }
-      ];
-    case 'restaurant-ordering':
-      return [
-        {
-          name: 'Customer places a pickup order',
-          targetUser: 'Restaurant customer',
-          goal: 'Place an order, confirm details, and understand pickup timing without calling the restaurant.',
-          startPoint: 'Customer opens the ordering experience.',
-          happyPath: [
-            'Customer browses the menu and adds items to cart.',
-            'Customer reviews modifiers, pickup time, and contact details.',
-            'Customer submits the order and sees a clear confirmation.'
-          ],
-          edgeCases: ['An item becomes unavailable mid-order.', 'Pickup timing changes because the kitchen is busy.'],
-          failureCases: ['Cart total is unclear.', 'Customer cannot tell whether the order was actually placed.'],
-          requiredScreens: ['Menu screen', 'Cart', 'Checkout form', 'Order confirmation'],
-          successCriteria: 'The customer can complete checkout confidently without staff intervention.',
-          businessRisk: 'Confusing ordering flow causes abandoned orders and duplicate support calls.'
-        },
-        {
-          name: 'Kitchen confirms and updates order state',
-          targetUser: 'Kitchen or operations staff',
-          goal: 'Move an order through preparation states without losing timing clarity.',
-          startPoint: 'Staff opens the kitchen queue.',
-          happyPath: [
-            'Staff sees new orders ordered by timing and urgency.',
-            'Staff marks order accepted, in progress, and ready.',
-            'Customer-facing state updates remain consistent.'
-          ],
-          edgeCases: ['A modification requires staff clarification.', 'Several rush orders arrive at once.'],
-          failureCases: ['Order state labels are too vague.', 'Queue layout hides overdue items.'],
-          requiredScreens: ['Kitchen queue', 'Order detail panel', 'Ready-for-pickup state'],
-          successCriteria: 'Staff can update order state in seconds without opening unrelated screens.',
-          businessRisk: 'If kitchen UI is confusing, service slows down and customers lose trust in timing estimates.'
-        },
-        {
-          name: 'Customer handles an issue or cancellation',
-          targetUser: 'Restaurant customer',
-          goal: 'Understand what to do when an order cannot continue as planned.',
-          startPoint: 'Customer sees a delay, error, or cancellation need.',
-          happyPath: [
-            'Customer opens order status.',
-            'System explains delay, cancellation policy, or next step in plain language.',
-            'Customer completes the safest available action.'
-          ],
-          edgeCases: ['Order was partially prepared.', 'Restaurant needs to offer a substitute item.'],
-          failureCases: ['Error copy is vague.', 'Customer loses confidence because there is no next step.'],
-          requiredScreens: ['Order status screen', 'Error state or support path', 'Cancellation confirmation'],
-          successCriteria: 'Issue states reduce confusion instead of escalating it.',
-          businessRisk: 'Poor exception handling creates refunds, bad reviews, and staff support burden.'
-        }
-      ];
-    default:
-      return [
-        {
-          name: `${sentenceCase(context.primaryFeature)} primary workflow`,
-          targetUser: context.primaryAudience,
-          goal: `Complete the main ${input.productName} workflow without needing hidden chat context or side-channel explanation.`,
-          startPoint: `User opens the first screen for ${input.productName}.`,
-          happyPath: [
-            `User understands the first decision on the page and starts the ${context.primaryFeature} workflow.`,
-            'User completes the minimum required inputs with clear guidance.',
-            'System confirms the action and shows the next useful step.'
-          ],
-          edgeCases: [
-            `The user arrives with incomplete information for ${context.primaryFeature}.`,
-            'The user returns mid-process and needs to resume safely.'
-          ],
-          failureCases: [
-            'The primary call to action is ambiguous.',
-            'The workflow ends without a clear success confirmation.'
-          ],
-          requiredScreens: ['Entry screen', 'Primary workflow screen', 'Confirmation state'],
-          successCriteria: `A first-time ${context.primaryAudience} user can complete the primary workflow on the first attempt.`,
-          businessRisk: 'If the main flow is confusing, the project fails at the exact moment it is supposed to prove value.'
-        },
-        {
-          name: 'Status, review, or admin follow-through',
-          targetUser: context.primaryAudience,
-          goal: `Review outcomes, exceptions, and next actions after the main ${context.primaryFeature} step.`,
-          startPoint: 'User returns after the first action is submitted.',
-          happyPath: [
-            'User sees the current state clearly.',
-            'User can inspect details without hunting through the interface.',
-            'User knows whether to continue, revise, or wait.'
-          ],
-          edgeCases: ['Important data is missing.', 'A pending review or approval step exists.'],
-          failureCases: ['Status copy is generic.', 'Recovery actions are hidden below the fold.'],
-          requiredScreens: ['Dashboard or status screen', 'Detail or review screen', 'Error or exception state'],
-          successCriteria: 'Users can diagnose the next step from the screen itself.',
-          businessRisk: 'If review state is unclear, teams create manual side workflows and the product stops being trusted.'
-        }
-      ];
-  }
+  // Phase A3c (final hardening): the per-archetype UI workflow set
+  // (family-task and restaurant-ordering arms) was deleted with the keyword
+  // router. The fallback workflow shape below works for any product; UI copy
+  // that needs to be domain-aware should pull from research extractions
+  // (workflows[].name / steps / failureModes) rather than from baked-in arms.
+  return [
+    {
+      name: `${sentenceCase(context.primaryFeature)} primary workflow`,
+      targetUser: context.primaryAudience,
+      goal: `Complete the main ${input.productName} workflow without needing hidden chat context or side-channel explanation.`,
+      startPoint: `User opens the first screen for ${input.productName}.`,
+      happyPath: [
+        `User understands the first decision on the page and starts the ${context.primaryFeature} workflow.`,
+        'User completes the minimum required inputs with clear guidance.',
+        'System confirms the action and shows the next useful step.'
+      ],
+      edgeCases: [
+        `The user arrives with incomplete information for ${context.primaryFeature}.`,
+        'The user returns mid-process and needs to resume safely.'
+      ],
+      failureCases: [
+        'The primary call to action is ambiguous.',
+        'The workflow ends without a clear success confirmation.'
+      ],
+      requiredScreens: ['Entry screen', 'Primary workflow screen', 'Confirmation state'],
+      successCriteria: `A first-time ${context.primaryAudience} user can complete the primary workflow on the first attempt.`,
+      businessRisk: 'If the main flow is confusing, the project fails at the exact moment it is supposed to prove value.'
+    },
+    {
+      name: 'Status, review, or admin follow-through',
+      targetUser: context.primaryAudience,
+      goal: `Review outcomes, exceptions, and next actions after the main ${context.primaryFeature} step.`,
+      startPoint: 'User returns after the first action is submitted.',
+      happyPath: [
+        'User sees the current state clearly.',
+        'User can inspect details without hunting through the interface.',
+        'User knows whether to continue, revise, or wait.'
+      ],
+      edgeCases: ['Important data is missing.', 'A pending review or approval step exists.'],
+      failureCases: ['Status copy is generic.', 'Recovery actions are hidden below the fold.'],
+      requiredScreens: ['Dashboard or status screen', 'Detail or review screen', 'Error or exception state'],
+      successCriteria: 'Users can diagnose the next step from the screen itself.',
+      businessRisk: 'If review state is unclear, teams create manual side workflows and the product stops being trusted.'
+    }
+  ];
 }
+
 
 function getUiScreens(input: ProjectInput, context: ProjectContext, workflows: UiWorkflow[]): UiScreen[] {
   if (!context.uiRelevant) {
@@ -9516,11 +9093,6 @@ ${phase.failureConditions.map((item) => `- ${item}`).join('\n')}
   add('regression-suite/scripts/agent-rules.md', buildAgentRulesScript(input));
   add('regression-suite/scripts/local-first.md', buildLocalFirstScript(input, context));
   add('regression-suite/scripts/run-regression.ts', buildRunnableRegressionScript());
-
-  // Sanitize cross-domain echoes from all generated files
-  for (const file of files) {
-    file.content = sanitizeCrossDomainEcho(file.content, context.domainArchetype);
-  }
 
   return files;
 }
