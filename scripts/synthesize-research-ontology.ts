@@ -52,14 +52,6 @@ import type {
 } from '../lib/research/schema';
 import { SCHEMA_VERSION, validateExtractions } from '../lib/research/schema';
 import type { ProjectInput } from '../lib/types';
-import { detectCategory, getPack } from '../lib/research/domain-packs';
-import type {
-  ActorArchetype,
-  DomainPack,
-  EntityArchetype,
-  FieldArchetype,
-  WorkflowArchetype
-} from '../lib/research/domain-packs';
 
 function getArg(name: string): string | undefined {
   const exact = process.argv.find((a) => a.startsWith(`--${name}=`));
@@ -130,295 +122,151 @@ function withProvenance<T extends object>(
   };
 }
 
-// ---------- pack-driven materialization (Phase F1) ----------
-
-/** Strip trailing punctuation and noise from brief-derived names. */
-function cleanName(s: string): string {
-  return (s || '')
-    .replace(/^(a|an|the)\s+/i, '')
-    .replace(/optional\s+/i, '')
-    .replace(/[\s.,;:!?]+$/g, '')
-    .trim();
-}
-
-/** Map idHint slugs to final IDs (`actor-<slug>`, `entity-<slug>`). */
-type IdMaps = {
-  actor: Map<string, string>;     // 'sdr' → 'actor-sdr'
-  entity: Map<string, string>;    // 'lead' → 'entity-lead'
-};
-
-function buildIdMaps(pack: DomainPack): IdMaps {
-  const actor = new Map<string, string>();
-  for (const a of pack.actorArchetypes) actor.set(a.idHint, `actor-${a.idHint}`);
-  const entity = new Map<string, string>();
-  for (const e of pack.entityArchetypes) entity.set(e.idHint, `entity-${e.idHint}`);
-  // Member Profile and Audit Entry are always added by the synthesizer.
-  entity.set('member-profile', 'entity-member-profile');
-  entity.set('audit-entry', 'entity-audit-entry');
-  return entity ? { actor, entity } : { actor, entity: new Map() };
-}
-
-/** Convert pack FieldArchetype → schema EntityField (preserving dbType, fk, indexed, etc.). */
-function materializeField(fa: FieldArchetype, idMaps: IdMaps): EntityField {
-  const isEnum = fa.dbType === 'ENUM';
-  const isDate = fa.dbType === 'TIMESTAMPTZ' || fa.dbType === 'DATE';
-  const isNum = fa.dbType === 'INTEGER' || fa.dbType === 'DECIMAL';
-  const isBool = fa.dbType === 'BOOLEAN';
-  const isJson = fa.dbType === 'JSONB';
-  const baseType: EntityField['type'] = isEnum
-    ? 'enum'
-    : isDate
-    ? 'date'
-    : isNum
-    ? 'number'
-    : isBool
-    ? 'boolean'
-    : isJson
-    ? 'json'
-    : 'string';
-  const out: EntityField = {
-    name: fa.name,
-    type: baseType,
-    description: fa.description,
-    required: fa.required ?? true,
-    example: String(fa.sample)
-  };
-  if (fa.enumValues) out.enumValues = fa.enumValues;
-  if (fa.unique) out.unique = true;
-  if (fa.indexed) out.indexed = true;
-  if (fa.dbType) out.dbType = fa.dbType;
-  if (typeof fa.required === 'boolean') out.nullable = !fa.required;
-  if (fa.defaultValue) out.defaultValue = fa.defaultValue;
-  if (fa.pii) out.pii = true;
-  if (fa.sensitive) out.sensitive = true;
-  if (fa.fkHint) {
-    const targetId = idMaps.entity.get(fa.fkHint.entityIdHint);
-    if (targetId) {
-      out.fk = { entityId: targetId, fieldName: fa.fkHint.fieldName, onDelete: fa.fkHint.onDelete || 'RESTRICT' };
-      out.references = targetId;
-      out.indexed = true;
-    }
-  }
-  return out;
-}
-
-/** Materialize a pack actor archetype as a schema Actor with provenance. */
-function materializePackActor(arc: ActorArchetype, input: ProjectInput, pack: DomainPack): Actor {
-  return withProvenance(
-    {
-      name: arc.name,
-      type: arc.type,
-      responsibilities: [...arc.responsibilities],
-      visibility: [...arc.visibility],
-      authMode: arc.authMode || 'authenticated'
-    },
-    {
-      id: `actor-${arc.idHint}`,
-      origin: 'both',
-      sources: [
-        briefSourceRef(input, `Audience: ${input.targetAudience}`),
-        domainSourceRef(input, `${pack.name}: actor archetype "${arc.name}"`)
-      ]
-    }
-  );
-}
-
-/** Materialize a pack entity archetype as a schema Entity with realistic sample row. */
-function materializePackEntity(arc: EntityArchetype, idMaps: IdMaps, input: ProjectInput, pack: DomainPack): Entity {
-  const fields = arc.fields.map((f) => materializeField(f, idMaps));
-  const sample: Record<string, unknown> = {};
-  for (const f of arc.fields) sample[f.name] = f.sample;
-  const ownerActorIds = arc.ownerActorIdHints
-    .map((hint) => idMaps.actor.get(hint))
-    .filter((id): id is string => Boolean(id));
-  return withProvenance(
-    {
-      name: arc.name,
-      description: arc.description,
-      fields,
-      relationships: deriveRelationships(arc, idMaps),
-      ownerActors: ownerActorIds.length ? ownerActorIds : Array.from(idMaps.actor.values()).slice(0, 1),
-      riskTypes: arc.riskTypes && arc.riskTypes.length ? [...arc.riskTypes] : ['operational'],
-      sample
-    },
-    {
-      id: `entity-${arc.idHint}`,
-      origin: 'both',
-      sources: [
-        briefSourceRef(input, `Must-haves: ${input.mustHaveFeatures}`),
-        domainSourceRef(input, `${pack.name}: entity archetype "${arc.name}"`)
-      ]
-    }
-  );
-}
-
-/** Derive plain-English relationships from FK targets. */
-function deriveRelationships(arc: EntityArchetype, idMaps: IdMaps): string[] {
-  const out: string[] = [];
-  for (const f of arc.fields) {
-    if (f.fkHint) {
-      const targetHint = f.fkHint.entityIdHint;
-      const targetEntityId = idMaps.entity.get(targetHint);
-      if (targetEntityId) {
-        out.push(`References ${targetHint} via ${f.name}`);
-      }
-    }
-  }
-  return out;
-}
-
-/** Materialize a pack workflow archetype as a schema Workflow. */
-function materializePackWorkflow(arc: WorkflowArchetype, idMaps: IdMaps, input: ProjectInput, pack: DomainPack): Workflow {
-  const primaryActorId = idMaps.actor.get(arc.primaryActorIdHint) || Array.from(idMaps.actor.values())[0] || 'actor-creator';
-  const secondaryActorIds = (arc.secondaryActorIdHints || [])
-    .map((hint) => idMaps.actor.get(hint))
-    .filter((id): id is string => Boolean(id));
-  const steps: WorkflowStep[] = arc.steps.map((s, i) => ({
-    order: i + 1,
-    actor: idMaps.actor.get(s.actorIdHint) || primaryActorId,
-    action: s.action,
-    systemResponse: s.systemResponse,
-    branchOn: s.branchOn,
-    preconditions: s.preconditions,
-    postconditions: s.postconditions
-  }));
-  // EntitiesTouched: derive from action text mentioning entity names.
-  const entitiesTouched: string[] = [];
-  const auditId = idMaps.entity.get('audit-entry');
-  for (const e of idMaps.entity.entries()) {
-    const [hint, id] = e;
-    if (hint === 'audit-entry' || hint === 'member-profile') continue;
-    const re = new RegExp(`\\b${hint.replace(/-/g, ' ')}\\b`, 'i');
-    const text = arc.steps.map((s) => `${s.action} ${s.systemResponse}`).join(' ');
-    if (re.test(text)) entitiesTouched.push(id);
-  }
-  if (entitiesTouched.length === 0) {
-    const firstNonMeta = Array.from(idMaps.entity.entries()).find(
-      ([h]) => h !== 'audit-entry' && h !== 'member-profile'
-    );
-    if (firstNonMeta) entitiesTouched.push(firstNonMeta[1]);
-  }
-  if (auditId) entitiesTouched.push(auditId);
-  return withProvenance(
-    {
-      name: arc.name,
-      primaryActor: primaryActorId,
-      secondaryActors: secondaryActorIds,
-      steps,
-      failureModes: arc.failureModes.map((f) => ({ ...f })),
-      entitiesTouched: Array.from(new Set(entitiesTouched)),
-      acceptancePattern: arc.acceptancePattern
-    },
-    {
-      id: `workflow-${arc.idHint}`,
-      origin: 'both',
-      sources: [
-        briefSourceRef(input, input.questionnaireAnswers['primary-workflow'] || `Must-haves: ${input.mustHaveFeatures}`),
-        domainSourceRef(input, `${pack.name}: workflow archetype "${arc.name}"`)
-      ]
-    }
-  );
-}
-
 // ---------- actors ----------
-function deriveActors(input: ProjectInput, pack: DomainPack): Actor[] {
-  const out: Actor[] = pack.actorArchetypes.map((arc) => materializePackActor(arc, input, pack));
-  // Optionally augment with brief-derived actors that don't overlap pack archetypes.
-  const audience = splitList(input.targetAudience).map(cleanName).filter(Boolean);
-  const seenIds = new Set(out.map((a) => a.id));
-  for (const phrase of audience.slice(0, 2)) {
-    const name = titleCase(phrase) || 'Primary User';
-    if (!name) continue;
-    // Skip if a pack actor already covers this name closely.
-    if (out.some((a) => normalizeName(a.name).includes(normalizeName(name)) || normalizeName(name).includes(normalizeName(a.name)))) continue;
+function deriveActors(input: ProjectInput): Actor[] {
+  const audience = splitList(input.targetAudience);
+  const candidates = audience.length ? audience : ['Primary User', 'Reviewer'];
+  const usedIds = new Set<string>();
+  const out: Actor[] = [];
+  for (const phrase of candidates.slice(0, 4)) {
+    const name = titleCase(phrase.replace(/^(a|an|the)\s+/i, '').replace(/optional\s+/i, '').trim()) || 'Primary User';
     let id = `actor-${slug(name)}`;
-    let n = 1;
-    while (seenIds.has(id)) {
-      n += 1;
-      id = `actor-${slug(name)}-${n}`;
-    }
-    seenIds.add(id);
-    const lower = name.toLowerCase();
-    const isReviewer = /review|approve|admin|manager|coordinator|owner|lead/i.test(lower);
-    const isExternal = /caregiver|guardian|guest|customer|public|resident/i.test(lower);
-    const type: Actor['type'] = isReviewer ? 'reviewer' : isExternal ? 'external' : 'secondary-user';
+    if (usedIds.has(id)) id = `${id}-${out.length + 1}`;
+    usedIds.add(id);
+    const isReviewer = /review|approve|admin|manager|coordinator|owner/i.test(name);
+    const isExternal = /caregiver|guardian|guest|customer|public/i.test(name);
+    const type: Actor['type'] = isReviewer ? 'reviewer' : isExternal ? 'external' : out.length === 0 ? 'primary-user' : 'secondary-user';
+    const responsibility = `Use ${input.productName} to ${type === 'reviewer' ? `review and approve ${name.toLowerCase()} actions` : `complete the ${name.toLowerCase()} workflow`}.`;
     out.push(
       withProvenance(
         {
           name,
           type,
-          responsibilities: [`Engage with ${input.productName} as ${name.toLowerCase()}.`, `Operate within scope defined for ${name}.`],
-          visibility: isReviewer ? ['All in-scope records'] : ['Own records and assignments'],
+          responsibilities: [responsibility, `Operate within scope defined for ${name}.`],
+          visibility: type === 'primary-user' ? ['Own records', 'Own assignments'] : type === 'reviewer' ? ['All in-scope records'] : ['Limited records per visibility rule'],
           authMode: 'authenticated' as const
         },
         { id, origin: 'use-case', sources: [briefSourceRef(input, `Audience: ${input.targetAudience}`)] }
       )
     );
   }
+  if (out.length < 2) {
+    out.push(
+      withProvenance(
+        {
+          name: 'Reviewer',
+          type: 'reviewer',
+          responsibilities: [`Review ${input.productName} records before they are considered final.`],
+          visibility: ['All in-scope records'],
+          authMode: 'authenticated' as const
+        },
+        { id: 'actor-reviewer', origin: 'use-case', sources: [briefSourceRef(input, `Reviewer implied by ${input.productName} workflow`)] }
+      )
+    );
+  }
   return out;
 }
 
-function normalizeName(s: string): string {
-  return s.toLowerCase().replace(/[^a-z]/g, '');
-}
-
 // ---------- entities ----------
-function deriveEntities(input: ProjectInput, actors: Actor[], pack: DomainPack, idMaps: IdMaps): Entity[] {
-  const entities: Entity[] = pack.entityArchetypes.map((arc) => materializePackEntity(arc, idMaps, input, pack));
-  const productSlug = slug(input.productName, 16);
-  const seenIds = new Set(entities.map((e) => e.id));
+function deriveEntities(input: ProjectInput, actors: Actor[]): Entity[] {
+  const features = splitList(input.mustHaveFeatures).slice(0, 6);
+  const dataPhrases = splitList(input.dataAndIntegrations).slice(0, 6);
+  const seedPhrases = Array.from(new Set([...features, ...dataPhrases]))
+    .filter((p) => !/integration|reminder|notification|email|sms|export|dashboard|mobile|view/i.test(p))
+    .slice(0, 5);
 
-  // Always add a Member Profile entity (if pack didn't already provide one with that idHint).
-  if (!seenIds.has('entity-member-profile')) {
+  const entities: Entity[] = [];
+  const usedIds = new Set<string>();
+  const productSlug = slug(input.productName, 16);
+
+  function makeEntity(label: string, isCore: boolean, idHint?: string): Entity {
+    const name = titleCase(label.replace(/^(create|track|manage|the)\s+/i, '')) || label;
+    let id = `entity-${idHint || slug(name)}`;
+    if (usedIds.has(id)) id = `${id}-${entities.length + 1}`;
+    usedIds.add(id);
+    const fields: EntityField[] = [
+      { name: `${slug(name).replace(/-/g, '')}Id`, type: 'string', description: `Stable identifier for ${name}.`, required: true, example: `${productSlug}-${slug(name).slice(0, 8)}-001` },
+      { name: 'title', type: 'string', description: `Human-readable label for ${name}.`, required: true, example: `Sample ${name}` },
+      { name: 'status', type: 'enum', description: `Current ${name} state.`, required: true, enumValues: ['draft', 'active', 'archived'], example: 'active' },
+      { name: 'createdAt', type: 'date', description: `When the ${name} record was created.`, required: true, example: new Date().toISOString() }
+    ];
+    const ownerIds = actors.length ? [actors[0].id] : [];
+    const sample: Record<string, unknown> = {};
+    for (const f of fields) sample[f.name] = f.example;
+    return withProvenance(
+      {
+        name,
+        description: `Domain record representing a ${name.toLowerCase()} in the ${input.productName} workflow.`,
+        fields,
+        relationships: entities.length ? [`Referenced by ${entities[0].name}`] : [],
+        ownerActors: ownerIds,
+        riskTypes: ['operational'],
+        sample
+      },
+      { id, origin: 'use-case', sources: [briefSourceRef(input, `Must-haves: ${input.mustHaveFeatures}`)] }
+    );
+  }
+
+  // First entity: core record from product (e.g., "Family Task Board" -> "Task")
+  const productCore = (() => {
+    const tokens = input.productName.split(/\s+/).filter((t) => t.length > 2 && !/board|tracker|portal|app|tool|hub|planner|manager|module|coordinator|catalog|module|book/i.test(t));
+    return tokens.length ? tokens[tokens.length - 1] : 'Record';
+  })();
+  entities.push(makeEntity(productCore, true, 'core'));
+
+  // Then up to 4 entities from feature seeds, deduped against productCore
+  for (const seed of seedPhrases) {
+    if (entities.length >= 5) break;
+    const candidate = titleCase(seed.replace(/^(create|track|manage|the)\s+/i, ''));
+    if (!candidate || candidate.toLowerCase().includes(productCore.toLowerCase())) continue;
+    if (entities.some((e) => e.name.toLowerCase().includes(candidate.toLowerCase()) || candidate.toLowerCase().includes(e.name.toLowerCase()))) continue;
+    entities.push(makeEntity(candidate, false));
+  }
+
+  // Always add a Member Profile entity to cover actor-side data
+  if (!entities.find((e) => /member|profile|account|user/i.test(e.name))) {
     entities.push(
       withProvenance(
         {
           name: 'Member Profile',
           description: `Account record for an actor of ${input.productName} (${actors.map((a) => a.name).join(' / ')}).`,
           fields: [
-            { name: 'memberId', type: 'string', description: 'Stable member identifier.', required: true, example: `${productSlug}-mem-001`, dbType: 'TEXT', unique: true, indexed: true },
-            { name: 'displayName', type: 'string', description: 'Human-readable member name.', required: true, example: 'Avery Reviewer', dbType: 'TEXT', pii: true },
-            { name: 'role', type: 'enum', description: 'Primary role for this member.', required: true, enumValues: actors.map((a) => slug(a.name)), example: slug(actors[0]?.name || 'primary-user'), dbType: 'ENUM' },
-            { name: 'createdAt', type: 'date', description: 'When the member joined.', required: true, example: new Date().toISOString(), dbType: 'TIMESTAMPTZ', defaultValue: 'CURRENT_TIMESTAMP' }
+            { name: 'memberId', type: 'string', description: 'Stable member identifier.', required: true, example: `${productSlug}-mem-001` },
+            { name: 'displayName', type: 'string', description: 'Human-readable member name.', required: true, example: 'Avery Reviewer' },
+            { name: 'role', type: 'enum', description: 'Primary role for this member.', required: true, enumValues: actors.map((a) => slug(a.name)), example: slug(actors[0]?.name || 'primary-user') },
+            { name: 'createdAt', type: 'date', description: 'When the member joined.', required: true, example: new Date().toISOString() }
           ],
-          relationships: [`Owned by all actors in the workspace`],
+          relationships: ['Owns Core Record entries'],
           ownerActors: actors.length ? [actors[0].id] : [],
           riskTypes: ['privacy'],
           sample: { memberId: `${productSlug}-mem-001`, displayName: 'Avery Reviewer', role: slug(actors[0]?.name || 'primary-user'), createdAt: new Date().toISOString() }
         },
-        { id: 'entity-member-profile', origin: 'domain', sources: [domainSourceRef(input, 'Member-profile entity standard for any role-aware workspace')] }
+        { id: 'entity-member-profile', origin: 'use-case', sources: [briefSourceRef(input, `Audience: ${input.targetAudience}`)] }
       )
     );
-    seenIds.add('entity-member-profile');
   }
 
-  // Always add an Audit Entry entity (if pack didn't already provide one).
-  if (!seenIds.has('entity-audit-entry')) {
-    const firstCoreEntity = entities.find((e) => e.id !== 'entity-member-profile');
-    const sampleRecordRef = firstCoreEntity
-      ? String(firstCoreEntity.sample[Object.keys(firstCoreEntity.sample)[0]])
-      : `${productSlug}-rec-001`;
-    entities.push(
-      withProvenance(
-        {
-          name: 'Audit Entry',
-          description: `Append-only record of who changed what in ${input.productName}.`,
-          fields: [
-            { name: 'entryId', type: 'string', description: 'Stable audit identifier.', required: true, example: `${productSlug}-audit-001`, dbType: 'TEXT', unique: true, indexed: true },
-            { name: 'recordRef', type: 'string', description: 'Reference to the changed record.', required: true, example: sampleRecordRef, dbType: 'TEXT', indexed: true },
-            { name: 'actorMemberId', type: 'string', description: 'Member who performed the action.', required: true, example: `${productSlug}-mem-001`, dbType: 'TEXT', indexed: true, fk: { entityId: 'entity-member-profile', fieldName: 'memberId', onDelete: 'RESTRICT' }, references: 'entity-member-profile' },
-            { name: 'action', type: 'enum', description: 'What changed.', required: true, enumValues: ['create', 'update', 'delete', 'state-change'], example: 'state-change', dbType: 'ENUM' },
-            { name: 'recordedAt', type: 'date', description: 'Server timestamp the entry was recorded.', required: true, example: new Date().toISOString(), dbType: 'TIMESTAMPTZ', defaultValue: 'CURRENT_TIMESTAMP', indexed: true }
-          ],
-          relationships: ['References Member Profile via actorMemberId', 'References any core record via recordRef'],
-          ownerActors: actors.length ? [actors[0].id] : [],
-          riskTypes: ['compliance'],
-          sample: { entryId: `${productSlug}-audit-001`, recordRef: sampleRecordRef, actorMemberId: `${productSlug}-mem-001`, action: 'state-change', recordedAt: new Date().toISOString() }
-        },
-        { id: 'entity-audit-entry', origin: 'domain', sources: [domainSourceRef(input, 'Audit-trail entity standard for any reviewable workflow')] }
-      )
-    );
-  }
+  // And an Audit Entry to satisfy the audit-trail expectation
+  entities.push(
+    withProvenance(
+      {
+        name: 'Audit Entry',
+        description: `Append-only record of who changed what in ${input.productName}.`,
+        fields: [
+          { name: 'entryId', type: 'string', description: 'Stable audit identifier.', required: true, example: `${productSlug}-audit-001` },
+          { name: 'recordRef', type: 'string', description: 'Reference to the changed record.', required: true, example: `${productSlug}-${slug(productCore).slice(0, 8)}-001` },
+          { name: 'actorMemberId', type: 'string', description: 'Member who performed the action.', required: true, example: `${productSlug}-mem-001` },
+          { name: 'action', type: 'enum', description: 'What changed.', required: true, enumValues: ['create', 'update', 'delete', 'state-change'], example: 'state-change' },
+          { name: 'recordedAt', type: 'date', description: 'Server timestamp the entry was recorded.', required: true, example: new Date().toISOString() }
+        ],
+        relationships: ['References Member Profile', 'References any core record'],
+        ownerActors: actors.length ? [actors[0].id] : [],
+        riskTypes: ['compliance'],
+        sample: { entryId: `${productSlug}-audit-001`, recordRef: `${productSlug}-${slug(productCore).slice(0, 8)}-001`, actorMemberId: `${productSlug}-mem-001`, action: 'state-change', recordedAt: new Date().toISOString() }
+      },
+      { id: 'entity-audit-entry', origin: 'domain', sources: [domainSourceRef(input, 'Audit-trail entity standard for any reviewable workflow')] }
+    )
+  );
 
   return entities;
 }
@@ -460,73 +308,97 @@ function deriveWorkflowName(
   return `${verb} ${entityName}`;
 }
 
-function deriveWorkflows(input: ProjectInput, actors: Actor[], entities: Entity[], pack: DomainPack, idMaps: IdMaps): Workflow[] {
-  const workflows: Workflow[] = pack.workflowArchetypes.map((arc) => materializePackWorkflow(arc, idMaps, input, pack));
+function deriveWorkflows(input: ProjectInput, actors: Actor[], entities: Entity[]): Workflow[] {
+  const features = splitList(input.mustHaveFeatures).slice(0, 4);
+  const primary = input.questionnaireAnswers['primary-workflow'] || features[0] || `Use ${input.productName}`;
+  const primaryActor = actors[0]?.id || 'actor-primary-user';
+  const reviewerActor = actors.find((a) => a.type === 'reviewer')?.id || actors[1]?.id || primaryActor;
+  const coreEntity = entities[0]?.id || 'entity-core';
+  const coreEntityName = entities[0]?.name || 'Record';
+  const memberEntity = entities.find((e) => e.id === 'entity-member-profile')?.id || coreEntity;
+  const auditEntity = entities.find((e) => e.id === 'entity-audit-entry')?.id || coreEntity;
 
-  // Always add a workspace member-management workflow when the pack didn't already cover member management.
-  const hasMemberMgmt = workflows.some((w) => /member|membership|invite|workspace/i.test(w.name));
-  if (!hasMemberMgmt) {
-    const reviewer = actors.find((a) => a.type === 'reviewer')?.id || actors[0]?.id || 'actor-creator';
-    const primary = actors.find((a) => a.type === 'primary-user')?.id || actors[0]?.id || reviewer;
-    const memberEntityId = entities.find((e) => e.id === 'entity-member-profile')?.id || entities[0]?.id || 'entity-member-profile';
-    const auditEntityId = entities.find((e) => e.id === 'entity-audit-entry')?.id || memberEntityId;
+  const workflows: Workflow[] = [];
+
+  // Workflow 1: primary creation/management
+  const wf1Steps: WorkflowStep[] = [
+    { order: 1, actor: primaryActor, action: `Open ${input.productName} and authenticate`, systemResponse: 'Show the workspace dashboard scoped to the actor.', preconditions: ['Account exists'] },
+    { order: 2, actor: primaryActor, action: `Create a new ${entities[0]?.name || 'record'}`, systemResponse: `Persist the ${entities[0]?.name || 'record'} with required fields and emit an audit entry.`, postconditions: [`${entities[0]?.name || 'record'} appears in the dashboard`] },
+    { order: 3, actor: primaryActor, action: `Edit the ${entities[0]?.name || 'record'} title or status`, systemResponse: 'Update the record, write audit entry, and surface change to allowed actors.', branchOn: 'Validation failure' },
+    { order: 4, actor: reviewerActor, action: `Review the ${entities[0]?.name || 'record'} before it is considered final`, systemResponse: 'Mark the record reviewed; lock further state changes for this stage.', preconditions: ['Record exists'] },
+    { order: 5, actor: primaryActor, action: 'View the dashboard for status', systemResponse: 'Render the current status and last updates with audit metadata.' }
+  ];
+  workflows.push(
+    withProvenance(
+      {
+        name: deriveWorkflowName('primary', input, coreEntityName),
+        primaryActor,
+        secondaryActors: actors.filter((a) => a.id !== primaryActor).slice(0, 2).map((a) => a.id),
+        steps: wf1Steps,
+        failureModes: [
+          { trigger: 'Required field missing', effect: 'Record save fails and the user is shown a clear validation error.', mitigation: 'Validate required fields client-side before submit; show error inline.' },
+          { trigger: 'Reviewer attempts to edit a locked record', effect: 'Lock is preserved and the reviewer is told why the record is locked.', mitigation: 'Surface lock state in the record header and gate writes server-side.' }
+        ] as WorkflowFailure[],
+        entitiesTouched: [coreEntity, auditEntity],
+        acceptancePattern: `Given a ${actors[0]?.name || 'primary user'}, when they create a ${entities[0]?.name || 'record'} and a ${actors.find((a) => a.type === 'reviewer')?.name || 'reviewer'} reviews it, then the dashboard shows the reviewed record and an audit entry exists.`
+      },
+      { id: 'workflow-primary', origin: 'use-case', sources: [briefSourceRef(input, primary)] }
+    )
+  );
+
+  // Workflow 2: review / approval (if there is a distinct reviewer)
+  if (reviewerActor !== primaryActor) {
+    const wf2Steps: WorkflowStep[] = [
+      { order: 1, actor: reviewerActor, action: 'Open the review queue', systemResponse: `Show ${entities[0]?.name || 'records'} pending review for the reviewer's scope.` },
+      { order: 2, actor: reviewerActor, action: `Open one ${entities[0]?.name || 'record'} for review`, systemResponse: 'Surface the record and prior audit entries.' },
+      { order: 3, actor: reviewerActor, action: 'Approve or send back with notes', systemResponse: 'Persist review decision; notify the originator.', branchOn: 'Decision: approve / revise' }
+    ];
     workflows.push(
       withProvenance(
         {
-          name: 'Workspace membership management',
-          primaryActor: reviewer,
-          secondaryActors: [primary],
-          steps: [
-            { order: 1, actor: reviewer, action: 'Invite a member to the workspace with a chosen role', systemResponse: 'Persist Member Profile draft and send invite token.' },
-            { order: 2, actor: primary, action: 'Accept invite and complete profile', systemResponse: 'Activate Member Profile and surface scope-appropriate dashboard.' },
-            { order: 3, actor: reviewer, action: 'Adjust member role mid-engagement', systemResponse: 'Update Member Profile, recompute visibility, and write audit entry.', branchOn: 'Upgrade / Downgrade' }
-          ],
+          name: deriveWorkflowName('review', input, coreEntityName),
+          primaryActor: reviewerActor,
+          secondaryActors: [primaryActor],
+          steps: wf2Steps,
           failureModes: [
-            { trigger: 'Invite token expired before acceptance', effect: 'Member sees a broken link', mitigation: 'Short token TTL with obvious resend path; reviewer dashboard shows pending invites.' },
-            { trigger: 'Member downgraded mid-write', effect: 'They lose access to their own work in flight', mitigation: 'Grace period before downgrade enforces; pending records remain readable.' }
-          ],
-          entitiesTouched: [memberEntityId, auditEntityId],
-          acceptancePattern: `Given a workspace, when a reviewer invites and later adjusts a member's role, then the member can accept, see the right scope, and the audit log captures every change.`
+            { trigger: 'Reviewer disagrees with the change', effect: 'Originator gets a revise-with-notes signal instead of a silent reject.', mitigation: 'Require a notes field for revise decisions.' }
+          ] as WorkflowFailure[],
+          entitiesTouched: [coreEntity, auditEntity],
+          acceptancePattern: `Given a ${actors[0]?.name || 'primary user'} created record, when the reviewer approves with notes, the record state advances and the audit log captures the decision.`
         },
-        { id: 'workflow-workspace-membership', origin: 'domain', sources: [domainSourceRef(input, 'Standard role-management workflow for any team workspace')] }
+        { id: 'workflow-review', origin: 'use-case', sources: [briefSourceRef(input, `Reviewer in ${input.targetAudience}`)] }
       )
     );
   }
+
+  // Workflow 3: account / member management
+  workflows.push(
+    withProvenance(
+      {
+        name: deriveWorkflowName('members', input, coreEntityName),
+        primaryActor: reviewerActor,
+        secondaryActors: [primaryActor],
+        steps: [
+          { order: 1, actor: reviewerActor, action: 'Invite a member to the workspace', systemResponse: 'Persist Member Profile draft and send invite token.' },
+          { order: 2, actor: primaryActor, action: 'Accept invite and complete profile', systemResponse: 'Activate Member Profile and surface scope-appropriate dashboard.' },
+          { order: 3, actor: reviewerActor, action: 'Adjust member role', systemResponse: 'Update Member Profile and write audit entry.' }
+        ],
+        failureModes: [{ trigger: 'Invite token expired', effect: 'Member sees a clear expired-token message.', mitigation: 'Short token TTL + obvious resend path.' }],
+        entitiesTouched: [memberEntity, auditEntity],
+        acceptancePattern: `Given a workspace, when a reviewer invites a member, the member can accept and appear with the correct role.`
+      },
+      { id: 'workflow-member-management', origin: 'domain', sources: [domainSourceRef(input, 'Standard role-management workflow for any team workspace')] }
+    )
+  );
 
   return workflows;
 }
 
 // ---------- integrations / risks / gates / anti-features / conflicts ----------
-function deriveIntegrations(input: ProjectInput, pack: DomainPack): Integration[] {
+function deriveIntegrations(input: ProjectInput): Integration[] {
   const integrations: Integration[] = [];
   const dataAndInt = `${input.dataAndIntegrations || ''} ${input.mustHaveFeatures || ''}`.toLowerCase();
-  // Pack-provided integration hints come first.
-  for (const hint of pack.integrationHints || []) {
-    integrations.push(
-      withProvenance(
-        {
-          name: hint.name,
-          vendor: hint.vendor,
-          category: hint.category,
-          purpose: hint.purpose,
-          required: hint.required ?? false,
-          envVar: hint.envVar,
-          mockedByDefault: !hint.required,
-          failureModes: ['Provider downtime', 'Quota exceeded', 'Auth token expired'],
-          popularity: 'common' as const,
-          alternatives: []
-        },
-        {
-          id: `integration-${slug(hint.name)}`,
-          origin: 'domain',
-          sources: [domainSourceRef(input, `${pack.name}: integration hint "${hint.name}"`)]
-        }
-      )
-    );
-  }
-  // Always include a generic email reminders integration if the brief mentions reminders / notifications and the pack didn't already cover email.
-  const hasEmail = integrations.some((i) => i.category === 'email');
-  if (!hasEmail && /email|reminder|notif/i.test(dataAndInt)) {
+  if (/email|reminder|notif/i.test(dataAndInt)) {
     integrations.push(
       withProvenance(
         {
@@ -879,92 +751,65 @@ function deriveScreens(
 
 // ---------- discovery + JTBD (Phase E4) ----------
 
-function deriveDiscovery(input: ProjectInput, pack: DomainPack): DiscoveryArtifacts {
-  // Pack-aware: pull headline, problem, solution, outcomes, alternatives, and
-  // critique seeds from the matched pack. Synth still under-credits idea-clarity
-  // (RC2 cap of 2/5) — agent-recipe lifts that — but the artifacts are no longer
-  // empty.
+function deriveDiscovery(input: ProjectInput): DiscoveryArtifacts {
+  // Lightweight templated stubs from the brief. Real-recipe runs (an LLM agent
+  // executing docs/RESEARCH_RECIPE.md Pass 0) populate richer ideaCritique
+  // and competingAlternatives — synth deliberately leaves those mostly empty.
   const problem = (input.problemStatement || `Users struggle to ${input.productIdea?.slice(0, 80) || 'accomplish the workflow'}`).trim();
   const solution = `${input.productName} provides a researched, role-aware workflow that ${input.mustHaveFeatures?.split(/[,;]/)[0]?.trim() || 'covers the must-have feature'}.`;
-  const audienceParts = splitList(input.targetAudience).map(cleanName).slice(0, 2);
+  const audienceParts = splitList(input.targetAudience).slice(0, 2);
   const headline = `${input.productName} for ${audienceParts.join(' and ') || 'the brief audience'}: cut friction in the v1 must-have flow without bolting on speculative scope.`;
   const outcomes = splitList(input.successMetrics).slice(0, 3).filter(Boolean);
-  // Pack success metrics provide concrete, observable post-shipping signals.
-  const packOutcomes = (pack.successMetricSeeds || []).slice(0, 3).map((m) => `${m.metric}: ${m.target} (${m.cadence})`);
   const fallbackOutcomes = [
     `Audience completes the must-have flow on the first attempt.`,
     `Reviewers can confirm correctness without hidden chat context.`,
     `No silent failures: every researched failure mode is surfaced to the user.`
   ];
-  const finalOutcomes = (outcomes.length >= 3 ? outcomes : packOutcomes.length ? packOutcomes : fallbackOutcomes).slice(0, 3);
   return {
     valueProposition: {
       headline,
       oneLineProblem: problem.length > 200 ? `${problem.slice(0, 197)}…` : problem,
       oneLineSolution: solution.length > 200 ? `${solution.slice(0, 197)}…` : solution,
-      topThreeOutcomes: finalOutcomes
+      topThreeOutcomes: (outcomes.length ? outcomes : fallbackOutcomes).slice(0, 3)
     },
     whyNow: {
       driver: `Users articulated this need in the brief; existing tools don't cover the must-have flow end-to-end.`,
       recentChange: `Brief assembled at ${new Date().toISOString().slice(0, 10)}; the must-have list is current and prioritized.`,
       risksIfDelayed: `If the must-have flow ships late, ${audienceParts[0] || 'the primary audience'} continues a manual workaround that has no audit trail and no role boundaries.`
     },
-    // Pack seeds at least one critique entry and one competing alternative so
-    // downstream artifacts (IDEA_CRITIQUE.md, USE_CASES.md) aren't empty.
-    // The audit dimension `idea-clarity` is still capped at 2/5 for synth
-    // because the seeds are templates, not real domain critique.
-    ideaCritique: (pack.ideaCritiqueSeeds || []).slice(0, 2),
-    competingAlternatives: (pack.competingAlternatives || []).slice(0, 2)
+    // Synthesizer leaves ideaCritique empty by design — only an LLM that has
+    // genuinely critiqued the brief (Pass 0 in the recipe) should fill these.
+    // The audit dimension `idea-clarity` only credits non-empty critique
+    // when researcher !== 'mock'.
+    ideaCritique: [],
+    competingAlternatives: []
   };
 }
 
-function deriveJtbd(input: ProjectInput, actors: Actor[], pack: DomainPack): JobToBeDone[] {
+function deriveJtbd(input: ProjectInput, actors: Actor[]): JobToBeDone[] {
   const out: JobToBeDone[] = [];
-  // Build a map of pack archetype JTBD seeds keyed by actor idHint.
-  const packSeedByActorId = new Map<string, { situation: string; motivation: string; expectedOutcome: string; currentWorkaround: string; hireForCriteria: string[] }>();
-  for (const arc of pack.actorArchetypes) {
-    if (arc.jtbdSeeds && arc.jtbdSeeds.length) {
-      const seed = arc.jtbdSeeds[0];
-      packSeedByActorId.set(`actor-${arc.idHint}`, {
-        situation: seed.situation,
-        motivation: seed.motivation,
-        expectedOutcome: seed.expectedOutcome,
-        currentWorkaround: seed.currentWorkaround,
-        hireForCriteria: [...seed.hireForCriteria]
-      });
-    }
-  }
-
   for (const a of actors) {
-    const seed = packSeedByActorId.get(a.id);
-    const baseJtbd = seed
-      ? {
-          actorId: a.id,
-          situation: seed.situation,
-          motivation: seed.motivation,
-          expectedOutcome: seed.expectedOutcome,
-          currentWorkaround: seed.currentWorkaround,
-          hireForCriteria: seed.hireForCriteria
-        }
-      : {
-          actorId: a.id,
-          situation: `When ${a.name.toLowerCase()} needs to ${(a.responsibilities[0] || 'engage').replace(/^(Use|Operate)\s+/i, '').replace(/\.$/, '').toLowerCase()}`,
-          motivation: `I want to complete the ${input.productName} workflow I'm responsible for without losing context across sessions or relying on hidden chat history.`,
-          expectedOutcome: `So that the persisted state is reviewable, my role boundary is respected, and a reviewer can trust the audit trail.`,
-          currentWorkaround: `Manual spreadsheets, ad-hoc scripts, or chat threads — none of which produce a consistent audit entry or enforce visibility scope.`,
-          hireForCriteria: [
-            `Workflow completes in fewer steps than the manual workaround.`,
-            `Visibility scope is enforced; ${a.name} never sees data from other actors' scope unintentionally.`,
-            `Every action that mutates state writes an audit entry that survives session boundaries.`
-          ]
-        };
-    out.push(
-      withProvenance(baseJtbd, {
+    const responsibility = a.responsibilities[0] || `Use ${input.productName}`;
+    const jtbd = withProvenance(
+      {
+        actorId: a.id,
+        situation: `When ${a.name.toLowerCase()} needs to ${responsibility.replace(/^(Use|Operate)\s+/i, '').replace(/\.$/, '').toLowerCase()}`,
+        motivation: `I want to complete the ${input.productName} workflow I'm responsible for without losing context across sessions or relying on hidden chat history.`,
+        expectedOutcome: `So that the persisted state is reviewable, my role boundary is respected, and a reviewer can trust the audit trail.`,
+        currentWorkaround: `Manual spreadsheets, ad-hoc scripts, or chat threads — none of which produce a consistent audit entry or enforce visibility scope.`,
+        hireForCriteria: [
+          `Workflow completes in fewer steps than the manual workaround.`,
+          `Visibility scope is enforced; ${a.name} never sees data from other actors' scope unintentionally.`,
+          `Every action that mutates state writes an audit entry that survives session boundaries.`
+        ]
+      },
+      {
         id: `jtbd-${slug(a.name)}`,
-        origin: seed ? ('both' as const) : ('use-case' as const),
+        origin: 'use-case' as const,
         sources: [briefSourceRef(input, `Audience: ${input.targetAudience}`)]
-      })
+      }
     );
+    out.push(jtbd);
   }
   return out;
 }
@@ -1138,17 +983,12 @@ function deriveUxFlow(screens: Screen[]): UxFlowEdge[] {
 }
 
 export function synthesizeExtractions(input: ProjectInput): ResearchExtractions {
-  // Phase F1: detect category and load pack.
-  const categoryId = detectCategory(input);
-  const pack = getPack(categoryId);
-  const idMaps = buildIdMaps(pack);
-
-  const actors = deriveActors(input, pack);
-  const entities = deriveEntities(input, actors, pack, idMaps);
+  const actors = deriveActors(input);
+  const entities = deriveEntities(input, actors);
   // Phase E3: enrich entity fields with DB-level metadata (dbType, FK, indexes, defaults).
   applyDbMetadata(entities);
-  const workflows = deriveWorkflows(input, actors, entities, pack, idMaps);
-  const integrations = deriveIntegrations(input, pack);
+  const workflows = deriveWorkflows(input, actors, entities);
+  const integrations = deriveIntegrations(input);
   const risks = deriveRisks(input, actors, entities);
   const gates = deriveGates(input, risks);
   const antiFeatures = deriveAntiFeatures(input);
@@ -1156,8 +996,8 @@ export function synthesizeExtractions(input: ProjectInput): ResearchExtractions 
   const screens = deriveScreens(input, actors, entities, workflows);
   const uxFlow = deriveUxFlow(screens);
   const testCases = deriveTestCases(input, entities, workflows);
-  const jobsToBeDone = deriveJtbd(input, actors, pack);
-  const discovery = deriveDiscovery(input, pack);
+  const jobsToBeDone = deriveJtbd(input, actors);
+  const discovery = deriveDiscovery(input);
 
   const briefHash = crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex');
   const meta: ResearchMeta = {

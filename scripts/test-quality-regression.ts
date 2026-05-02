@@ -662,19 +662,15 @@ async function main() {
       console.error(`  FAIL: ${useCase.name} synthesized extractions have meta.researchSource=${synthesized.meta.researchSource}, expected 'synthesized'.`);
       failures++;
     }
-    // Phase F1 (post-RC2): synth may seed 1-2 pack-templated critique/alternatives
-    // so downstream artifacts (USE_CASES.md, IDEA_CRITIQUE.md) aren't empty.
-    // The audit's `idea-clarity` dim still hard-caps synth at 2/5 regardless of
-    // seeded content, so demoReady stays false. We assert ≤2 entries to prevent
-    // accidental over-seeding.
-    const synthCritique = synthesized.meta.discovery?.ideaCritique ?? [];
-    if (synthCritique.length > 2) {
-      console.error(`  FAIL: ${useCase.name} synthesized ideaCritique should have ≤2 pack-seeded entries (got ${synthCritique.length}).`);
+    // RC2: synth must NOT populate ideaCritique or competingAlternatives — those
+    // are real-recipe-only artifacts. The audit credits them only for
+    // researchSource ∈ {agent-recipe, imported-real, manual}.
+    if ((synthesized.meta.discovery?.ideaCritique ?? []).length !== 0) {
+      console.error(`  FAIL: ${useCase.name} synthesized ideaCritique should be empty (got ${synthesized.meta.discovery?.ideaCritique?.length}).`);
       failures++;
     }
-    const synthAlternatives = synthesized.meta.discovery?.competingAlternatives ?? [];
-    if (synthAlternatives.length > 2) {
-      console.error(`  FAIL: ${useCase.name} synthesized competingAlternatives should have ≤2 pack-seeded entries (got ${synthAlternatives.length}).`);
+    if ((synthesized.meta.discovery?.competingAlternatives ?? []).length !== 0) {
+      console.error(`  FAIL: ${useCase.name} synthesized competingAlternatives should be empty (got ${synthesized.meta.discovery?.competingAlternatives?.length}).`);
       failures++;
     }
 

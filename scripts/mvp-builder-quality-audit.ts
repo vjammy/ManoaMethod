@@ -1346,9 +1346,7 @@ function expertIdeaClarity(ex: ResearchExtractsLite, source: ResearchSource): Ex
   }
 
   // Critique only credited for real research sources (agent-recipe / imported-real / manual).
-  // Synth may carry pack-seeded critique/alternatives so downstream artifacts
-  // aren't empty, but those seeds are templates, not real product judgment —
-  // the RC2 cap of 2/5 still applies regardless of seeded content.
+  // Synth deliberately leaves critique empty — see deriveDiscovery in the synthesizer.
   const isSynth = source === 'synthesized';
   const critique = discovery.ideaCritique || [];
   const alternatives = discovery.competingAlternatives || [];
@@ -1357,14 +1355,11 @@ function expertIdeaClarity(ex: ResearchExtractsLite, source: ResearchSource): Ex
     if (critique.length >= 3) score += 1;
     if (alternatives.length >= 1) score += 1;
   } else {
-    // Synth: don't credit critique/alternatives, AND hard-cap final score at 2/5
-    // so pack-seeded headlines/outcomes/whyNow can't push synth above the
-    // judgment-bearing ceiling.
-    evidence.push(`synthesized research source — critique not credited and dim hard-capped at 2/5 (run docs/RESEARCH_RECIPE.md for full idea-clarity score)`);
+    // Synth: don't punish (no cap), don't reward (no critique credit).
+    evidence.push(`synthesized research source — critique not credited (run docs/RESEARCH_RECIPE.md for full idea-clarity score)`);
   }
 
-  const finalScore = isSynth ? Math.min(2, score) : Math.min(5, score);
-  return { name: 'idea-clarity', score: finalScore, max: 5, evidence };
+  return { name: 'idea-clarity', score: Math.min(5, score), max: 5, evidence };
 }
 
 // ===== Phase F3: comprehensive-depth dimensions (E11–E16) =====
