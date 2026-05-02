@@ -41,6 +41,9 @@ type AuditSnapshot = {
   total: number;
   rating: 'cookie-cutter' | 'thin' | 'workable' | 'production-ready';
   researchGrounded: boolean;
+  productionReady: boolean;
+  demoReady: boolean;
+  researchSource: string;
   dimensions: Array<{ name: string; score: number; max: number }>;
   topFindings: Array<{ dimension: string; severity: string; message: string }>;
 };
@@ -132,6 +135,23 @@ async function runIteration(iteration: number, idea: typeof ideas[number]): Prom
   const inputJsonPath = path.join(iterDir, 'input.json');
   const outDir = path.join(iterDir, 'out');
   const packageDir = path.join(outDir, 'mvp-builder-workspace');
+  // RC2: scrub prior workspace before re-running. Without this, stale files
+  // like repo/mvp-builder-loop-state.json from a previous sweep cause loop-dry
+  // to no-op with status='max-iterations' (state.iterations.length already
+  // satisfies maxIterations=1, so the for-loop body never executes). Removing
+  // the entire out/ + research-input/ + audit-state trees per iter makes
+  // reruns deterministic.
+  if (fs.existsSync(outDir)) fs.rmSync(outDir, { recursive: true, force: true });
+  const researchInputDirEarly = path.join(iterDir, 'research-input');
+  if (fs.existsSync(researchInputDirEarly)) fs.rmSync(researchInputDirEarly, { recursive: true, force: true });
+  // RC2 regression check: belt-and-braces — if any stale loop-state file is
+  // somehow left behind (e.g. parallel runs, interrupted sweeps), wipe it
+  // explicitly. The above rmSync of outDir should already cover this; this
+  // is here so a future refactor that splits outDir cleanup can't regress.
+  const staleLoopState = path.join(packageDir, 'repo', 'mvp-builder-loop-state.json');
+  if (fs.existsSync(staleLoopState)) {
+    fs.rmSync(staleLoopState, { force: true });
+  }
   ensureDir(iterDir);
   fs.writeFileSync(inputJsonPath, JSON.stringify(idea.input, null, 2), 'utf8');
 
@@ -239,6 +259,9 @@ async function runIteration(iteration: number, idea: typeof ideas[number]): Prom
       total: result.total,
       rating: result.rating,
       researchGrounded: result.researchGrounded,
+      productionReady: result.readiness.productionReady,
+      demoReady: result.readiness.demoReady,
+      researchSource: result.readiness.researchSource,
       dimensions: result.dimensions.map((d) => ({ name: d.name, score: d.score, max: d.max })),
       topFindings: result.topFindings.map((f) => ({ dimension: f.dimension, severity: f.severity, message: f.message }))
     };
@@ -372,9 +395,16 @@ function renderRunReport(results: IterationResult[]): string {
     const ratingCounts = new Map<string, number>();
     audits.forEach((a) => ratingCounts.set(a.rating, (ratingCounts.get(a.rating) || 0) + 1));
     const grounded = audits.filter((a) => a.researchGrounded).length;
+    const productionReady = audits.filter((a) => a.productionReady).length;
+    const demoReady = audits.filter((a) => a.demoReady).length;
+    const sourceCounts = new Map<string, number>();
+    audits.forEach((a) => sourceCounts.set(a.researchSource, (sourceCounts.get(a.researchSource) || 0) + 1));
     lines.push(`- Workspaces audited: ${audits.length}`);
     lines.push(`- Score: min ${min} / median ${median} / mean ${mean} / max ${max}`);
     lines.push(`- Research-grounded: ${grounded}/${audits.length}`);
+    lines.push(`- Production-ready: ${productionReady}/${audits.length}`);
+    lines.push(`- Demo / client-ready: ${demoReady}/${audits.length}`);
+    lines.push(`- Research source: ${Array.from(sourceCounts.entries()).map(([s, c]) => `${s}=${c}`).join(', ')}`);
     lines.push('');
     lines.push('| Rating | Count |');
     lines.push('| --- | ---: |');
