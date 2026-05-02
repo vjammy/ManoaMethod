@@ -208,10 +208,47 @@ const ACCEPTANCE_PATTERNS: OntologyAcceptancePattern[] = [
 ];
 
 function splitItems(value: string) {
-  return value
-    .split(/\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  if (!value) return [];
+  // Paren/bracket-aware splitter: respects "(parens)" and "[brackets]", accepts
+  // ; , and \n as separators, and falls back to "Foo. Bar. Baz." sentence-style
+  // splits when the source clearly is a list. Ported from origin/main commit
+  // 568685a as a generic improvement for any code that processes brief lists.
+  const items: string[] = [];
+  let buf = '';
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  for (const ch of value) {
+    if (ch === '(' || ch === '[') {
+      if (ch === '(') parenDepth++;
+      else bracketDepth++;
+      buf += ch;
+      continue;
+    }
+    if (ch === ')' || ch === ']') {
+      if (ch === ')') parenDepth = Math.max(0, parenDepth - 1);
+      else bracketDepth = Math.max(0, bracketDepth - 1);
+      buf += ch;
+      continue;
+    }
+    const isSeparator =
+      (ch === '\n' || ch === ';' || ch === ',') && parenDepth === 0 && bracketDepth === 0;
+    if (isSeparator) {
+      const trimmed = buf.trim();
+      if (trimmed) items.push(trimmed);
+      buf = '';
+      continue;
+    }
+    buf += ch;
+  }
+  const tail = buf.trim();
+  if (tail) items.push(tail);
+  if (items.length === 1) {
+    const clauses = items[0].split(/\.\s+/).map((part) => part.trim()).filter(Boolean);
+    if (clauses.length >= 4 && clauses.every((part) => part.length <= 80)) {
+      return clauses.map((part) => part.replace(/\.$/, '').trim()).filter(Boolean);
+    }
+  }
+  return items;
 }
 
 function normalize(value: string) {

@@ -139,10 +139,64 @@ function ensureTrailingNewline(value: string) {
 }
 
 function splitItems(value: string) {
-  return value
-    .split(/\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean);
+  if (!value) return [];
+  // Paren/bracket-aware splitter: respects "(parens)" and "[brackets]", accepts
+  // ; , and \n as separators, and falls back to "Foo. Bar. Baz." sentence-style
+  // splits when the source clearly is a list. Ported from origin/main commit
+  // 568685a as a generic improvement for any code that processes brief lists.
+  const items: string[] = [];
+  let buf = '';
+  let parenDepth = 0;
+  let bracketDepth = 0;
+  for (const ch of value) {
+    if (ch === '(' || ch === '[') {
+      if (ch === '(') parenDepth++;
+      else bracketDepth++;
+      buf += ch;
+      continue;
+    }
+    if (ch === ')' || ch === ']') {
+      if (ch === ')') parenDepth = Math.max(0, parenDepth - 1);
+      else bracketDepth = Math.max(0, bracketDepth - 1);
+      buf += ch;
+      continue;
+    }
+    const isSeparator =
+      (ch === '\n' || ch === ';' || ch === ',') && parenDepth === 0 && bracketDepth === 0;
+    if (isSeparator) {
+      const trimmed = buf.trim();
+      if (trimmed) items.push(trimmed);
+      buf = '';
+      continue;
+    }
+    buf += ch;
+  }
+  const tail = buf.trim();
+  if (tail) items.push(tail);
+  if (items.length === 1) {
+    const clauses = items[0].split(/\.\s+/).map((part) => part.trim()).filter(Boolean);
+    if (clauses.length >= 4 && clauses.every((part) => part.length <= 80)) {
+      return clauses.map((part) => part.replace(/\.$/, '').trim()).filter(Boolean);
+    }
+  }
+  return items;
+}
+
+// Extract a bounded head-noun phrase for role / audience labels. Ported from
+// origin/main commits 568685a + d289170: cuts at relative-clause/conjunction
+// boundaries, strips leading articles, capitalizes the first letter, caps at
+// `maxWords`. Used to keep phase / role titles readable when audience text is
+// long-winded.
+function extractRoleHead(value: string, fallback: string, maxWords = 4): string {
+  const trimmed = (value || '').trim();
+  if (!trimmed) return fallback;
+  const head = trimmed.split(/\s+(?:and|or|who|that|which|where|when)\s+/i)[0].trim();
+  const stripped = head
+    .replace(/^[\s,;:.\-]+|[\s,;:.\-]+$/g, '')
+    .replace(/^(?:a|an|the)\s+/i, '');
+  const words = stripped.split(/\s+/).filter(Boolean).slice(0, maxWords).join(' ');
+  if (!words) return fallback;
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 function wordCount(value: string) {
@@ -740,7 +794,7 @@ function buildContext(input: ProjectInput, extractions?: ResearchExtractions): P
     audienceSegments,
     keywords,
     answers,
-    primaryAudience: audienceSegments[0] || 'the primary target user',
+    primaryAudience: extractRoleHead(audienceSegments[0] || '', 'the primary target user'),
     primaryFeature: mustHaves[0] || truncateText(input.desiredOutput, 8) || input.productName,
     secondaryFeature: mustHaves[1] || truncateText(input.productIdea, 8),
     outputAnchor: truncateText(input.desiredOutput || input.productIdea, 10),
