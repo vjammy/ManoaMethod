@@ -24,6 +24,7 @@ const NEUTRAL_ARCHETYPE_DETECTION: ArchetypeDetection = {
   candidateScores: []
 };
 import type { ResearchExtractions } from './research/schema';
+import { getResearchSource } from './research/schema';
 import {
   buildResearchTokenPack,
   deriveBriefTokens,
@@ -1408,6 +1409,46 @@ ${FALLBACK_REQUIREMENTS_BANNER}${scenarios
 `;
 }
 
+/**
+ * Phase G G2 issue 4: pick the failureMode whose trigger shares the most
+ * content-bearing tokens with the step's branchOn / systemResponse. Returns
+ * undefined if no failureMode shares ≥ 1 meaningful keyword (3+ chars,
+ * non-stopword) — caller then emits a workflow-level pointer instead of
+ * fabricating a join.
+ */
+function matchFailureModeForStep(
+  step: { branchOn?: string; systemResponse: string; action: string; order: number },
+  failureModes: ReadonlyArray<{ trigger: string; effect: string; mitigation: string }>
+): { trigger: string; effect: string; mitigation: string } | undefined {
+  if (!failureModes.length) return undefined;
+  const stepText = [step.branchOn || '', step.systemResponse || '', step.action || '']
+    .join(' ')
+    .toLowerCase();
+  if (!stepText.trim()) return undefined;
+  const STOP = new Set([
+    'and', 'the', 'for', 'with', 'that', 'this', 'from', 'into', 'when', 'what',
+    'will', 'have', 'been', 'were', 'are', 'is', 'a', 'an', 'of', 'to', 'in',
+    'on', 'or', 'as', 'by', 'be', 'at', 'it', 'if', 'so', 'no', 'not'
+  ]);
+  const tokenize = (s: string) =>
+    new Set(
+      s
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((t) => t.length >= 4 && !STOP.has(t))
+    );
+  const stepTokens = tokenize(stepText);
+  if (stepTokens.size === 0) return undefined;
+  let best: { fm: typeof failureModes[number]; overlap: number } | undefined;
+  for (const fm of failureModes) {
+    const fmTokens = tokenize(fm.trigger);
+    let overlap = 0;
+    for (const t of fmTokens) if (stepTokens.has(t)) overlap += 1;
+    if (overlap > 0 && (!best || overlap > best.overlap)) best = { fm, overlap };
+  }
+  return best?.fm;
+}
+
 function buildFunctionalRequirementsFromResearch(input: ProjectInput, ex: ResearchExtractions) {
   const actorById = new Map(ex.actors.map((a) => [a.id, a]));
   const entityById = new Map(ex.entities.map((e) => [e.id, e]));
@@ -1437,15 +1478,21 @@ function buildFunctionalRequirementsFromResearch(input: ProjectInput, ex: Resear
       .slice(0, 2)
       .map((s) => `[${s.title}](${s.url})`)
       .join('; ');
-    // Phase F3: rotate through workflow failure modes by step index so requirements
-    // from the same workflow surface DIFFERENT failure cases. Without this rotation
-    // every step shared the workflow's first failure mode, defeating the audit's
-    // requirement-failure-variance dim.
+    // Phase G G2 issue 4: derive per-step failure from `step.branchOn` first.
+    // If branchOn (or systemResponse) shares meaningful keywords with one of
+    // the workflow's failure-mode triggers, attach THAT specific failure to
+    // the requirement; otherwise emit a workflow-level pointer instead of
+    // rotating through unrelated failures. Pre-G2 code rotated by step index
+    // modulo, which produced join-spam (e.g. delimiter check listed under
+    // "resolve flagged rows") because most workflows have 5-7 steps but only
+    // 2-3 failure modes.
     const fmList = r.workflow.failureModes;
-    const fm = fmList.length ? fmList[(r.step.order - 1) % fmList.length] : undefined;
+    const fm = matchFailureModeForStep(r.step, fmList);
     const failureNote = fm
       ? `On ${fm.trigger.toLowerCase()}, ${fm.mitigation.toLowerCase()}.`
-      : 'Failure surfaces clearly to the actor; no silent state.';
+      : fmList.length
+        ? `No step-specific failure mode researched for this action; see workflow-level failures for "${r.workflow.name}" (${fmList.length} mode${fmList.length === 1 ? '' : 's'}).`
+        : 'Failure surfaces clearly to the actor; no silent state.';
     return `## Requirement ${reqNum}: ${r.title}
 
 - Actor: ${r.actor ? r.actor.name : r.step.actor}
@@ -2818,13 +2865,48 @@ function deriveLifecycleStatus(options: {
   warnings: WarningItem[];
   scoreTotal: number;
   approvedForBuild: boolean;
+  buildReady?: boolean;
 }) {
-  if (options.warnings.some((warning) => warning.severity === 'blocker')) return 'Blocked' as LifecycleStatus;
+  // Phase G G2 issue 3: reserve `Blocked` for genuine structural failures
+  // (schema-validation severity > 'note', unresolved critical conflicts)
+  // surfaced by the research extraction pipeline. Critique/questionnaire/score
+  // blockers stay visible as warnings but no longer trigger the Blocked banner
+  // when the workspace has agent-recipe research and a clean schema — that
+  // case becomes BuildReady.
+  const hasStructuralBlocker = options.warnings.some(
+    (warning) => warning.severity === 'blocker' && warning.source === 'schema'
+  );
+  if (hasStructuralBlocker) return 'Blocked' as LifecycleStatus;
   const reviewReady =
     options.scoreTotal >= 88 && options.warnings.every((warning) => warning.severity === 'info');
   if (reviewReady && options.approvedForBuild) return 'ApprovedForBuild' as LifecycleStatus;
+  if (options.buildReady) return 'BuildReady' as LifecycleStatus;
+  if (options.warnings.some((warning) => warning.severity === 'blocker')) return 'Blocked' as LifecycleStatus;
   if (reviewReady) return 'ReviewReady' as LifecycleStatus;
   return 'Draft' as LifecycleStatus;
+}
+
+/**
+ * Phase G G2 issue 3: a workspace is "BuildReady" when it has agent-recipe
+ * research extractions, the schema is intact (no critical conflicts), and the
+ * artifacts a coding agent needs to build (workflows, screens, entities) are
+ * present. Synth and legacy-templated paths never reach BuildReady.
+ */
+function computeBuildReadyFlag(context: ProjectContext): boolean {
+  const ex = context.extractions;
+  if (!ex) return false;
+  const source = getResearchSource(ex.meta);
+  if (source !== 'agent-recipe' && source !== 'imported-real') return false;
+  const hasWorkflows = ex.workflows.length >= 1;
+  const hasScreens = Boolean(ex.screens && ex.screens.length >= 1);
+  const hasEntities = ex.entities.length >= 1;
+  if (!hasWorkflows || !hasScreens || !hasEntities) return false;
+  // Reserve Blocked for actual unresolved conflicts at severity > 'note'.
+  const hasCriticalConflict = ex.conflicts.some(
+    (c) => (c.severity === 'critical' || c.severity === 'important') && c.resolution === 'pending'
+  );
+  if (hasCriticalConflict) return false;
+  return true;
 }
 
 function getApprovalFlags(input: ProjectInput) {
@@ -2845,10 +2927,12 @@ function getLifecycleSummary(status: LifecycleStatus) {
   switch (status) {
     case 'ApprovedForBuild':
       return 'The package has explicit approval metadata and can be treated as approved for build execution.';
+    case 'BuildReady':
+      return 'The package has agent-recipe research, a validated schema, and full requirement / persona / use-case depth. A coding agent can build from it without re-deciding the spec; explicit human approval (ApprovedForBuild) is still a separate step.';
     case 'ReviewReady':
       return 'The package is complete enough for formal human review, but it is not yet explicitly approved for build execution.';
     case 'Blocked':
-      return 'The package is blocked by unresolved blocker warnings, missing critical answers, or failed readiness conditions.';
+      return 'The package is blocked by structural problems (schema-validation failures or unresolved critical conflicts). Critique and questionnaire warnings alone no longer trigger this state.';
     case 'InRework':
       return 'A previously approved phase has been reopened. The current phase has a recorded gate failure and an active REWORK_PROMPT that must be resolved before advancing.';
     default:
@@ -5043,6 +5127,126 @@ If you are a business user, this is the first file to open.
 `;
 }
 
+/**
+ * Phase G G2 issue 2: builder-targeted entry point. BUSINESS_USER_START_HERE
+ * is for human reviewers; this file is for an implementing coding agent.
+ * Points at the actually-load-bearing files for building the app, in the order
+ * an agent reads them: brief → personas → use-cases → workflows → screens →
+ * schema → tests.
+ */
+function buildBuilderStartHere(bundle: ProjectBundle, input: ProjectInput, context: ProjectContext) {
+  const hasResearch = Boolean(context.extractions);
+  const hasScreens = hasResearch && Boolean(context.extractions!.screens && context.extractions!.screens.length);
+  const hasDb = hasResearch && context.extractions!.entities.some((e) => e.fields.some((f) => f.dbType));
+  const buildReadyLine =
+    bundle.lifecycleStatus === 'BuildReady' || bundle.lifecycleStatus === 'ApprovedForBuild'
+      ? 'This workspace is **BuildReady**. The 10 files below are sufficient to scaffold and deploy the app.'
+      : `This workspace is in **${bundle.lifecycleStatus}** state. Read the 10 files below; if blockers exist they are listed in 00_PROJECT_CONTEXT.md.`;
+  return `# BUILDER_START_HERE
+
+## Who this file is for
+You are a coding agent (Claude Code, Codex, OpenCode, Kimi, GLM) that has been pointed at this workspace and asked to build a runnable web app. This file tells you the 10 load-bearing files to open, in order.
+
+## Status
+${buildReadyLine}
+
+## Read these in order
+
+1. **PROJECT_BRIEF.md** — one-paragraph product brief and the must-have scope.
+2. **product-strategy/USE_CASES.md** — 2-4 use cases per persona with happy / edge / failure / recovery paths.${hasResearch ? '' : ' *(generated only when research extractions exist — fall back to product-strategy/MVP_SCOPE.md.)*'}
+3. **product-strategy/USER_PERSONAS.md** — actor-level personas with JTBDs.${hasResearch ? '' : ' *(same caveat.)*'}
+4. **research/extracted/workflows.json** — workflows in dependency order. Build one route group + one page + one server action per workflow.id.${hasResearch ? '' : ' *(only present in research-driven workspaces.)*'}
+5. **research/extracted/screens.json** — screen-level state contracts (sections, fields, actions).${hasScreens ? '' : ' *(emitted when research includes screens; fall back to ui-ux/SCREEN_INVENTORY.md.)*'}
+6. **requirements/PER_SCREEN_REQUIREMENTS.md** — empty / loading / error / populated state contract per screen. Mandatory for every page component.${hasScreens ? '' : ' *(emitted when screens are researched.)*'}
+7. **architecture/DATABASE_SCHEMA.sql** — Postgres-correct DDL. Drizzle / Prisma / direct SQL all consume it.${hasDb ? '' : ' *(only emitted when entity fields carry dbType metadata.)*'}
+8. **architecture/DATABASE_SCHEMA.md** — readable index of tables, columns, FK relationships, PII flags.${hasDb ? '' : ' *(same caveat.)*'}
+9. **research/extracted/testCases.json** — test cases per persona × workflow × screen. Generate Playwright suites from this.${hasResearch ? '' : ''}
+10. **phases/<slug>/INTEGRATION_TESTS.md** — happy-path + failure-mode integration tests per phase.
+
+## Then read the build recipe
+Open \`docs/BUILD_RECIPE.md\` for the 9 mandatory build passes (stack pick → schema migration → auth wiring → workflow scaffolding → per-screen implementation → server-side validation enforcement → audit-log wiring → smoke + e2e tests → deploy + production smoke).
+
+## What you can ignore
+The top level of this workspace contains 60+ files for ceremony, gating, recovery, scoring, and human-review purposes. None of them are required to build the app. See \`archive/INDEX.md\` for the catalog. The 10 files above plus \`docs/BUILD_RECIPE.md\` are sufficient.
+
+## Validation rules to enforce server-side (not just in UI)
+The recipe-generated workspace declares validation behaviors a real builder must enforce at the API / server-action layer (the UI alone is not enough — a malicious client can bypass). See PER_SCREEN_REQUIREMENTS.md for the canonical list per screen. Common patterns:
+- Minimum-length checks on free-text inputs (e.g. 20-char minimum on research notes)
+- Domain reject patterns (malformed email / URL → reject)
+- Opt-out keyword scans on inbound text
+- Territory / ownership conflict blocks at write time
+- Consent-gate enforcement before persistence
+
+## Audit log wiring
+Every state-changing route must write the audit entry the workspace declares (see entity entries with eventType enumValues). Server-side, not client-side.
+
+## Project anchors
+- Product: ${input.productName}
+- Primary audience: ${context.primaryAudience}
+- Problem statement: ${input.problemStatement}
+- Must-have scope: ${context.mustHaves.join(', ') || 'see PROJECT_BRIEF.md'}
+`;
+}
+
+/**
+ * Phase G G2 issue 1: catalog the ceremony / gate / recovery / scoring files
+ * at the workspace top level so a builder agent can skip them. Files
+ * themselves still live at top level (smoke-test asserts their paths) — this
+ * file is the index that points away from the noise.
+ */
+function buildArchiveIndex(bundle: ProjectBundle) {
+  return `# archive — ceremony files index
+
+## What this file is for
+The workspace top level contains 60+ files. Many of them are ceremony, gating, recovery, or scoring artifacts that are required for the mvp-builder lifecycle but are NOT load-bearing for an implementing coding agent. This file lists them so you can skip them.
+
+## How to use this index
+- Coding agent that needs to BUILD the app: open \`BUILDER_START_HERE.md\` for the 10 canonical files. Skip everything in the lists below.
+- Human reviewer that needs to APPROVE the package: open \`BUSINESS_USER_START_HERE.md\` and \`00_APPROVAL_GATE.md\`. The lists below are the underlying evidence files.
+
+## Final / handoff reports (snapshot at lifecycle close)
+- FINAL_RELEASE_REPORT.md
+- FINAL_HANDOFF.md
+- FINAL_GATE_REPORT.md
+- FINAL_SCORECARD.md
+- FINAL_RECOVERY_SUMMARY.md
+- FINAL_DEPLOYMENT_STATUS.md
+
+## Approval / gating
+- 00_APPROVAL_GATE.md
+- HANDOFF.md
+- PRODUCTION_GATE.md
+- RELEASE_CHECKLIST.md
+- PRODUCTION_READINESS_CHECKLIST.md
+
+## Recursive testing / improvement loop
+- recursive-test/* (all files)
+- auto-improve/* (all files)
+
+## Operational runbooks (only relevant once deployed)
+- OPERATIONS_RUNBOOK.md
+- INCIDENT_RESPONSE_GUIDE.md
+- ROLLBACK_PLAN.md
+- DEPLOYMENT_PLAN.md
+- ENVIRONMENT_SETUP.md
+
+## Beginner-business companion files
+- CURRENT_STATUS.md
+- COPY_PASTE_PROMPTS.md
+- MODULE_MAP.md
+- WHAT_TO_IGNORE_FOR_NOW.md
+- STEP_BY_STEP_BUILD_GUIDE.md
+- ORCHESTRATOR_GUIDE.md
+- TROUBLESHOOTING.md
+
+## Why these are not deleted
+The mvp-builder validator and smoke test assert these paths exist. They are evidence files for the lifecycle audit. Skipping them is correct for build agents; deleting them would break the validator.
+
+## Lifecycle at archive time
+${bundle.lifecycleStatus}
+`;
+}
+
 function buildModuleMap(input: ProjectInput, context: ProjectContext) {
   const moduleEntries = getFriendlyModuleEntries(input, context);
   const byStatus = (status: string) => moduleEntries.filter((entry) => entry.status === status);
@@ -6834,6 +7038,21 @@ ${firstPhase.phaseType === 'implementation'
 }
 
 function buildRootContext(input: ProjectInput, bundle: ProjectBundle, context: ProjectContext) {
+  const isBuildReady = bundle.lifecycleStatus === 'BuildReady' || bundle.lifecycleStatus === 'ApprovedForBuild';
+  const nextSteps = isBuildReady
+    ? `- A coding agent can build directly from this package — open BUILDER_START_HERE.md for the canonical 10 load-bearing files.
+- Status banner is informational; review-time critique items live in PROJECT_BRIEF.md but do not block a build pass.
+- If you want a human-readable tour first, open BUSINESS_USER_START_HERE.md.`
+    : `- Read this file first to understand the project.
+- Then open 01_CONTEXT_RULES.md and the current phase files.
+- If blockers are listed below, do not assume the package is ready to advance.`;
+  const blockerSection = isBuildReady
+    ? `## Review notes (non-blocking)
+${listToBullets(bundle.blockingWarnings.map((warning) => formatWarningLine(warning)), 'No review notes recorded.')}
+
+These are critique / questionnaire items surfaced for a human reviewer. They do not prevent a coding agent from building from the workspace; the BuildReady banner is set because the research extractions, schema, and depth artifacts are intact. See \`docs/BUILD_RECIPE.md\` for the build pass.`
+    : `## Current blockers
+${listToBullets(bundle.blockingWarnings.map((warning) => formatWarningLine(warning)), 'No blocker warnings recorded.')}`;
   return `# 00_PROJECT_CONTEXT
 
 ## What this file is for
@@ -6849,9 +7068,7 @@ ${bundle.lifecycleStatus}
 This is a local, markdown-first planning and gating package for AI-assisted builds in Codex, Claude Code, and OpenCode.
 
 ## What you should do next
-- Read this file first to understand the project.
-- Then open 01_CONTEXT_RULES.md and the current phase files.
-- If blockers are listed below, do not assume the package is ready to advance.
+${nextSteps}
 
 ## Project-specific anchors
 - Product idea: ${input.productIdea}
@@ -6860,8 +7077,7 @@ This is a local, markdown-first planning and gating package for AI-assisted buil
 - Desired output: ${input.desiredOutput}
 - Must-have scope: ${context.mustHaves.join(', ') || 'Please review and confirm'}
 
-## Current blockers
-${listToBullets(bundle.blockingWarnings.map((warning) => formatWarningLine(warning)), 'No blocker warnings recorded.')}
+${blockerSection}
 
 ## Current phase
 ${bundle.phases[0]?.name || 'Phase 1'}
@@ -9335,6 +9551,13 @@ function createGeneratedFiles(bundle: ProjectBundle, input: ProjectInput, contex
 
   add('README.md', buildRootReadme(bundle, input));
   add('BUSINESS_USER_START_HERE.md', buildBusinessUserStartHere(bundle, input));
+  // Phase G G2 issues 1 & 2: builder-targeted entry point + archive index.
+  // BUSINESS_USER_START_HERE points at human-review files. BUILDER_START_HERE
+  // points at the canonical 10 load-bearing files for an implementing agent.
+  // archive/INDEX.md catalogs the ceremony files at the top level so a builder
+  // knows what to skip when scanning the workspace.
+  add('BUILDER_START_HERE.md', buildBuilderStartHere(bundle, input, context));
+  add('archive/INDEX.md', buildArchiveIndex(bundle));
   add('CURRENT_STATUS.md', buildCurrentStatus(bundle, input, context));
   add('COPY_PASTE_PROMPTS.md', buildCopyPastePrompts(input, bundle, context));
   add('MODULE_MAP.md', buildModuleMap(input, context));
@@ -9662,8 +9885,9 @@ ${listToBullets(bundle.unresolvedWarnings.map((warning) => `[${warning.severity}
 
 ## Status meaning
 - Draft: export is allowed for planning review, but the package still needs more work before formal approval review.
-- Blocked: export is allowed for diagnosis and review, but blocker warnings prevent a build-ready package.
+- Blocked: only fires for structural failures (schema-validation severity > 'note' or unresolved critical conflicts). Diagnosis and review are still possible.
 - ReviewReady: the package is complete enough for human approval review, but it is not yet approved for build.
+- BuildReady: the workspace has agent-recipe research, a clean schema, and full requirement / persona / use-case depth — a coding agent can build from it. Human approval (ApprovedForBuild) is still a separate step.
 - ApprovedForBuild: the package contains explicit approval metadata and can be treated as build-approved.
 
 ## What the builder should read first
@@ -9958,10 +10182,12 @@ export function generateProjectBundle(
   }
 
   const { approvalRequired, approvedForBuild } = getApprovalFlags(input);
+  const buildReady = computeBuildReadyFlag(context);
   const lifecycleStatus = deriveLifecycleStatus({
     warnings,
     scoreTotal: rawScore.total,
-    approvedForBuild
+    approvedForBuild,
+    buildReady
   });
   const score = reconcileScoreWithLifecycle(rawScore, lifecycleStatus, warnings, semanticFit);
   const warningCounts: Record<WarningSeverity, number> = {

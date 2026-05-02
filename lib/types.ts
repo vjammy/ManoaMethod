@@ -3,7 +3,13 @@ export type UserTrack = 'business' | 'technical';
 export type ProfileKey = `${ExperienceLevel}-${UserTrack}`;
 export type CritiqueSeverity = 'critical' | 'important' | 'nice-to-have';
 export type WarningSeverity = 'info' | 'warning' | 'blocker';
-export type LifecycleStatus = 'Draft' | 'Blocked' | 'ReviewReady' | 'ApprovedForBuild' | 'InRework';
+export type LifecycleStatus =
+  | 'Draft'
+  | 'Blocked'
+  | 'ReviewReady'
+  | 'BuildReady'
+  | 'ApprovedForBuild'
+  | 'InRework';
 
 export type ProjectInput = {
   productName: string;
@@ -107,7 +113,8 @@ export type WarningItem = {
     | 'critique'
     | 'score'
     | 'approval'
-    | 'generator';
+    | 'generator'
+    | 'schema';
   openQuestion?: string;
   assumption?: string;
 };
