@@ -39,6 +39,11 @@ import { renderPhaseTestCasesMarkdown } from './generator/test-cases';
 import { renderValuePropositionMarkdown } from './generator/value-proposition';
 import { renderIdeaCritiqueMarkdown } from './generator/idea-critique';
 import { renderJobsToBeDoneMarkdown } from './generator/jobs-to-be-done';
+import { renderUseCasesMarkdown } from './generator/use-cases';
+import { renderUserPersonasMarkdown } from './generator/user-personas';
+import { renderSuccessMetricsMarkdown } from './generator/success-metrics';
+import { renderPerScreenRequirementsMarkdown } from './generator/per-screen-requirements';
+import { renderPhaseIntegrationTestsMarkdown } from './generator/integration-tests';
 import { buildQuestionPrompts, CORE_AGENT_OPERATING_RULES, getProfileConfig, slugify } from './templates';
 import {
   buildDomainOntology,
@@ -1432,8 +1437,14 @@ function buildFunctionalRequirementsFromResearch(input: ProjectInput, ex: Resear
       .slice(0, 2)
       .map((s) => `[${s.title}](${s.url})`)
       .join('; ');
-    const failureNote = r.workflow.failureModes[0]
-      ? `On ${r.workflow.failureModes[0].trigger.toLowerCase()}, ${r.workflow.failureModes[0].mitigation.toLowerCase()}.`
+    // Phase F3: rotate through workflow failure modes by step index so requirements
+    // from the same workflow surface DIFFERENT failure cases. Without this rotation
+    // every step shared the workflow's first failure mode, defeating the audit's
+    // requirement-failure-variance dim.
+    const fmList = r.workflow.failureModes;
+    const fm = fmList.length ? fmList[(r.step.order - 1) % fmList.length] : undefined;
+    const failureNote = fm
+      ? `On ${fm.trigger.toLowerCase()}, ${fm.mitigation.toLowerCase()}.`
       : 'Failure surfaces clearly to the actor; no silent state.';
     return `## Requirement ${reqNum}: ${r.title}
 
@@ -9407,9 +9418,23 @@ function createGeneratedFiles(bundle: ProjectBundle, input: ProjectInput, contex
     if (context.extractions.meta.discovery) {
       add('product-strategy/VALUE_PROPOSITION.md', renderValuePropositionMarkdown(context.extractions));
       add('product-strategy/IDEA_CRITIQUE.md', renderIdeaCritiqueMarkdown(context.extractions));
+      // Phase F2: success metrics from discovery outcomes + workflow leading indicators.
+      add('product-strategy/SUCCESS_METRICS.md', renderSuccessMetricsMarkdown(context.extractions, input));
     }
     if (context.extractions.jobsToBeDone && context.extractions.jobsToBeDone.length) {
       add('product-strategy/JOBS_TO_BE_DONE.md', renderJobsToBeDoneMarkdown(context.extractions));
+    }
+    // Phase F2: comprehensive-depth artifacts.
+    // Use cases require workflows; personas require actors + JTBDs (we'll still
+    // emit a thin personas file even without JTBDs).
+    if (context.extractions.workflows.length > 0) {
+      add('product-strategy/USE_CASES.md', renderUseCasesMarkdown(context.extractions));
+    }
+    if (context.extractions.actors.length > 0) {
+      add('product-strategy/USER_PERSONAS.md', renderUserPersonasMarkdown(context.extractions));
+    }
+    if (context.extractions.screens && context.extractions.screens.length > 0) {
+      add('requirements/PER_SCREEN_REQUIREMENTS.md', renderPerScreenRequirementsMarkdown(context.extractions));
     }
   }
   add('requirements/OPEN_QUESTIONS.md', buildOpenQuestions(input, context));
@@ -9793,6 +9818,13 @@ ${listToBullets(bundle.unresolvedWarnings.map((warning) => `[${warning.severity}
     // Phase E3: emit grounded TEST_CASES.md per phase when research has test cases.
     if (context.extractions?.testCases && context.extractions.testCases.length) {
       add(`phases/${phase.slug}/TEST_CASES.md`, renderPhaseTestCasesMarkdown(phase, context.extractions));
+    }
+    // Phase F2: per-phase end-to-end integration tests with realistic fixture data.
+    if (context.extractions && context.extractions.workflows.length > 0) {
+      add(
+        `phases/${phase.slug}/INTEGRATION_TESTS.md`,
+        renderPhaseIntegrationTestsMarkdown({ slug: phase.slug, name: phase.name, goal: phase.goal }, context.extractions, input)
+      );
     }
     add(`phases/${phase.slug}/TEST_SCRIPT.md`, buildPhaseTestScript(phase, input, context));
     add(`phases/${phase.slug}/TEST_RESULTS.md`, buildPhaseTestResults(phase));

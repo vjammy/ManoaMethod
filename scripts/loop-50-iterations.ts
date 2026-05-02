@@ -45,6 +45,9 @@ type AuditSnapshot = {
   demoReady: boolean;
   researchSource: string;
   dimensions: Array<{ name: string; score: number; max: number }>;
+  expertDimensions: Array<{ name: string; score: number; max: number }>;
+  expertBonus: number;
+  expertCap: number;
   topFindings: Array<{ dimension: string; severity: string; message: string }>;
 };
 
@@ -263,6 +266,9 @@ async function runIteration(iteration: number, idea: typeof ideas[number]): Prom
       demoReady: result.readiness.demoReady,
       researchSource: result.readiness.researchSource,
       dimensions: result.dimensions.map((d) => ({ name: d.name, score: d.score, max: d.max })),
+      expertDimensions: result.expert ? result.expert.dimensions.map((d) => ({ name: d.name, score: d.score, max: d.max })) : [],
+      expertBonus: result.expert?.bonus ?? 0,
+      expertCap: result.expert?.cap ?? 100,
       topFindings: result.topFindings.map((f) => ({ dimension: f.dimension, severity: f.severity, message: f.message }))
     };
     const auditDir = path.join(packageDir, 'evidence', 'audit');
@@ -428,6 +434,36 @@ function renderRunReport(results: IterationResult[]): string {
     for (const [name, stats] of dimMap) {
       const mean2 = stats.n ? (stats.total / stats.n).toFixed(1) : '—';
       lines.push(`| ${name} | ${mean2} | ${stats.max} |`);
+    }
+    // Phase F: surface expert dim averages too. The 16 expert dims drive
+    // depth signal even when the headline /100 stays unchanged.
+    const expertDimMap = new Map<string, { total: number; max: number; n: number }>();
+    for (const a of audits) {
+      for (const d of a.expertDimensions) {
+        const existing = expertDimMap.get(d.name) || { total: 0, max: d.max, n: 0 };
+        existing.total += d.score;
+        existing.n += 1;
+        expertDimMap.set(d.name, existing);
+      }
+    }
+    if (expertDimMap.size > 0) {
+      lines.push('');
+      lines.push('### Expert rubric dimension averages');
+      lines.push('| Dimension | Mean | Max |');
+      lines.push('| --- | ---: | ---: |');
+      let expertSumMean = 0;
+      let expertSumMax = 0;
+      for (const [name, stats] of expertDimMap) {
+        const mean2 = stats.n ? (stats.total / stats.n).toFixed(1) : '—';
+        lines.push(`| ${name} | ${mean2} | ${stats.max} |`);
+        if (stats.n) {
+          expertSumMean += stats.total / stats.n;
+          expertSumMax += stats.max;
+        }
+      }
+      lines.push(`| **Raw expert total** | **${expertSumMean.toFixed(1)}** | **${expertSumMax}** |`);
+      const meanBonus = audits.reduce((s, a) => s + a.expertBonus, 0) / audits.length;
+      lines.push(`| **Mean bonus applied** | **${meanBonus.toFixed(1)}** | **8** |`);
     }
     // Top findings frequency
     const findingFreq = new Map<string, number>();

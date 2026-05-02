@@ -48,6 +48,20 @@ Then run:
 npm run create-project -- --input=<brief.json> --out=<workspace> --research-from=<your-research-dir>
 ```
 
+### Phase F2 generated artifacts (no extra JSON needed)
+
+When the extractions above are populated, the generator emits five additional comprehensive-depth artifacts:
+
+| File | Generator module | What it contains |
+|---|---|---|
+| `product-strategy/USE_CASES.md` | `lib/generator/use-cases.ts` | One use case per workflow with goals, preconditions, main flow, alternatives, failure modes, postconditions, and a "Why this actor will use it" section sourced from the matching JTBD |
+| `product-strategy/USER_PERSONAS.md` | `lib/generator/user-personas.ts` | One persona per non-external actor with responsibilities, motivations, pain points, adoption signals, visibility scope |
+| `product-strategy/SUCCESS_METRICS.md` | `lib/generator/success-metrics.ts` | D1/D7/D30 outcomes from `meta.discovery.valueProposition.topThreeOutcomes`, per-actor adoption signals from `jobsToBeDone.json`, leading indicators from workflow failure modes |
+| `requirements/PER_SCREEN_REQUIREMENTS.md` | `lib/generator/per-screen-requirements.ts` | One section per screen with sections, fields, four-state contract, screen-specific acceptance criterion, edge cases |
+| `phases/<slug>/INTEGRATION_TESTS.md` | `lib/generator/integration-tests.ts` | Per-phase end-to-end scenario walking the relevant workflow with realistic fixture data the implementing agent can paste into a seed script |
+
+These read from existing extractions — no new JSON files are required. To lift Phase F audit dimensions (`use-case-depth`, `persona-depth`) above the synth cap of 3/5, ensure your JTBDs include real motivations and your discovery includes an honest critique.
+
 ---
 
 ## Schema reference

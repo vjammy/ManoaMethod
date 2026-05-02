@@ -714,7 +714,7 @@ const GENERIC_FAILURE_TRIGGERS = [
 ];
 
 type ResearchExtractsLite = {
-  actors: Array<{ id: string; name: string; visibility: string[] }>;
+  actors: Array<{ id: string; name: string; visibility: string[]; type?: string }>;
   entities: Array<{
     id: string;
     name: string;
@@ -733,7 +733,7 @@ type ResearchExtractsLite = {
   }>;
   workflows: Array<{
     name: string;
-    steps: Array<{ branchOn?: string }>;
+    steps: Array<{ action?: string; branchOn?: string }>;
     failureModes: Array<{ trigger: string; effect: string; mitigation: string }>;
   }>;
   risks: Array<{ category: string; description: string; mitigation: string; affectedEntities: string[] }>;
@@ -742,6 +742,7 @@ type ResearchExtractsLite = {
   screens?: Array<{
     id: string;
     name: string;
+    purpose?: string;
     sections: Array<{ kind: string; title: string }>;
     fields: Array<{ name: string; kind: string; refEntityField?: string }>;
     states: { empty: string; loading: string; error: string; populated: string };
@@ -1345,7 +1346,9 @@ function expertIdeaClarity(ex: ResearchExtractsLite, source: ResearchSource): Ex
   }
 
   // Critique only credited for real research sources (agent-recipe / imported-real / manual).
-  // Synth deliberately leaves critique empty — see deriveDiscovery in the synthesizer.
+  // Synth may carry pack-seeded critique/alternatives so downstream artifacts
+  // aren't empty, but those seeds are templates, not real product judgment —
+  // the RC2 cap of 2/5 still applies regardless of seeded content.
   const isSynth = source === 'synthesized';
   const critique = discovery.ideaCritique || [];
   const alternatives = discovery.competingAlternatives || [];
@@ -1354,11 +1357,182 @@ function expertIdeaClarity(ex: ResearchExtractsLite, source: ResearchSource): Ex
     if (critique.length >= 3) score += 1;
     if (alternatives.length >= 1) score += 1;
   } else {
-    // Synth: don't punish (no cap), don't reward (no critique credit).
-    evidence.push(`synthesized research source — critique not credited (run docs/RESEARCH_RECIPE.md for full idea-clarity score)`);
+    // Synth: don't credit critique/alternatives, AND hard-cap final score at 2/5
+    // so pack-seeded headlines/outcomes/whyNow can't push synth above the
+    // judgment-bearing ceiling.
+    evidence.push(`synthesized research source — critique not credited and dim hard-capped at 2/5 (run docs/RESEARCH_RECIPE.md for full idea-clarity score)`);
   }
 
-  return { name: 'idea-clarity', score: Math.min(5, score), max: 5, evidence };
+  const finalScore = isSynth ? Math.min(2, score) : Math.min(5, score);
+  return { name: 'idea-clarity', score: finalScore, max: 5, evidence };
+}
+
+// ===== Phase F3: comprehensive-depth dimensions (E11–E16) =====
+
+// E11. workflow-step-realism (max 5) — penalize templated CRUD verbs
+function expertWorkflowStepRealism(ex: ResearchExtractsLite): ExpertScore {
+  const evidence: string[] = [];
+  // Generic step patterns that synth used to emit before pack-aware F1.
+  const TEMPLATED_PATTERNS = [
+    /^create a new\s/i,
+    /^edit the .* (title|status)/i,
+    /^view the dashboard for status/i,
+    /^open .* and authenticate/i,
+    /^review the .* before it is considered final/i,
+    /^run the workflow/i
+  ];
+  const allSteps = ex.workflows.flatMap((w) => w.steps);
+  if (allSteps.length === 0) {
+    evidence.push('no workflow steps to score');
+    return { name: 'workflow-step-realism', score: 0, max: 5, evidence };
+  }
+  const templated = allSteps.filter((s) => TEMPLATED_PATTERNS.some((p) => p.test(s.action || '')));
+  const fraction = templated.length / allSteps.length;
+  evidence.push(`workflow steps: ${allSteps.length}, templated CRUD: ${templated.length} (${(fraction * 100).toFixed(0)}%)`);
+  const score = Math.max(0, Math.round(5 * (1 - fraction)));
+  // Phase F3: dim scores signal depth without capping the headline; the headline
+  // /100 ceiling is preserved per Phase E5 decision (downstream consumers depend
+  // on fixed thresholds). Real signal lives in per-dim scores.
+  return { name: 'workflow-step-realism', score: Math.min(5, score), max: 5, evidence };
+}
+
+// E12. requirement-failure-variance (max 5) — penalize identical failure cases across REQs
+function expertFailureVariance(packageRoot: string): ExpertScore {
+  const evidence: string[] = [];
+  const reqsContent = readSafe(path.join(packageRoot, 'requirements/FUNCTIONAL_REQUIREMENTS.md'));
+  if (!reqsContent) {
+    evidence.push('FUNCTIONAL_REQUIREMENTS.md missing');
+    return { name: 'requirement-failure-variance', score: 0, max: 5, evidence };
+  }
+  // Pull every "Failure case:" line.
+  const failureLines = (reqsContent.match(/Failure case:[^\n]+/g) || []).map((s) => s.replace(/^Failure case:\s*/, '').trim().toLowerCase());
+  if (failureLines.length < 2) {
+    evidence.push(`only ${failureLines.length} failure-case lines — insufficient to score variance`);
+    return { name: 'requirement-failure-variance', score: 5, max: 5, evidence };
+  }
+  // Count how many failure-case lines are duplicates (Jaccard-like via exact substring containment after normalizing whitespace).
+  const norm = failureLines.map((s) => s.replace(/\s+/g, ' '));
+  const counts = new Map<string, number>();
+  for (const s of norm) counts.set(s, (counts.get(s) || 0) + 1);
+  const dupCount = Array.from(counts.values()).filter((c) => c > 1).reduce((sum, c) => sum + (c - 1), 0);
+  const dupFraction = dupCount / norm.length;
+  evidence.push(`failure-case lines: ${norm.length}, duplicate-occurrence count: ${dupCount} (${(dupFraction * 100).toFixed(0)}%)`);
+  const score = Math.max(0, Math.round(5 * (1 - dupFraction)));
+  return { name: 'requirement-failure-variance', score: Math.min(5, score), max: 5, evidence };
+}
+
+// E13. entity-field-richness (max 5) — credit domain depth on entity fields
+function expertEntityFieldRichness(ex: ResearchExtractsLite): ExpertScore {
+  const evidence: string[] = [];
+  if (ex.entities.length === 0) {
+    evidence.push('no entities');
+    return { name: 'entity-field-richness', score: 0, max: 5, evidence };
+  }
+  const totalFields = ex.entities.reduce((s, e) => s + e.fields.length, 0);
+  const meanFields = totalFields / ex.entities.length;
+  const entitiesWithExtras = ex.entities.filter((e) => {
+    const hasEnumOrFk = e.fields.some((f) => f.dbType === 'ENUM' || f.fk || f.indexed || f.pii || f.sensitive);
+    return hasEnumOrFk;
+  }).length;
+  const extrasFraction = entitiesWithExtras / ex.entities.length;
+  evidence.push(`entities: ${ex.entities.length}, mean fields/entity: ${meanFields.toFixed(1)} (target ≥6)`);
+  evidence.push(`entities with enum / fk / indexed / pii / sensitive flags: ${entitiesWithExtras}/${ex.entities.length}`);
+  // Score: 3 points for mean fields ≥6, 2 points for ≥80% entities have extras.
+  let score = 0;
+  score += Math.min(3, Math.round((meanFields / 6) * 3));
+  score += Math.round(extrasFraction * 2);
+  return { name: 'entity-field-richness', score: Math.min(5, score), max: 5, evidence };
+}
+
+// E14. per-screen-acceptance-uniqueness (max 5) — credit screens with distinct purposes
+function expertPerScreenAcceptanceUniqueness(ex: ResearchExtractsLite, packageRoot: string): ExpertScore | undefined {
+  if (!ex.screens || ex.screens.length === 0) return undefined;
+  const evidence: string[] = [];
+  const purposes = ex.screens.map((s) => (s.purpose || s.name).toLowerCase().replace(/\s+/g, ' ').trim());
+  // Count unique purposes
+  const set = new Set(purposes);
+  const uniqueFraction = set.size / purposes.length;
+  evidence.push(`screens: ${ex.screens.length}, unique purposes: ${set.size} (${(uniqueFraction * 100).toFixed(0)}%)`);
+  // Bonus signal: PER_SCREEN_REQUIREMENTS.md present
+  const perScreenReqs = readSafe(path.join(packageRoot, 'requirements/PER_SCREEN_REQUIREMENTS.md'));
+  if (perScreenReqs && /Screen-specific acceptance/i.test(perScreenReqs)) {
+    evidence.push('requirements/PER_SCREEN_REQUIREMENTS.md present with per-screen acceptance');
+  } else {
+    evidence.push('requirements/PER_SCREEN_REQUIREMENTS.md missing or lacks per-screen acceptance section');
+  }
+  const score = Math.round(5 * uniqueFraction);
+  return { name: 'per-screen-acceptance-uniqueness', score: Math.min(5, score), max: 5, evidence };
+}
+
+// E15. use-case-depth (max 5) — credit USE_CASES.md depth
+function expertUseCaseDepth(packageRoot: string, ex: ResearchExtractsLite, source: ResearchSource): ExpertScore | undefined {
+  const md = readSafe(path.join(packageRoot, 'product-strategy/USE_CASES.md'));
+  if (!md) return undefined;
+  const evidence: string[] = [];
+  let score = 0;
+  // 1 point: ≥1 use case per workflow
+  const useCaseCount = (md.match(/^## Use case:/gm) || []).length;
+  if (ex.workflows.length > 0 && useCaseCount >= ex.workflows.length) {
+    score += 1;
+    evidence.push(`use cases: ${useCaseCount} (≥ workflows ${ex.workflows.length})`);
+  } else {
+    evidence.push(`use cases: ${useCaseCount}, workflows: ${ex.workflows.length}`);
+  }
+  // 1 point each for: main flow ≥3 numbered steps, alternative flows present, failure modes present, postconditions present
+  if (/Main flow:[^\n]*\n1\.\s/.test(md) && /\n2\.\s/.test(md)) {
+    score += 1;
+    evidence.push('main flow has numbered steps');
+  }
+  if (/Alternative flows[\s\S]+- Step/.test(md)) {
+    score += 1;
+    evidence.push('alternative flows / branches present');
+  }
+  if (/Failure modes:[^\n]*\n1\./.test(md)) {
+    score += 1;
+    evidence.push('failure modes present');
+  }
+  if (/Why .* will use this/.test(md)) {
+    score += 1;
+    evidence.push('"Why they will use this" section present');
+  }
+  // Synth cap: limit to 3/5 because synth's use cases are pack-seeded.
+  const synthCap = source === 'synthesized' ? 3 : 5;
+  return { name: 'use-case-depth', score: Math.min(synthCap, score), max: 5, evidence };
+}
+
+// E16. persona-depth (max 5) — credit USER_PERSONAS.md depth
+function expertPersonaDepth(packageRoot: string, ex: ResearchExtractsLite, source: ResearchSource): ExpertScore | undefined {
+  const md = readSafe(path.join(packageRoot, 'product-strategy/USER_PERSONAS.md'));
+  if (!md) return undefined;
+  const evidence: string[] = [];
+  let score = 0;
+  const personaActorCount = ex.actors.filter((a) => a.type !== 'external').length;
+  const personaSections = (md.match(/^## /gm) || []).length;
+  if (personaSections >= personaActorCount && personaActorCount > 0) {
+    score += 1;
+    evidence.push(`persona sections: ${personaSections} (≥ non-external actors ${personaActorCount})`);
+  } else {
+    evidence.push(`persona sections: ${personaSections}, non-external actors: ${personaActorCount}`);
+  }
+  if (/### Why they will use it/.test(md) && /Motivation:/.test(md)) {
+    score += 1;
+    evidence.push('"Why they will use it" with Motivation present');
+  }
+  if (/### Pain points/.test(md) && /\n- /.test(md)) {
+    score += 1;
+    evidence.push('Pain points section present');
+  }
+  if (/### Adoption signals/.test(md)) {
+    score += 1;
+    evidence.push('Adoption signals section present');
+  }
+  if (/### Visibility scope/.test(md)) {
+    score += 1;
+    evidence.push('Visibility scope section present');
+  }
+  // Synth cap: limit to 3/5.
+  const synthCap = source === 'synthesized' ? 3 : 5;
+  return { name: 'persona-depth', score: Math.min(synthCap, score), max: 5, evidence };
 }
 
 function evaluateExpertRubric(
@@ -1385,6 +1559,16 @@ function evaluateExpertRubric(
   if (jtbdCoverage) dims.push(jtbdCoverage);
   const ideaClarity = expertIdeaClarity(ex, source);
   if (ideaClarity) dims.push(ideaClarity);
+  // Phase F3: comprehensive-depth dimensions.
+  dims.push(expertWorkflowStepRealism(ex));
+  dims.push(expertFailureVariance(packageRoot));
+  dims.push(expertEntityFieldRichness(ex));
+  const perScreenAcceptance = expertPerScreenAcceptanceUniqueness(ex, packageRoot);
+  if (perScreenAcceptance) dims.push(perScreenAcceptance);
+  const useCaseDepth = expertUseCaseDepth(packageRoot, ex, source);
+  if (useCaseDepth) dims.push(useCaseDepth);
+  const personaDepth = expertPersonaDepth(packageRoot, ex, source);
+  if (personaDepth) dims.push(personaDepth);
 
   // Bonus: bonus = round(rawTotal / sumMax × 8). 8-point ceiling because 92 base + 8 = 100.
   const rawTotal = dims.reduce((s, d) => s + d.score, 0);
