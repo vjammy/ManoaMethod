@@ -19,6 +19,7 @@ import path from 'node:path';
 import { createArtifactPackage } from '../../scripts/mvp-builder-create-project';
 import { runAudit } from '../../scripts/mvp-builder-quality-audit';
 import type { ProjectInput } from '../types';
+import { evaluateDepthGate } from './depth-gate';
 import type { AuditExitConfig, AuditExitResult } from './loop';
 import type { ResearchExtractions } from './schema';
 
@@ -59,6 +60,10 @@ export function buildAuditExitCallback(args: {
   brief: ProjectInput;
   threshold: number;
   respectCaps: boolean;
+  /** Phase F follow-up: enforce depth-gate. When true, the run populates
+   * AuditExitResult.depthGateBlocking and runResearchLoop treats blocking
+   * failures as "not yet passing". */
+  depthEnforcement?: boolean;
   /** Defaults to OS temp dir. Set to a stable path when debugging. */
   workdir?: string;
   /** Set true to retain the temp workspaces between calls (debugging). Default false. */
@@ -98,6 +103,25 @@ export function buildAuditExitCallback(args: {
       }))
     };
 
+    // Phase F follow-up: depth-gate evaluation feeds into the loop's pass
+    // decision and into the gap list for targeted re-extraction.
+    if (args.depthEnforcement && result.expert) {
+      const gate = evaluateDepthGate({
+        expertDims: result.expert.dimensions.map((d) => ({ name: d.name, score: d.score, max: d.max })),
+        researchSource: result.readiness.researchSource,
+        riskCategories: extractions.risks.map((r) => r.category)
+      });
+      if (gate.blocking.length > 0) {
+        audit.depthGateBlocking = gate.blocking.map((b) => ({
+          dim: b.dim,
+          score: b.score,
+          threshold: b.threshold,
+          upstreamPass: b.upstreamPass,
+          remediation: b.remediation
+        }));
+      }
+    }
+
     if (!args.keepArtifacts) {
       try {
         fs.rmSync(inputDir, { recursive: true, force: true });
@@ -112,6 +136,7 @@ export function buildAuditExitCallback(args: {
   return {
     threshold: args.threshold,
     respectCaps: args.respectCaps,
+    depthEnforcement: args.depthEnforcement,
     run
   };
 }

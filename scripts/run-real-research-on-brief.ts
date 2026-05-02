@@ -40,9 +40,10 @@ async function main() {
   const auditThreshold = auditThresholdArg ? Number(auditThresholdArg) : undefined;
   const auditMaxRetries = Number(getArg('audit-max-retries') || '2');
   const respectCaps = (getArg('respect-caps') || 'true').toLowerCase() !== 'false';
+  const enforceDepth = (getArg('enforce-depth') || 'false').toLowerCase() === 'true';
 
   if (!inputArg || !outArg) {
-    console.error('Usage: tsx scripts/run-real-research-on-brief.ts --input=brief.json --out=<dir> [--max-passes=4] [--token-cap=200000] [--audit-threshold=95] [--audit-max-retries=2] [--respect-caps=true]');
+    console.error('Usage: tsx scripts/run-real-research-on-brief.ts --input=brief.json --out=<dir> [--max-passes=4] [--token-cap=200000] [--audit-threshold=95] [--audit-max-retries=2] [--respect-caps=true] [--enforce-depth=true]');
     process.exit(1);
   }
 
@@ -54,10 +55,10 @@ async function main() {
   const provider = await loadAnthropicProvider({ model: 'claude-sonnet-4-6' });
 
   const auditExit = auditThreshold
-    ? { ...buildAuditExitCallback({ brief, threshold: auditThreshold, respectCaps }), maxRetries: auditMaxRetries }
+    ? { ...buildAuditExitCallback({ brief, threshold: auditThreshold, respectCaps, depthEnforcement: enforceDepth }), maxRetries: auditMaxRetries }
     : undefined;
   if (auditExit) {
-    console.log(`[A4] Audit-exit: threshold=${auditThreshold}, respectCaps=${respectCaps}, maxRetries=${auditMaxRetries}`);
+    console.log(`[A4] Audit-exit: threshold=${auditThreshold}, respectCaps=${respectCaps}, maxRetries=${auditMaxRetries}, enforceDepth=${enforceDepth}`);
   }
 
   console.log(`[A4] Running research loop on "${brief.productName}" (max-passes=${maxPasses}, token-cap=${tokenCap.toLocaleString()})…`);

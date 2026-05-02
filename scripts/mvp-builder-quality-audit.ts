@@ -24,6 +24,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { getResearchSource, type ResearchSource } from '../lib/research/schema';
+import { evaluateDepthGate, formatDepthGateReport } from '../lib/research/depth-gate';
 
 type Finding = {
   dimension: string;
@@ -64,6 +65,25 @@ type Readiness = {
   researchSource: ResearchSource;
 };
 
+/**
+ * Phase F follow-up: depth-grade is a separate signal from the headline /100.
+ * Computed from the 6 F3 expert dims (max 30). Lets reviewers see that a
+ * "100/100 production-ready" synth workspace has shallow content depth
+ * without rebaselining the headline.
+ */
+type DepthGrade = {
+  /** Sum of the 6 F3 dim scores; range 0..30. */
+  score: number;
+  /** Always 30 (6 dims × 5 each). Surfaced for display. */
+  max: number;
+  /** Round((score/max) × 100). */
+  pct: number;
+  /** Band: shallow (<18), moderate (18-24), deep (≥25). */
+  label: 'shallow' | 'moderate' | 'deep';
+  /** True when synth caps dragged label from 'deep' → 'moderate'. */
+  cappedBySource: boolean;
+};
+
 type AuditResult = {
   packageRoot: string;
   productName: string;
@@ -80,6 +100,8 @@ type AuditResult = {
     dimensions: ExpertScore[];
     capReasons: string[];
   };
+  /** Phase F follow-up: depth signal computed from F3 dims. */
+  depthGrade?: DepthGrade;
 };
 
 function getArg(name: string): string | undefined {
@@ -1695,6 +1717,38 @@ function rate(score: number): AuditResult['rating'] {
   return 'cookie-cutter';
 }
 
+/**
+ * Phase F follow-up: the 6 F3 expert dims that contribute to depth-grade.
+ * Each is scored max 5 → total max 30. Mean of these dims is the depth signal.
+ */
+const F3_DEPTH_DIM_NAMES = new Set([
+  'workflow-step-realism',
+  'requirement-failure-variance',
+  'entity-field-richness',
+  'per-screen-acceptance-uniqueness',
+  'use-case-depth',
+  'persona-depth'
+]);
+
+function computeDepthGrade(
+  expert: AuditResult['expert'],
+  researchSource: ResearchSource
+): DepthGrade | undefined {
+  if (!expert) return undefined;
+  const f3 = expert.dimensions.filter((d) => F3_DEPTH_DIM_NAMES.has(d.name));
+  if (f3.length !== 6) return undefined;
+  const score = f3.reduce((s, d) => s + d.score, 0);
+  const max = 30;
+  const pct = Math.round((score / max) * 100);
+  let label: DepthGrade['label'] = score < 18 ? 'shallow' : score < 25 ? 'moderate' : 'deep';
+  let cappedBySource = false;
+  if (researchSource === 'synthesized' && label === 'deep') {
+    label = 'moderate';
+    cappedBySource = true;
+  }
+  return { score, max, pct, label, cappedBySource };
+}
+
 export function runAudit(packageRoot: string): AuditResult {
   const { productName, briefText } = readBrief(packageRoot);
   const briefTokenList = domainTokens(briefText, productName);
@@ -1747,6 +1801,8 @@ export function runAudit(packageRoot: string): AuditResult {
     expertCap: expert?.cap ?? 100
   });
 
+  const depthGrade = computeDepthGrade(expert, researchSource);
+
   return {
     packageRoot,
     productName,
@@ -1756,7 +1812,8 @@ export function runAudit(packageRoot: string): AuditResult {
     readiness,
     dimensions,
     topFindings,
-    expert
+    expert,
+    depthGrade
   };
 }
 
@@ -1765,6 +1822,10 @@ export function renderAudit(result: AuditResult): string {
   lines.push(`# Quality audit — ${result.productName}`);
   lines.push('');
   lines.push(`- **Overall:** ${result.total}/100 — ${result.rating}`);
+  if (result.depthGrade) {
+    const tag = result.depthGrade.cappedBySource ? `${result.depthGrade.label} (synth-capped)` : result.depthGrade.label;
+    lines.push(`- **Depth grade:** ${result.depthGrade.score}/${result.depthGrade.max} (${result.depthGrade.pct}%) — ${tag}`);
+  }
   lines.push(`- **Research source:** ${result.readiness.researchSource}`);
   lines.push(`- **Production-ready:** ${result.readiness.productionReady ? 'yes' : 'no'}`);
   lines.push(`- **Research-grounded:** ${result.researchGrounded ? 'yes' : 'no (−5 penalty applied)'}`);
@@ -1843,7 +1904,40 @@ function main() {
       `(research-grounded=${result.researchGrounded}, source=${result.readiness.researchSource}, ` +
       `productionReady=${result.readiness.productionReady}, demoReady=${result.readiness.demoReady})`
   );
+  if (result.depthGrade) {
+    const tag = result.depthGrade.cappedBySource
+      ? `${result.depthGrade.label}, synth-capped`
+      : result.depthGrade.label;
+    console.log(`Depth: ${result.depthGrade.score}/${result.depthGrade.max} (${result.depthGrade.pct}%, ${tag})`);
+  }
   console.log(`Report: ${path.relative(packageRoot, reportPath).replace(/\\/g, '/')}`);
+
+  // Phase F follow-up: --enforce-depth turns the gate-mvp-quality recommendations
+  // into hard exit codes. Reads risks.json to apply the conditional regulatory
+  // rule. Synth runs only see the "always blocking" rules — synth caps prevent
+  // the agent-recipe-only blockers from ever applying to synth.
+  if (getArg('enforce-depth') && result.expert) {
+    const risksPath = path.join(packageRoot, 'research', 'extracted', 'risks.json');
+    let riskCategories: string[] = [];
+    try {
+      const risks = JSON.parse(fs.readFileSync(risksPath, 'utf8')) as Array<{ category: string }>;
+      riskCategories = risks.map((r) => r.category);
+    } catch {
+      // No risks file → treat as empty (regulatory rule won't fire).
+    }
+    const gate = evaluateDepthGate({
+      expertDims: result.expert.dimensions.map((d) => ({ name: d.name, score: d.score, max: d.max })),
+      researchSource: result.readiness.researchSource,
+      riskCategories
+    });
+    console.log('');
+    console.log(formatDepthGateReport(gate));
+    if (!gate.passed) {
+      process.exitCode = 1;
+      return;
+    }
+  }
+
   process.exitCode = result.total >= 50 ? 0 : 1;
 }
 

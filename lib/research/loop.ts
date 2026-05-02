@@ -65,6 +65,18 @@ export type AuditExitResult = {
   capApplied: number;
   capReasons: string[];
   topFindings: Array<{ severity: 'blocker' | 'warning' | 'info'; dimension: string; message: string }>;
+  /**
+   * Phase F follow-up: blocking depth-gate failures. Populated by the runner
+   * when AuditExitConfig.depthEnforcement is true. Each entry seeds a gap
+   * the targeted re-extraction loop will address.
+   */
+  depthGateBlocking?: Array<{
+    dim: string;
+    score: number;
+    threshold: number;
+    upstreamPass: string;
+    remediation: string;
+  }>;
 };
 
 export type AuditExitConfig = {
@@ -74,6 +86,13 @@ export type AuditExitConfig = {
   respectCaps: boolean;
   /** Number of retry attempts before giving up. Default 2. */
   maxRetries?: number;
+  /**
+   * Phase F follow-up: when true, depth-gate blocking failures also count as
+   * "not yet passing" and feed gap entries into targeted re-extraction.
+   * The runner reads research/extracted/risks.json to apply the conditional
+   * regulatory-mapping rule.
+   */
+  depthEnforcement?: boolean;
   /** The actual audit run. Caller wires this to create-project + runAudit. */
   run: (extractions: ResearchExtractions) => Promise<AuditExitResult>;
 };
@@ -247,7 +266,7 @@ export async function runResearchLoop(args: {
 
     while (
       retries < maxRetries &&
-      !auditPassed(audit, args.auditExit.threshold, args.auditExit.respectCaps)
+      !auditPassed(audit, args.auditExit.threshold, args.auditExit.respectCaps, args.auditExit.depthEnforcement)
     ) {
       retries += 1;
       const targetedGaps = auditFindingsAsGaps(audit);
@@ -282,7 +301,7 @@ export async function runResearchLoop(args: {
     auditExitOutcome = {
       finalAudit: audit,
       retries,
-      passed: auditPassed(audit, args.auditExit.threshold, args.auditExit.respectCaps)
+      passed: auditPassed(audit, args.auditExit.threshold, args.auditExit.respectCaps, args.auditExit.depthEnforcement)
     };
   }
 
@@ -298,9 +317,18 @@ export async function runResearchLoop(args: {
   };
 }
 
-function auditPassed(audit: AuditExitResult, threshold: number, respectCaps: boolean): boolean {
+function auditPassed(
+  audit: AuditExitResult,
+  threshold: number,
+  respectCaps: boolean,
+  depthEnforcement?: boolean
+): boolean {
   if (audit.total < threshold) return false;
   if (respectCaps && audit.capApplied < 100) return false;
+  // Phase F follow-up: depth-gate blocking failures count as "not yet passing"
+  // when enforcement is on. The runner populates depthGateBlocking; we just
+  // observe it here.
+  if (depthEnforcement && audit.depthGateBlocking && audit.depthGateBlocking.length > 0) return false;
   return true;
 }
 
@@ -319,6 +347,15 @@ function auditFindingsAsGaps(audit: AuditExitResult): CritiqueResult['gaps'] {
       area: `audit-${f.dimension}`,
       severity: f.severity === 'blocker' ? 'critical' : 'important',
       instruction: f.message
+    });
+  }
+  // Phase F follow-up: depth-gate failures map to upstream-pass gaps so the
+  // targeted re-extraction loop knows where to apply the fix.
+  for (const f of audit.depthGateBlocking ?? []) {
+    gaps.push({
+      area: `depth-${f.dim}`,
+      severity: 'critical',
+      instruction: `Depth gate: ${f.dim}=${f.score} (need ≥${f.threshold}). Fix in ${f.upstreamPass}: ${f.remediation}`
     });
   }
   return gaps;

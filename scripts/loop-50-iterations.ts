@@ -48,6 +48,8 @@ type AuditSnapshot = {
   expertDimensions: Array<{ name: string; score: number; max: number }>;
   expertBonus: number;
   expertCap: number;
+  /** Phase F follow-up: depth-grade signal computed from F3 dims. */
+  depthGrade?: { score: number; max: number; pct: number; label: 'shallow' | 'moderate' | 'deep'; cappedBySource: boolean };
   topFindings: Array<{ dimension: string; severity: string; message: string }>;
 };
 
@@ -269,6 +271,15 @@ async function runIteration(iteration: number, idea: typeof ideas[number]): Prom
       expertDimensions: result.expert ? result.expert.dimensions.map((d) => ({ name: d.name, score: d.score, max: d.max })) : [],
       expertBonus: result.expert?.bonus ?? 0,
       expertCap: result.expert?.cap ?? 100,
+      depthGrade: result.depthGrade
+        ? {
+            score: result.depthGrade.score,
+            max: result.depthGrade.max,
+            pct: result.depthGrade.pct,
+            label: result.depthGrade.label,
+            cappedBySource: result.depthGrade.cappedBySource
+          }
+        : undefined,
       topFindings: result.topFindings.map((f) => ({ dimension: f.dimension, severity: f.severity, message: f.message }))
     };
     const auditDir = path.join(packageDir, 'evidence', 'audit');
@@ -464,6 +475,23 @@ function renderRunReport(results: IterationResult[]): string {
       lines.push(`| **Raw expert total** | **${expertSumMean.toFixed(1)}** | **${expertSumMax}** |`);
       const meanBonus = audits.reduce((s, a) => s + a.expertBonus, 0) / audits.length;
       lines.push(`| **Mean bonus applied** | **${meanBonus.toFixed(1)}** | **8** |`);
+    }
+    // Phase F follow-up: depth grade aggregate. Independent signal from the
+    // headline /100; flags shallowness even when production-ready=true.
+    const depthSamples = audits.filter((a) => a.depthGrade).map((a) => a.depthGrade!);
+    if (depthSamples.length > 0) {
+      const meanDepth = depthSamples.reduce((s, d) => s + d.score, 0) / depthSamples.length;
+      const labelDist = new Map<string, number>();
+      for (const d of depthSamples) labelDist.set(d.label, (labelDist.get(d.label) || 0) + 1);
+      const cappedCount = depthSamples.filter((d) => d.cappedBySource).length;
+      lines.push('');
+      lines.push('### Depth grade aggregate');
+      lines.push(`- Workspaces graded: ${depthSamples.length}/${audits.length}`);
+      lines.push(`- Mean depth: ${meanDepth.toFixed(1)}/30 (${Math.round((meanDepth / 30) * 100)}%)`);
+      lines.push(`- Distribution: ${Array.from(labelDist.entries()).map(([l, c]) => `${l}=${c}`).join(', ')}`);
+      if (cappedCount > 0) {
+        lines.push(`- Synth-capped (would have rated 'deep' without cap): ${cappedCount}`);
+      }
     }
     // Top findings frequency
     const findingFreq = new Map<string, number>();
