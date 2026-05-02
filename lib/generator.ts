@@ -36,6 +36,7 @@ import { renderRegulatoryNotesMarkdown } from './generator/regulatory-notes';
 import { renderAllScreenSpecs, renderScreenInventoryMarkdown } from './generator/screen-specs';
 import { renderUxFlowMarkdown } from './generator/ux-flow';
 import { renderDatabaseSchemaMarkdown, renderDatabaseSchemaSql } from './generator/database-schema';
+import { renderDeploymentTemplate } from './generator/deployment-template';
 import { renderPhaseTestCasesMarkdown } from './generator/test-cases';
 import { renderValuePropositionMarkdown } from './generator/value-proposition';
 import { renderIdeaCritiqueMarkdown } from './generator/idea-critique';
@@ -9634,8 +9635,18 @@ function createGeneratedFiles(bundle: ProjectBundle, input: ProjectInput, contex
     // Phase E3: full DDL + readable schema doc when entity fields carry dbType metadata.
     const hasDbMetadata = context.extractions.entities.some((e) => e.fields.some((f) => f.dbType));
     if (hasDbMetadata) {
+      const databaseSchemaSql = renderDatabaseSchemaSql(context.extractions);
       add('architecture/DATABASE_SCHEMA.md', renderDatabaseSchemaMarkdown(context.extractions));
-      add('architecture/DATABASE_SCHEMA.sql', renderDatabaseSchemaSql(context.extractions));
+      add('architecture/DATABASE_SCHEMA.sql', databaseSchemaSql);
+      // Phase G G3: deployment template (Supabase migration + Next.js + Vercel + Makefile + README).
+      // Only emit when the workspace has DB metadata to migrate; otherwise the template would point at empty SQL.
+      for (const file of renderDeploymentTemplate({
+        productName: input.productName,
+        databaseSchemaSql,
+        extractions: context.extractions
+      })) {
+        add(file.path, file.content);
+      }
     }
     // Phase E4: product-strategy artifacts when discovery / JTBD are populated.
     if (context.extractions.meta.discovery) {
