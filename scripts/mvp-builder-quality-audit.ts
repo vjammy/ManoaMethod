@@ -746,6 +746,7 @@ type ResearchExtractsLite = {
       sensitive?: boolean;
       example?: unknown;
       dbType?: string;
+      enumValues?: string[];
       indexed?: boolean;
       unique?: boolean;
       fk?: { entityId: string; fieldName: string; onDelete: string };
@@ -754,6 +755,7 @@ type ResearchExtractsLite = {
     ownerActors: string[];
   }>;
   workflows: Array<{
+    id: string;
     name: string;
     steps: Array<{ action?: string; branchOn?: string }>;
     failureModes: Array<{ trigger: string; effect: string; mitigation: string }>;
@@ -1552,6 +1554,71 @@ function expertPersonaDepth(packageRoot: string, ex: ResearchExtractsLite, sourc
   return { name: 'persona-depth', score: Math.min(synthCap, score), max: 5, evidence };
 }
 
+/**
+ * Phase G G1. build-recipe-coverage (max 5). Advisory dim that scores the
+ * deployed app against the workspace spec. Fires only when the workspace
+ * contains `build/manifest.json` pointing at the deployed app; otherwise
+ * the dim is omitted entirely (not zero) so research-only workspaces aren't
+ * penalized for not having a build yet.
+ *
+ * The manifest's expected shape:
+ * {
+ *   "deployUrl": "https://...",
+ *   "routes": [{ "path": "/intake", "workflowId": "workflow-list-intake" }, ...],
+ *   "serverValidations": [{ "name": "csv-min-rows", "screen": "screen-import" }, ...],
+ *   "auditEvents": ["list-imported", "row-flagged", ...]
+ * }
+ *
+ * Sub-dim scoring:
+ *   +1 per workflow that's also a route in the deployed app, max 3
+ *   +1 if at least one validation is server-enforced (manifest.serverValidations non-empty), max 1
+ *   +1 if the manifest's auditEvents set ⊇ a non-trivial subset of entity-audit-entry.eventType.enumValues, max 1
+ */
+function expertBuildRecipeCoverage(
+  ex: ResearchExtractsLite,
+  packageRoot: string
+): ExpertScore | undefined {
+  const manifestPath = path.join(packageRoot, 'build', 'manifest.json');
+  if (!fs.existsSync(manifestPath)) return undefined;
+  const evidence: string[] = [];
+  let score = 0;
+  let manifest: {
+    deployUrl?: string;
+    routes?: Array<{ path: string; workflowId?: string }>;
+    serverValidations?: Array<{ name: string; screen?: string }>;
+    auditEvents?: string[];
+  };
+  try {
+    manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  } catch (e) {
+    evidence.push(`build/manifest.json failed to parse: ${String(e)}`);
+    return { name: 'build-recipe-coverage', score: 0, max: 5, evidence };
+  }
+
+  const workflows = ex.workflows || [];
+  const routes = manifest.routes || [];
+  const workflowsWithRoute = workflows.filter((wf) =>
+    routes.some((r) => r.workflowId === wf.id)
+  ).length;
+  evidence.push(`workflows with deployed route: ${workflowsWithRoute}/${workflows.length}`);
+  score += Math.min(3, workflowsWithRoute);
+
+  const serverValidations = manifest.serverValidations || [];
+  evidence.push(`server-side validations declared: ${serverValidations.length}`);
+  if (serverValidations.length >= 1) score += 1;
+
+  // audit events: workspace's auditEntry-style entity declares enumValues.
+  const auditEntity = ex.entities.find((e) => /audit/i.test(e.name) && /entry|event|log/i.test(e.name));
+  const declared = (auditEntity?.fields.find((f) => /event/i.test(f.name) && f.dbType === 'ENUM')?.enumValues) || [];
+  const wired = manifest.auditEvents || [];
+  const overlap = declared.length ? wired.filter((e) => declared.includes(e)).length : wired.length;
+  evidence.push(`audit events wired: ${wired.length} (overlap with workspace enumValues: ${overlap}/${declared.length || '—'})`);
+  if (declared.length === 0 && wired.length >= 3) score += 1;
+  else if (declared.length > 0 && overlap >= Math.ceil(declared.length * 0.5)) score += 1;
+
+  return { name: 'build-recipe-coverage', score: Math.min(5, score), max: 5, evidence };
+}
+
 function evaluateExpertRubric(
   packageRoot: string,
   source: ResearchSource
@@ -1586,6 +1653,9 @@ function evaluateExpertRubric(
   if (useCaseDepth) dims.push(useCaseDepth);
   const personaDepth = expertPersonaDepth(packageRoot, ex, source);
   if (personaDepth) dims.push(personaDepth);
+  // Phase G G1: build-recipe-coverage (advisory). Only fires when build/manifest.json exists.
+  const buildCoverage = expertBuildRecipeCoverage(ex, packageRoot);
+  if (buildCoverage) dims.push(buildCoverage);
 
   // Bonus: bonus = round(rawTotal / sumMax × 8). 8-point ceiling because 92 base + 8 = 100.
   const rawTotal = dims.reduce((s, d) => s + d.score, 0);

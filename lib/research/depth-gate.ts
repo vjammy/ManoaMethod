@@ -131,6 +131,18 @@ const RULES: RuleDef[] = [
     remediation: 'Make each screen.purpose unique across siblings; avoid repeating the workflow-level acceptance pattern.',
     appliesWhen: () => true,
     severity: 'advisory'
+  },
+  // Phase G G1 — initially advisory; only fires when build/manifest.json
+  // exists (the audit dim returns undefined otherwise, so the rule never has
+  // a dim to evaluate). Graduates to blocking once enough builds calibrate
+  // the thresholds.
+  {
+    dim: 'build-recipe-coverage',
+    threshold: 4,
+    upstreamPass: 'docs/BUILD_RECIPE.md (B1–B9)',
+    remediation: 'Run all 9 build passes; ensure every workflow.id has a deployed route, validation runs server-side, and audit events are wired.',
+    appliesWhen: () => true,
+    severity: 'advisory'
   }
 ];
 
