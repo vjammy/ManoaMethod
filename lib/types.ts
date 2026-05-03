@@ -44,6 +44,13 @@ export type LifecycleStatus =
   | 'ReleaseNotApproved'
   | 'InRework';
 
+export type Actor = {
+  id: string;
+  name: string;
+  role?: string;
+  aliases?: string[];
+};
+
 export type ProjectInput = {
   productName: string;
   level: ExperienceLevel;
@@ -66,6 +73,7 @@ export type ProjectInput = {
   runtimeStartCommand?: string;
   runtimeSmokeRoutes?: string[];
   runtimeStartTimeoutMs?: number;
+  actors?: Actor[];
 };
 
 export type RuntimeTarget = {

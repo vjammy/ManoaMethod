@@ -489,11 +489,16 @@ function chooseIntegrationsForFeature(feature: string, integrations: OntologyInt
 }
 
 function chooseActorForFeature(feature: string, workflowChoice: OntologyWorkflow, actors: OntologyActor[]) {
+  // E1: Feature-text alias matches win over workflow.primaryActors[0]. Without
+  // this flip every feature inherits the same workflow-default actor and the
+  // generated REQs all attribute to one role even when the brief names many.
+  const featureMatch = actors.find((candidate) =>
+    candidate.aliases.some((alias) => containsAny(feature, [alias]))
+  );
+  if (featureMatch) return featureMatch;
   const workflowActor = workflowChoice.primaryActors[0];
-  const matched =
-    actors.find((candidate) => candidate.name === workflowActor) ||
-    actors.find((candidate) => candidate.aliases.some((alias) => containsAny(feature, [alias])));
-  return matched || actors[0];
+  const workflowMatch = actors.find((candidate) => candidate.name === workflowActor);
+  return workflowMatch || actors[0];
 }
 
 function chooseScenarioType(

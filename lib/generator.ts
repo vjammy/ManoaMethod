@@ -60,6 +60,7 @@ import {
   type RiskFlag
 } from './domain-ontology';
 import type {
+  Actor,
   CritiqueItem,
   GeneratedFile,
   LifecycleStatus,
@@ -121,6 +122,10 @@ type ProjectContext = {
   audienceSegments: string[];
   keywords: string[];
   answers: Record<string, string>;
+  /** E1: Resolved per-context actor list. First element mirrors primaryActor. */
+  actors: Actor[];
+  /** E1: Convenience pointer to actors[0]. primaryAudience holds primaryActor.name for back-compat. */
+  primaryActor: Actor;
   primaryAudience: string;
   primaryFeature: string;
   secondaryFeature: string;
@@ -729,6 +734,95 @@ function findContradictions(input: ProjectInput) {
   return contradictions;
 }
 
+/**
+ * E1: Resolve the per-context list of actors that downstream artifacts attribute
+ * REQs and screens to.
+ *
+ * Order of preference:
+ *   1. Explicit `input.actors` — slug-normalize IDs and use as-is.
+ *   2. Each `audienceSegment` → match an ontology actor by alias / role text;
+ *      project an Actor record; deduplicate by id.
+ *   3. First three ontology actors.
+ *   4. Single hard-coded fallback so downstream code never sees an empty list.
+ */
+function resolveActors(
+  input: ProjectInput,
+  audienceSegments: string[],
+  ontology: DomainOntology,
+  extractions?: ResearchExtractions
+): Actor[] {
+  if (input.actors && input.actors.length) {
+    const seen = new Set<string>();
+    const out: Actor[] = [];
+    for (const actor of input.actors) {
+      const id = slugify(actor.id || actor.name);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      out.push({
+        id,
+        name: actor.name,
+        role: actor.role,
+        aliases: actor.aliases ? [...actor.aliases] : []
+      });
+    }
+    if (out.length) return out;
+  }
+
+  // Prefer research-derived actors when extractions provided them.
+  if (extractions?.actors?.length) {
+    const seen = new Set<string>();
+    const out: Actor[] = [];
+    for (const a of extractions.actors) {
+      const id = slugify(a.type || a.name);
+      if (!id || seen.has(id)) continue;
+      seen.add(id);
+      out.push({ id, name: a.name, role: a.type });
+    }
+    if (out.length) return out;
+  }
+
+  const seen = new Set<string>();
+  const fromSegments: Actor[] = [];
+  for (const segment of audienceSegments) {
+    const segmentLower = segment.toLowerCase();
+    const ontologyMatch = ontology.actorTypes.find((candidate) =>
+      candidate.aliases.some((alias) => alias && segmentLower.includes(alias.toLowerCase()))
+    );
+    if (ontologyMatch) {
+      const id = slugify(ontologyMatch.type || ontologyMatch.name);
+      if (id && !seen.has(id)) {
+        seen.add(id);
+        fromSegments.push({
+          id,
+          name: ontologyMatch.name,
+          role: ontologyMatch.type,
+          aliases: [...ontologyMatch.aliases]
+        });
+      }
+      continue;
+    }
+    const head = extractRoleHead(segment, '', 5);
+    const fallbackName = head || segment.trim();
+    if (!fallbackName) continue;
+    const id = slugify(fallbackName);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    fromSegments.push({ id, name: fallbackName, aliases: [segment.trim()] });
+  }
+  if (fromSegments.length) return fromSegments;
+
+  if (ontology.actorTypes.length) {
+    return ontology.actorTypes.slice(0, 3).map((actor) => ({
+      id: slugify(actor.type || actor.name),
+      name: actor.name,
+      role: actor.type,
+      aliases: [...actor.aliases]
+    }));
+  }
+
+  return [{ id: 'primary-user', name: 'the primary target user' }];
+}
+
 function buildContext(input: ProjectInput, extractions?: ResearchExtractions): ProjectContext {
   const profile = getProfileConfig(input);
   const mustHaves = splitItems(input.mustHaveFeatures);
@@ -792,6 +886,9 @@ function buildContext(input: ProjectInput, extractions?: ResearchExtractions): P
   const briefTokens = deriveBriefTokens(input.productName, briefText);
   const tokenPack = buildResearchTokenPack(extractions, briefTokens);
 
+  const actors = resolveActors(input, audienceSegments, ontology, extractions);
+  const primaryActor = actors[0];
+
   return {
     profile,
     mustHaves,
@@ -803,7 +900,9 @@ function buildContext(input: ProjectInput, extractions?: ResearchExtractions): P
     audienceSegments,
     keywords,
     answers,
-    primaryAudience: extractRoleHead(audienceSegments[0] || '', 'the primary target user'),
+    actors,
+    primaryActor,
+    primaryAudience: primaryActor.name || extractRoleHead(audienceSegments[0] || '', 'the primary target user'),
     primaryFeature: mustHaves[0] || truncateText(input.desiredOutput, 8) || input.productName,
     secondaryFeature: mustHaves[1] || truncateText(input.productIdea, 8),
     outputAnchor: truncateText(input.desiredOutput || input.productIdea, 10),
@@ -1380,7 +1479,7 @@ function buildFunctionalRequirements(input: ProjectInput, context: ProjectContex
         {
           feature: context.primaryFeature,
           scenarioType: 'record-create',
-          actor: { name: context.primaryAudience, type: 'primary-user', aliases: [], responsibilities: [], visibility: [] },
+          actor: { name: context.primaryActor.name, type: context.primaryActor.id, aliases: [], responsibilities: [], visibility: [] },
           workflow: context.ontology.workflowTypes[0],
           entities: [],
           fields: [],
@@ -1400,6 +1499,7 @@ ${FALLBACK_REQUIREMENTS_BANNER}${scenarios
       (scenario, index) => `## Requirement ${index + 1}: ${sentenceCase(scenario.feature)}
 
 - Actor: ${scenario.actor.name}
+- Actor ID: ${slugify(scenario.actor.type || scenario.actor.name)}
 - User action: ${scenario.userAction}
 - System response: ${scenario.systemResponse}
 - Stored data: ${scenario.storedData}
@@ -1599,9 +1699,12 @@ function buildFunctionalRequirementsFromResearch(input: ProjectInput, ex: Resear
     } else {
       failureNote = 'Failure surfaces clearly to the actor; no silent state.';
     }
+    const actorName = r.actor ? r.actor.name : r.step.actor;
+    const actorIdSlug = slugify(r.step.actor || (r.actor ? r.actor.type || r.actor.name : actorName));
     return `## Requirement ${reqNum}: ${r.title}
 
-- Actor: ${r.actor ? r.actor.name : r.step.actor}
+- Actor: ${actorName}
+- Actor ID: ${actorIdSlug}
 - User action: ${r.step.action}
 - System response: ${r.step.systemResponse}
 - Stored data: ${r.entities.map((e) => `${e.name} (${e.fields.slice(0, 4).map((f) => f.name).join(', ')})`).join('; ') || 'See research/extracted/entities.json'}
@@ -1727,7 +1830,7 @@ function buildAcceptanceCriteria(input: ProjectInput, context: ProjectContext, p
         {
           feature: context.primaryFeature,
           scenarioType: 'record-create',
-          actor: { name: context.primaryAudience, type: 'primary-user', aliases: [], responsibilities: [], visibility: [] },
+          actor: { name: context.primaryActor.name, type: context.primaryActor.id, aliases: [], responsibilities: [], visibility: [] },
           workflow: context.ontology.workflowTypes[0],
           entities: [],
           fields: [],
@@ -1753,9 +1856,12 @@ ${scenarios
         const phaseSlug = phases && phases.length
           ? getRequirementPhaseSlug(index, phases)
           : `phase-${String(Math.min(index + 1, 9)).padStart(2, '0')}`;
+        const actorIdSlug = slugify(safeScenario.actor.type || safeScenario.actor.name);
         return `## ${index + 1}. ${sentenceCase(safeScenario.feature)}
 
 - Requirement ID: REQ-${index + 1}
+- Actor: ${safeScenario.actor.name}
+- Actor ID: ${actorIdSlug}
 - Clear pass/fail check: ${safeScenario.testableOutcome}
 - Given: ${values?.actorExample || context.primaryAudience} has ${entityName} data prepared with ${sampleSummary}.
 - When: ${safeScenario.userAction}
@@ -1808,11 +1914,13 @@ function buildAcceptanceCriteriaFromResearch(
     const postconditionLine = f.step.postconditions?.length
       ? `\n- Postconditions: ${f.step.postconditions.join('; ')}`
       : '';
+    const actorIdSlug = slugify(f.step.actor || (actor ? actor.type || actor.name : actorName));
     return `## ${i + 1}. ${sentenceCase(f.step.action)}
 
 - Requirement ID: ${reqId}
 - Workflow: ${f.workflow.name}
 - Actor: ${actorName}
+- Actor ID: ${actorIdSlug}
 - Clear pass/fail check: ${f.workflow.acceptancePattern}
 - Given: ${actorName} has ${primaryEntity} data prepared from SAMPLE_DATA.md "${primaryEntity}" section.
 - When: ${f.step.action}
@@ -6124,10 +6232,20 @@ function getUiWorkflowSet(input: ProjectInput, context: ProjectContext): UiWorkf
   // router. The fallback workflow shape below works for any product; UI copy
   // that needs to be domain-aware should pull from research extractions
   // (workflows[].name / steps / failureModes) rather than from baked-in arms.
+  // E1: derive targetUser from the ontology workflow primary actor when present
+  // so REQs and screens attribute to varied actors instead of all collapsing
+  // onto context.primaryAudience.
+  const ontologyWorkflows = context.ontology.workflowTypes;
+  const primaryWorkflowActor =
+    ontologyWorkflows[0]?.primaryActors?.[0] || context.primaryActor.name;
+  const reviewWorkflowActor =
+    ontologyWorkflows.find((wf) => /review|approval|admin/i.test(wf.acceptancePattern || wf.name))?.primaryActors?.[0] ||
+    ontologyWorkflows[1]?.primaryActors?.[0] ||
+    primaryWorkflowActor;
   return [
     {
       name: `${sentenceCase(context.primaryFeature)} primary workflow`,
-      targetUser: context.primaryAudience,
+      targetUser: primaryWorkflowActor,
       goal: `Complete the main ${input.productName} workflow without needing hidden chat context or side-channel explanation.`,
       startPoint: `User opens the first screen for ${input.productName}.`,
       happyPath: [
@@ -6149,7 +6267,7 @@ function getUiWorkflowSet(input: ProjectInput, context: ProjectContext): UiWorkf
     },
     {
       name: 'Status, review, or admin follow-through',
-      targetUser: context.primaryAudience,
+      targetUser: reviewWorkflowActor,
       goal: `Review outcomes, exceptions, and next actions after the main ${context.primaryFeature} step.`,
       startPoint: 'User returns after the first action is submitted.',
       happyPath: [
@@ -6187,6 +6305,23 @@ function getUiScreens(input: ProjectInput, context: ProjectContext, workflows: U
     ];
   }
 
+  // E1: Build a screenName → owning workflows map so each screen attributes its
+  // primary user to the workflow that owns it, not the bare primaryAudience.
+  const screenOwners = new Map<string, UiWorkflow[]>();
+  for (const workflow of workflows) {
+    for (const screenName of workflow.requiredScreens) {
+      const key = screenName.toLowerCase();
+      const list = screenOwners.get(key) || [];
+      list.push(workflow);
+      screenOwners.set(key, list);
+    }
+  }
+  const ownerLabel = (key: string, fallback: string) => {
+    const owners = screenOwners.get(key);
+    if (!owners || !owners.length) return fallback;
+    return Array.from(new Set(owners.map((wf) => wf.targetUser))).join(', ');
+  };
+
   const baseScreens: UiScreen[] = [
     {
       name: `${input.productName} entry screen`,
@@ -6210,7 +6345,7 @@ function getUiScreens(input: ProjectInput, context: ProjectContext, workflows: U
     baseScreens.push({
       name: screenName,
       purpose: `Support the ${screenName.toLowerCase()} step inside ${input.productName}.`,
-      primaryUser: context.primaryAudience,
+      primaryUser: ownerLabel(screenName.toLowerCase(), context.primaryAudience),
       primaryAction: `Complete the key action for ${screenName.toLowerCase()}.`,
       secondaryActions: ['Review supporting details', 'Back out safely without losing context'],
       requiredData: [`Data needed to complete ${screenName.toLowerCase()}`, 'Current status', 'Next-step guidance'],
@@ -7654,12 +7789,17 @@ function buildSampleData(input: ProjectInput, context: ProjectContext, phases: P
   const entities = context.ontology.entityTypes;
   const scenarios = context.ontology.featureScenarios;
   const reqIndexByEntity = new Map<string, number[]>();
+  // E1: Track scenario actor by index so SAMPLE_DATA can annotate each REQ
+  // with its actor id, e.g. "REQ-3 (child-user)".
+  const reqActorByIndex = new Map<number, string>();
   scenarios.forEach((scenario, idx) => {
     const main = scenario.entities[0];
-    if (!main) return;
-    const list = reqIndexByEntity.get(main.name) || [];
-    list.push(idx);
-    reqIndexByEntity.set(main.name, list);
+    if (main) {
+      const list = reqIndexByEntity.get(main.name) || [];
+      list.push(idx);
+      reqIndexByEntity.set(main.name, list);
+    }
+    reqActorByIndex.set(idx, slugify(scenario.actor.type || scenario.actor.name));
   });
 
   const renderEntityBlock = (entity: typeof entities[number]) => {
@@ -7670,7 +7810,11 @@ function buildSampleData(input: ProjectInput, context: ProjectContext, phases: P
     if (firstStringField) negativeSample[firstStringField.name] = '';
     if (firstIdField) negativeSample[firstIdField.name] = null;
     const negativeJson = JSON.stringify(negativeSample, null, 2);
-    const reqIds = (reqIndexByEntity.get(entity.name) || []).map((idx) => `REQ-${idx + 1}`);
+    const reqIndices = reqIndexByEntity.get(entity.name) || [];
+    const reqIds = reqIndices.map((idx) => {
+      const actorIdSlug = reqActorByIndex.get(idx);
+      return actorIdSlug ? `REQ-${idx + 1} (${actorIdSlug})` : `REQ-${idx + 1}`;
+    });
     const reqLine = reqIds.length ? reqIds.join(', ') : 'No direct requirement reference yet.';
     const owningPhases = unique(
       (reqIndexByEntity.get(entity.name) || []).map((idx) => getRequirementPhaseSlug(idx, phases))
@@ -7736,21 +7880,31 @@ function buildSampleDataFromResearch(
 
   // Map REQ-N → entity primary touched. REQ-N flattening matches buildFunctionalRequirementsFromResearch.
   const reqIndexByEntityId = new Map<string, number[]>();
+  // E1: Track step.actor per REQ index so the "Used by requirements" line can
+  // annotate each REQ with its actor id, e.g. "REQ-3 (child-user)".
+  const reqActorById = new Map<number, string>();
   let reqIdx = 0;
   for (const wf of ex.workflows) {
     for (let s = 0; s < wf.steps.length; s += 1) {
+      const step = wf.steps[s];
       const primary = wf.entitiesTouched[0];
       if (primary) {
         const list = reqIndexByEntityId.get(primary) || [];
         list.push(reqIdx);
         reqIndexByEntityId.set(primary, list);
       }
+      const actorIdSlug = slugify(step.actor || actorById.get(step.actor)?.type || 'primary-user');
+      reqActorById.set(reqIdx, actorIdSlug);
       reqIdx += 1;
     }
   }
 
   const renderBlock = (e: typeof ex.entities[number]) => {
-    const reqIds = (reqIndexByEntityId.get(e.id) || []).map((idx) => `REQ-${idx + 1}`);
+    const reqIndices = reqIndexByEntityId.get(e.id) || [];
+    const reqIds = reqIndices.map((idx) => {
+      const actorIdSlug = reqActorById.get(idx);
+      return actorIdSlug ? `REQ-${idx + 1} (${actorIdSlug})` : `REQ-${idx + 1}`;
+    });
     const reqLine = reqIds.length ? reqIds.join(', ') : 'No direct requirement reference yet.';
     const owningPhases = unique(
       (reqIndexByEntityId.get(e.id) || []).map((idx) => getRequirementPhaseSlug(idx, phases))

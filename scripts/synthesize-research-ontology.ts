@@ -140,9 +140,24 @@ function deriveActors(input: ProjectInput): Actor[] {
     let id = `actor-${slug(name)}`;
     if (usedIds.has(id)) id = `${id}-${out.length + 1}`;
     usedIds.add(id);
-    const isReviewer = /review|approve|admin|manager|coordinator|owner/i.test(name);
-    const isExternal = /caregiver|guardian|guest|customer|public/i.test(name);
-    const type: Actor['type'] = isReviewer ? 'reviewer' : isExternal ? 'external' : out.length === 0 ? 'primary-user' : 'secondary-user';
+    const isReviewer = /\b(review|approve|manager|coordinator|owner|admin)\b/i.test(name);
+    const isExternal = /caregiver|guardian|guest|public/i.test(name);
+    const isChildUser = /\b(kid|child|student|patient|requester|customer|member|user)\b/i.test(name);
+    // E1: Don't auto-promote the FIRST audience term to reviewer just because
+    // it contains "admin". The first audience phrase is the doing user; the
+    // reviewer is selected as a separate actor unless none exists.
+    let type: Actor['type'];
+    if (out.length === 0 && !isExternal) {
+      type = 'primary-user';
+    } else if (isReviewer) {
+      type = 'reviewer';
+    } else if (isExternal) {
+      type = 'external';
+    } else if (isChildUser) {
+      type = 'secondary-user';
+    } else {
+      type = 'secondary-user';
+    }
     const responsibility = `Use ${input.productName} to ${type === 'reviewer' ? `review and approve ${name.toLowerCase()} actions` : `complete the ${name.toLowerCase()} workflow`}.`;
     out.push(
       withProvenance(
@@ -318,8 +333,21 @@ function deriveWorkflowName(
 function deriveWorkflows(input: ProjectInput, actors: Actor[], entities: Entity[]): Workflow[] {
   const features = splitList(input.mustHaveFeatures).slice(0, 4);
   const primary = input.questionnaireAnswers['primary-workflow'] || features[0] || `Use ${input.productName}`;
-  const primaryActor = actors[0]?.id || 'actor-primary-user';
-  const reviewerActor = actors.find((a) => a.type === 'reviewer')?.id || actors[1]?.id || primaryActor;
+  // E1: Pick distinct actors so each workflow can attribute steps to different
+  // roles. When the audience names multiple roles ("parent, kid, caregiver"),
+  // the primary doing user (kid/child/customer) should drive workflow 1 and
+  // the reviewer/admin should drive the approval path.
+  const primaryUserActor =
+    actors.find((a) => a.type === 'primary-user') ||
+    actors.find((a) => /child|kid|customer|user|requester/i.test(a.name)) ||
+    actors[0];
+  const reviewerCandidate =
+    actors.find((a) => a.type === 'reviewer') ||
+    actors.find((a) => /admin|parent|owner|manager|coordinator|reviewer/i.test(a.name) && a.id !== primaryUserActor?.id) ||
+    actors[1] ||
+    primaryUserActor;
+  const primaryActor = primaryUserActor?.id || 'actor-primary-user';
+  const reviewerActor = reviewerCandidate?.id || actors[1]?.id || primaryActor;
   const coreEntity = entities[0]?.id || 'entity-core';
   const coreEntityName = entities[0]?.name || 'Record';
   const memberEntity = entities.find((e) => e.id === 'entity-member-profile')?.id || coreEntity;

@@ -17,6 +17,8 @@ type RuntimeTarget = {
 type EntityFixture = {
   entityName: string;
   reqIds: string[];
+  /** E1: Map REQ-ID → actor slug parsed from "REQ-3 (child-user)" annotations. */
+  reqActorIds: Record<string, string>;
   happyPath: Record<string, unknown> | null;
   negativePath: Record<string, unknown> | null;
 };
@@ -101,11 +103,17 @@ function parseEntityFixtures(packageRoot: string): EntityFixture[] {
     }
     const entityName = headerLine.trim();
     const reqLineMatch = section.match(/Used by requirements:\s*([^\n]+)/i);
-    const reqIds = (reqLineMatch?.[1] || '')
-      .split(',')
-      .map((token) => token.trim())
-      .filter((token) => /^REQ-\d+$/i.test(token))
-      .map((token) => token.toUpperCase());
+    // E1: accept "REQ-N" and "REQ-N (actor-id)" annotations, capturing both ID
+    // and optional actor for downstream consumers (the actor mapping is
+    // surfaced explicitly in the new EntityFixture.reqActorIds map).
+    const reqLineRaw = reqLineMatch?.[1] || '';
+    const reqMatches = Array.from(reqLineRaw.matchAll(/REQ-(\d+)(?:\s*\(([^)]+)\))?/gi));
+    const reqIds = reqMatches.map((m) => `REQ-${m[1]}`.toUpperCase());
+    const reqActorIds: Record<string, string> = {};
+    for (const m of reqMatches) {
+      const reqId = `REQ-${m[1]}`.toUpperCase();
+      if (m[2]) reqActorIds[reqId] = m[2].trim();
+    }
     const jsonBlocks = Array.from(section.matchAll(/```json\n([\s\S]*?)\n```/g)).map((match) => match[1]);
     const safeParse = (raw: string | undefined) => {
       if (!raw) return null;
@@ -118,6 +126,7 @@ function parseEntityFixtures(packageRoot: string): EntityFixture[] {
     fixtures.push({
       entityName,
       reqIds,
+      reqActorIds,
       happyPath: safeParse(jsonBlocks[0]),
       negativePath: safeParse(jsonBlocks[1])
     });
