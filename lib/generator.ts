@@ -48,6 +48,13 @@ import { renderPerScreenRequirementsMarkdown } from './generator/per-screen-requ
 import { renderPhaseIntegrationTestsMarkdown } from './generator/integration-tests';
 import { renderBuilderStartHere } from './generator/builder-start-here';
 import { renderMockingStrategy } from './generator/mocking-strategy';
+import {
+  buildImplementationSurface,
+  renderImplementationContractMarkdown,
+  renderTestIdGlossaryTable,
+  serializeFlowSpec,
+  type ImplementationSurface
+} from './generator/implementation-contract';
 import { buildQuestionPrompts, CORE_AGENT_OPERATING_RULES, getProfileConfig, slugify } from './templates';
 import {
   buildDomainOntology,
@@ -6552,7 +6559,21 @@ function buildUxReviewChecklist(context: ProjectContext) {
 `;
 }
 
-function buildUiImplementationGuide(input: ProjectInput, context: ProjectContext, screens: UiScreen[]) {
+function buildUiImplementationGuide(
+  input: ProjectInput,
+  context: ProjectContext,
+  screens: UiScreen[],
+  surface?: ImplementationSurface
+) {
+  const testIdSection = surface
+    ? `
+
+## Test ID glossary (canonical)
+> Source of truth: \`architecture/IMPLEMENTATION_CONTRACT.md\`. The application must implement the testids below verbatim (\`data-testid="<id>"\`) so the browser-loop runner can drive the UI without DOM guessing.
+
+${renderTestIdGlossaryTable(surface)}
+`
+    : '';
   return `# UI_IMPLEMENTATION_GUIDE
 
 ## Recommended component structure
@@ -6598,7 +6619,7 @@ function buildUiImplementationGuide(input: ProjectInput, context: ProjectContext
 - Capture screenshots for each core screen plus core empty, loading, and error states.
 - Capture mobile screenshots for the highest-risk workflow screens.
 - Keep screenshot filenames traceable to screen names so reviews can cite evidence.
-
+${testIdSection}
 ## What not to build yet
 - Do not add speculative analytics panels, advanced settings, permission matrices, or power-user modes unless a current phase explicitly requires them.
 - Do not build alternate workflows that are not backed by USER_WORKFLOWS.md.
@@ -9873,8 +9894,34 @@ If ${context.profile.label} produces a CLI, library, or batch process, replace t
 `;
 }
 
-function buildBrowserAutomationGuide(input: ProjectInput, _context: ProjectContext) {
+function buildBrowserAutomationGuide(
+  input: ProjectInput,
+  context: ProjectContext,
+  surface?: ImplementationSurface
+) {
   const target = resolveRuntimeTarget(input);
+  // Build a deduped list keyed by actor id. Prefer surface flow loginMock
+  // values (which match what the per-phase JSON files actually use), and
+  // fall back to context.actors when no surface is provided.
+  const actorEntries = new Map<string, { id: string; name: string; role?: string }>();
+  for (const actor of context.actors) {
+    actorEntries.set(actor.id, { id: actor.id, name: actor.name, role: actor.role });
+  }
+  if (surface) {
+    for (const flow of surface.flows) {
+      const key = flow.loginMock.value;
+      if (!actorEntries.has(key)) {
+        actorEntries.set(key, { id: key, name: flow.actorName });
+      }
+    }
+  }
+  const actorIdLines =
+    Array.from(actorEntries.values())
+      .map(
+        (actor) =>
+          `- \`${actor.id}\` — ${actor.name}${actor.role ? ` (${actor.role})` : ''}`
+      )
+      .join('\n') || `- \`${context.primaryActor.id}\` — ${context.primaryActor.name}`;
   return `# BROWSER_AUTOMATION_GUIDE
 
 ## What this file is for
@@ -9940,6 +9987,18 @@ Run all of these against ${target.url} and the routes listed in RUNTIME_TARGET.m
 
 ## Why two options instead of one
 Forcing Playwright as a hard dependency would bloat MVP Builder itself with browser binaries. Forcing chrome-devtools MCP would exclude agents that do not have it. Documenting both keeps the harness portable, and the assertion checklist above is identical regardless of tooling.
+
+## Mock auth contract
+The browser runner authenticates by appending \`?as=<actorId>\` to the URL. The application MUST read the \`as\` query-string parameter at boot, hydrate the session as if that actor signed in, and apply the matching role gate.
+
+- Strategy: **query-string \`?as=<actorId>\`**.
+- Recognized actor IDs for ${input.productName}:
+${actorIdLines}
+- Required global testids the application must surface:
+  - \`data-testid="permission-denied"\` — shown when an actor attempts an action they cannot perform.
+  - \`data-testid="form-error"\` — shown when a submission fails validation.
+
+Why this exists: the per-(actor, workflow) flow JSONs under \`phases/<phase-slug>/PLAYWRIGHT_FLOWS/\` reference these actor IDs and testids verbatim. Without a stable mock-auth contract, the browser runner cannot prove role boundaries hold, and the demo cannot show that a kid user is gated out of an admin action. Treat \`?as=\` as the only authentication mechanism the runner will use during phase verification; production auth is out of scope for the runner.
 `;
 }
 
@@ -10017,6 +10076,22 @@ function createGeneratedFiles(bundle: ProjectBundle, input: ProjectInput, contex
   const mvpBuilderState = buildMvpBuilderState(bundle);
   const uiWorkflows = getUiWorkflowSet(input, context);
   const uiScreens = getUiScreens(input, context, uiWorkflows);
+  // E3a: Build the implementation surface once. When research extractions
+  // include screens, the surface uses those (research-grounded routes,
+  // primary actors, states); otherwise it falls back to the templated UI
+  // screens. Workflows always come from research extractions when present
+  // because per-actor flows require ontology-resolved actor IDs.
+  const implementationSurface: ImplementationSurface = buildImplementationSurface({
+    input,
+    context: {
+      actors: context.actors,
+      primaryActor: context.primaryActor,
+      extractions: context.extractions,
+      primaryAudience: context.primaryAudience
+    },
+    screens: uiScreens,
+    workflows: uiWorkflows
+  });
 
   add('README.md', buildRootReadme(bundle, input));
   add('BUSINESS_USER_START_HERE.md', buildBusinessUserStartHere(bundle, input));
@@ -10037,7 +10112,7 @@ function createGeneratedFiles(bundle: ProjectBundle, input: ProjectInput, contex
   add('ORCHESTRATOR_GUIDE.md', buildOrchestratorGuide(bundle, input));
   add('BUILD_TARGET.md', buildBuildTarget(input, context));
   add('RUNTIME_TARGET.md', buildRuntimeTarget(input, context));
-  add('BROWSER_AUTOMATION_GUIDE.md', buildBrowserAutomationGuide(input, context));
+  add('BROWSER_AUTOMATION_GUIDE.md', buildBrowserAutomationGuide(input, context, implementationSurface));
   add('PRODUCTION_SCOPE.md', buildProductionScope(input, context));
   add('DEPLOYMENT_PLAN.md', buildDeploymentPlan(input, context));
   add('ENVIRONMENT_SETUP.md', buildEnvironmentSetup(input, context));
@@ -10164,6 +10239,9 @@ function createGeneratedFiles(bundle: ProjectBundle, input: ProjectInput, contex
   add('architecture/SYSTEM_OVERVIEW.md', buildSystemOverview(input, context));
   add('architecture/DATA_MODEL.md', buildDataModel(input, context));
   add('architecture/API_CONTRACTS.md', buildApiContracts(input, context));
+  // E3a: emit the canonical implementation contract right next to API_CONTRACTS
+  // so any builder reading architecture/ sees both side by side.
+  add('architecture/IMPLEMENTATION_CONTRACT.md', renderImplementationContractMarkdown(implementationSurface));
   add('architecture/STATE_MANAGEMENT.md', buildStateManagement(input, context));
   add('architecture/ARCHITECTURE_DECISIONS.md', buildArchitectureDecisions(input, context));
   add('architecture/ARCHITECTURE_GATE.md', buildArchitectureGate());
@@ -10176,7 +10254,7 @@ function createGeneratedFiles(bundle: ProjectBundle, input: ProjectInput, contex
     add('ui-ux/SCREEN_INVENTORY.md', `# SCREEN_INVENTORY\n\n${uiScreens.map(renderUiScreenMarkdown).join('\n')}`);
   }
   add('ui-ux/UX_REVIEW_CHECKLIST.md', buildUxReviewChecklist(context));
-  add('ui-ux/UI_IMPLEMENTATION_GUIDE.md', buildUiImplementationGuide(input, context, uiScreens));
+  add('ui-ux/UI_IMPLEMENTATION_GUIDE.md', buildUiImplementationGuide(input, context, uiScreens, implementationSurface));
   add('ui-ux/ACCESSIBILITY_CHECKLIST.md', buildAccessibilityChecklist());
   add('ui-ux/RESPONSIVE_DESIGN_CHECKLIST.md', buildResponsiveChecklist());
   add('ui-ux/SCREENSHOT_REVIEW_PROMPT.md', buildScreenshotReviewPrompt(input, context));
@@ -10569,6 +10647,26 @@ Tier 1 once they exist.
     add(`phases/${phase.slug}/TEST_RESULTS.md`, buildPhaseTestResults(phase));
     add(`phases/${phase.slug}/HANDOFF_SUMMARY.md`, buildPhaseHandoffSummary(phase, input, context));
     add(`phases/${phase.slug}/NEXT_PHASE_CONTEXT.md`, buildNextPhaseContext(phase, nextPhase, input, context));
+    // E3a: Emit per-(actor, workflow) Playwright flow JSONs under each phase
+    // that owns implementation work for at least one REQ. Research workflow
+    // names do not always map 1:1 onto ontology REQ-IDs, so the safe default
+    // is to emit every derived flow under every implementation/design phase
+    // that has requirementIds. Verification phases inherit the full REQ set
+    // and would duplicate the index, so they are skipped here. If no phase
+    // has flows attached at all, fall back to phase-01 (handled below the
+    // forEach loop).
+    if (
+      implementationSurface.flows.length &&
+      (phase.phaseType === 'implementation' || phase.phaseType === 'design') &&
+      (phase.requirementIds || []).length > 0
+    ) {
+      for (const flow of implementationSurface.flows) {
+        add(
+          `phases/${phase.slug}/PLAYWRIGHT_FLOWS/${flow.flowId}.json`,
+          serializeFlowSpec(flow)
+        );
+      }
+    }
     add(
       `gates/gate-${gateNumber}-entry.md`,
       `# Gate ${gateNumber} Entry
@@ -10615,6 +10713,27 @@ ${phase.failureConditions.map((item) => `- ${item}`).join('\n')}
 `
     );
   });
+
+  // E3a: Fallback flow emission. If no implementation/design phase carried
+  // requirementIds, the per-phase loop above emitted no flow JSONs. Drop them
+  // under phase-01 so the downstream browser-loop runner always finds at
+  // least one PLAYWRIGHT_FLOWS directory to consume.
+  if (implementationSurface.flows.length && bundle.phases.length) {
+    const anyPhaseHasFlows = bundle.phases.some(
+      (phase) =>
+        (phase.phaseType === 'implementation' || phase.phaseType === 'design') &&
+        (phase.requirementIds || []).length > 0
+    );
+    if (!anyPhaseHasFlows) {
+      const fallbackSlug = bundle.phases[0].slug;
+      for (const flow of implementationSurface.flows) {
+        add(
+          `phases/${fallbackSlug}/PLAYWRIGHT_FLOWS/${flow.flowId}.json`,
+          serializeFlowSpec(flow)
+        );
+      }
+    }
+  }
 
   add('regression-suite/README.md', buildRegressionSuiteReadme(input, bundle, context));
   add('regression-suite/RUN_REGRESSION.md', buildRegressionRun(input, bundle, context));
