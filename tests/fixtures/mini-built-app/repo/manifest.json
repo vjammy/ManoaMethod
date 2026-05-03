@@ -1,0 +1,8 @@
+{
+  "name": "mini-built-app-fixture",
+  "description": "Phase G E2 fixture for end-to-end browser-loop coverage. Not a real MVP Builder workspace; only contains the files runBrowserLoop needs (RUNTIME_TARGET.md, SAMPLE_DATA.md, requirements/ACCEPTANCE_CRITERIA.md, phases/phase-01/PLAYWRIGHT_FLOWS/*.json) plus a vanilla http server. Used by scripts/test-browser-loop-fixture.ts.",
+  "version": "0.1.0",
+  "phases": [
+    { "slug": "phase-01", "title": "Greet" }
+  ]
+}

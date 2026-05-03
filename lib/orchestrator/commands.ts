@@ -4,7 +4,13 @@ import type { CommandResult, RepoState } from './types';
 import { writeFile } from './utils';
 
 const REQUIRED = ['typecheck', 'smoke', 'build', 'test:quality-regression'] as const;
-const OPTIONAL = ['test', 'lint', 'validate', 'regression'] as const;
+// Phase G E1 — `loop:browser` runs the per-actor PLAYWRIGHT_FLOWS specs the
+// generator emits at `phases/<slug>/PLAYWRIGHT_FLOWS/*.json`. It is OPTIONAL
+// because Playwright is dynamically imported and the runner skips with
+// `skipReason='no-playwright'` when not installed in the built app. Wiring it
+// into the orchestrator means the gate engine at minimum *records* the
+// browser-loop output as evidence; recovery prompts can cite the result.
+const OPTIONAL = ['test', 'lint', 'validate', 'regression', 'loop:browser'] as const;
 
 function npmCommand() {
   return process.platform === 'win32' ? 'npm.cmd' : 'npm';

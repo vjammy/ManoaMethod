@@ -1,0 +1,30 @@
+{
+  "flowId": "primary-user-greet",
+  "actorId": "primary-user",
+  "actorName": "Primary User",
+  "workflowName": "Greet",
+  "reqIds": ["REQ-1"],
+  "loginMock": {
+    "strategy": "query-string",
+    "param": "as",
+    "value": "primary-user"
+  },
+  "steps": [
+    { "kind": "goto", "url": "/", "description": "Open the app as primary-user." },
+    { "kind": "fill", "testId": "greeting-name", "valueFromSample": "Greeting.happy-default.name", "description": "Enter the sample name." },
+    { "kind": "click", "testId": "greeting-submit", "description": "Submit the greeting." },
+    { "kind": "assertText", "text": "Hello Avery", "description": "Greeting renders for the authorized actor." }
+  ],
+  "negativeSteps": [
+    { "kind": "goto", "url": "/", "description": "Open the app for the negative path." },
+    { "kind": "click", "testId": "greeting-submit", "description": "Submit with empty name to trigger validation." },
+    { "kind": "assertText", "testId": "form-error", "text": "required", "description": "Form-level validation surfaces a required-field error." }
+  ],
+  "rolePermissionSteps": [
+    { "kind": "goto", "url": "/?as=guest", "description": "Open the app as an unauthorized actor." },
+    { "kind": "fill", "testId": "greeting-name", "valueFromSample": "Greeting.happy-default.name", "description": "Enter the sample name." },
+    { "kind": "click", "testId": "greeting-submit", "description": "Attempt to submit as unauthorized actor." },
+    { "kind": "assertText", "testId": "permission-denied", "text": "permission", "description": "Permission gate denies the unauthorized actor." }
+  ],
+  "notes": "Fixture flow used by scripts/test-browser-loop-fixture.ts to prove the per-actor browser-loop runner stays correct end-to-end."
+}

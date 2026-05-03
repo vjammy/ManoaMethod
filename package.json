@@ -39,6 +39,7 @@
     "test:lifecycle-honesty": "tsx scripts/test-lifecycle-honesty.ts",
     "test:regulatory-truncation": "tsx scripts/test-regulatory-truncation.ts",
     "test:phase-h-repairs": "npm run test:database-schema && npm run test:builder-start-here && npm run test:mocking-strategy && npm run test:lifecycle-honesty && npm run test:regulatory-truncation",
+    "test:browser-loop": "tsx scripts/test-browser-loop-fixture.ts",
     "test:rc2-real-recipe-sdr": "tsx scripts/rc2-real-recipe-sdr-calibration.ts --input=examples/sdr-sales-module.json --out=.tmp/rc2-real-sdr --report=.tmp/rc2-real-sdr/CALIBRATION.json",
     "autoresearch": "tsx scripts/mvp-builder-autoresearch.ts",
     "orchestrate": "tsx scripts/mvp-builder-orchestrate.ts",

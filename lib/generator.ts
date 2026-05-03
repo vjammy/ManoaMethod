@@ -1696,12 +1696,23 @@ function buildFunctionalRequirementsFromResearch(input: ProjectInput, ex: Resear
     let failureNote: string;
     if (claimed) {
       failureNote = `On ${claimed.failureMode.trigger.toLowerCase()}, ${claimed.failureMode.mitigation.toLowerCase()}.`;
+    } else if (r.step.branchOn?.trim()) {
+      // Phase G E5: derive a concrete per-step failure from the step's own
+      // branchOn + systemResponse instead of pointing back to workflow-level
+      // mitigations. branchOn names the decision point or failure trigger; the
+      // expected systemResponse names what is suspended when the branch goes
+      // wrong. This eliminates the "no dedicated failure mode applies" pointer
+      // for any step the researcher has annotated with a branch.
+      const branch = r.step.branchOn.trim().replace(/\.$/, '');
+      const expected = (r.step.systemResponse || '').trim().replace(/\.$/, '');
+      failureNote = expected
+        ? `On "${branch}" the system does not "${expected.toLowerCase()}"; surface the branch to the actor and require an explicit recovery (retry, escalate, or revise).`
+        : `On "${branch}" the actor sees the branch state explicitly; require explicit recovery (retry, escalate, or revise) before advancing.`;
     } else if (fmList.length) {
-      // Step-aware fallback. Including the step's own branchOn (or, failing
-      // that, the action verb) makes each pointer unique across the workflow,
-      // so requirement-failure-variance stays high even when only N of M
-      // steps map to a failure mode.
-      const stepHint = r.step.branchOn?.trim() || sentenceCase(r.step.action).replace(/\.$/, '');
+      // Final fallback: step has no branchOn AND no claimed failure. Keep the
+      // workflow-level pointer but include the action verb so each line stays
+      // unique across the requirements list.
+      const stepHint = sentenceCase(r.step.action).replace(/\.$/, '');
       failureNote = `On "${stepHint}" path, no dedicated researched failure mode applies; route to the workflow-level mitigations for "${r.workflow.name}" (${fmList.length} mode${fmList.length === 1 ? '' : 's'}).`;
     } else {
       failureNote = 'Failure surfaces clearly to the actor; no silent state.';
@@ -3131,6 +3142,46 @@ function deriveLifecycleStatus(options: {
  * artifacts a coding agent needs to build (workflows, screens, entities) are
  * present. Synth and legacy-templated paths never reach BuildReady.
  */
+/**
+ * Phase G E8: generator-time proxy for the audit's depth-gate. Mirrors the
+ * blocking rules in `lib/research/depth-gate.ts` (workflow-step-realism +
+ * entity-field-richness) using extraction-only checks so the generator can
+ * downgrade lifecycle to ReviewReady when the underlying research is too
+ * thin to honestly call a workspace BuildReady.
+ *
+ * The post-audit `--enforce-depth` is still the authoritative source of
+ * truth; this proxy exists so the generator-time lifecycle banner doesn't
+ * advertise BuildReady on agent-recipe extractions that would fail the
+ * audit's depth gate.
+ */
+const TEMPLATED_STEP_PATTERNS = [
+  /^create a new\s/i,
+  /^edit the .* (title|status)/i,
+  /^view the dashboard for status/i,
+  /^open .* and authenticate/i,
+  /^review the .* before it is considered final/i,
+  /^run the workflow/i
+];
+
+function passesGeneratorTimeDepthProxy(ex: ResearchExtractions): boolean {
+  // workflow-step-realism: < 20% templated CRUD steps.
+  const allSteps = ex.workflows.flatMap((w) => w.steps);
+  if (allSteps.length === 0) return false;
+  const templated = allSteps.filter((s) => TEMPLATED_STEP_PATTERNS.some((p) => p.test(s.action || ''))).length;
+  if (templated / allSteps.length > 0.2) return false;
+  // entity-field-richness: mean ≥ 4 fields/entity AND ≥ 60% entities have at
+  // least one enum / fk / indexed / pii / sensitive flag.
+  if (ex.entities.length === 0) return false;
+  const totalFields = ex.entities.reduce((sum, e) => sum + e.fields.length, 0);
+  const meanFields = totalFields / ex.entities.length;
+  if (meanFields < 4) return false;
+  const entitiesWithExtras = ex.entities.filter((e) =>
+    e.fields.some((f) => f.dbType === 'ENUM' || f.fk || f.indexed || f.pii || f.sensitive)
+  ).length;
+  if (entitiesWithExtras / ex.entities.length < 0.6) return false;
+  return true;
+}
+
 function computeBuildReadyFlag(context: ProjectContext): boolean {
   const ex = context.extractions;
   if (!ex) return false;
@@ -3145,6 +3196,10 @@ function computeBuildReadyFlag(context: ProjectContext): boolean {
     (c) => (c.severity === 'critical' || c.severity === 'important') && c.resolution === 'pending'
   );
   if (hasCriticalConflict) return false;
+  // Phase G E8: generator-time depth-gate proxy. Mirrors the audit's blocking
+  // rules so a thin agent-recipe extraction can't claim BuildReady when the
+  // post-audit `--enforce-depth` would block it.
+  if (!passesGeneratorTimeDepthProxy(ex)) return false;
   return true;
 }
 
@@ -5470,7 +5525,23 @@ const TIER_3_FILES: ReadonlyArray<string> = [
   'WHAT_TO_IGNORE_FOR_NOW.md',
   'STEP_BY_STEP_BUILD_GUIDE.md',
   'ORCHESTRATOR_GUIDE.md',
-  'TROUBLESHOOTING.md'
+  'TROUBLESHOOTING.md',
+  // Phase G E7: agent-specific entry/handoff prompts. Each implementing agent
+  // (Codex, Claude Code, OpenCode) gets its own START_HERE + HANDOFF_PROMPT
+  // pair, but a generic builder agent only needs BUILDER_START_HERE. The
+  // per-agent files are review/handoff evidence, not the build path.
+  'BUSINESS_USER_START_HERE.md',
+  'CODEX_START_HERE.md',
+  'CLAUDE_START_HERE.md',
+  'OPENCODE_START_HERE.md',
+  'CODEX_HANDOFF_PROMPT.md',
+  'CLAUDE_HANDOFF_PROMPT.md',
+  'OPENCODE_HANDOFF_PROMPT.md',
+  'CLAUDE_HANDOFF.md',
+  'AGENTS.md',
+  'PLAN_CRITIQUE.md',
+  'SCORECARD.md',
+  'QUESTIONNAIRE.md'
 ];
 
 const TIER_3_BANNER =

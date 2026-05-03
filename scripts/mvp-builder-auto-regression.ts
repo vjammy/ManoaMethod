@@ -72,6 +72,143 @@ function combineScores(loopScore: number, browserScore: number, browserAvailable
   return Math.round(loopScore * 0.5 + browserScore * 0.5);
 }
 
+/**
+ * Phase G E3 — UI counter-evidence emit.
+ *
+ * When the auto-regression loop finds that the built UI cannot satisfy a
+ * researched REQ-ID (uncovered or partially-covered after multiple
+ * iterations), that's evidence the *research* may also be wrong: the workflow
+ * step the researcher recorded might not be doable as written, the actor
+ * the researcher named may not be authorized in any plausible UI, the entity
+ * the researcher modeled may be missing fields the UI needs.
+ *
+ * The existing fix prompt addresses the *builder* ("the code is wrong").
+ * This counter-evidence record + research-gap prompt addresses the
+ * *researcher* ("the research may need to be re-extracted with the UI
+ * counter-evidence as input"). It closes the missing edge that the
+ * 11-criteria evaluation surfaced as a structural gap.
+ */
+type UiCounterEvidenceRecord = {
+  reqId: string;
+  status: string;
+  entityName: string;
+  notes: string[];
+  iterationsObserved: number;
+  firstSeenIteration: number;
+  lastSeenIteration: number;
+};
+
+type UiCounterEvidence = {
+  emittedAt: string;
+  packageRoot: string;
+  reasonForEmit: 'stalled' | 'max-iterations' | 'iteration-failure';
+  iterationCount: number;
+  records: UiCounterEvidenceRecord[];
+};
+
+function writeUiCounterEvidence(args: {
+  packageRoot: string;
+  iteration: number;
+  reasonForEmit: UiCounterEvidence['reasonForEmit'];
+  browserReqResults: Array<{ reqId: string; status: string; entityName: string; testResultsVerified: boolean; notes: string[] }>;
+  priorRecords: Map<string, UiCounterEvidenceRecord>;
+}): { path: string; recordCount: number } | null {
+  const failing = args.browserReqResults.filter((r) => r.status !== 'covered');
+  if (!failing.length) return null;
+  const records = new Map<string, UiCounterEvidenceRecord>(args.priorRecords);
+  for (const failure of failing) {
+    const existing = records.get(failure.reqId);
+    if (existing) {
+      existing.iterationsObserved += 1;
+      existing.lastSeenIteration = args.iteration;
+      existing.notes = Array.from(new Set([...existing.notes, ...failure.notes])).slice(0, 8);
+      existing.status = failure.status;
+    } else {
+      records.set(failure.reqId, {
+        reqId: failure.reqId,
+        status: failure.status,
+        entityName: failure.entityName,
+        notes: failure.notes.slice(0, 4),
+        iterationsObserved: 1,
+        firstSeenIteration: args.iteration,
+        lastSeenIteration: args.iteration
+      });
+    }
+  }
+  const evidence: UiCounterEvidence = {
+    emittedAt: new Date().toISOString(),
+    packageRoot: args.packageRoot,
+    reasonForEmit: args.reasonForEmit,
+    iterationCount: args.iteration,
+    records: Array.from(records.values()).sort((a, b) => a.reqId.localeCompare(b.reqId))
+  };
+  const dest = path.join(args.packageRoot, 'research', 'extracted', '_uiCounterEvidence.json');
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.writeFileSync(dest, `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
+  return {
+    path: path.relative(args.packageRoot, dest).replace(/\\/g, '/'),
+    recordCount: evidence.records.length
+  };
+}
+
+function readPriorUiCounterEvidence(packageRoot: string): Map<string, UiCounterEvidenceRecord> {
+  const dest = path.join(packageRoot, 'research', 'extracted', '_uiCounterEvidence.json');
+  if (!fileExists(dest)) return new Map();
+  try {
+    const raw = readJsonFile<UiCounterEvidence>(dest);
+    const map = new Map<string, UiCounterEvidenceRecord>();
+    for (const record of raw.records || []) map.set(record.reqId, record);
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+function buildResearchGapPrompt(args: {
+  iteration: number;
+  reasonForEmit: UiCounterEvidence['reasonForEmit'];
+  records: UiCounterEvidenceRecord[];
+  counterEvidencePath: string;
+}): string {
+  const lines: string[] = [];
+  lines.push(`# RESEARCH_GAP_PROMPT — iteration ${args.iteration}`);
+  lines.push('');
+  lines.push('## Audience');
+  lines.push('You are the researcher agent (the one that runs `docs/RESEARCH_RECIPE.md`), not the builder agent. The auto-regression loop has concluded that the built UI cannot satisfy one or more researched REQ-IDs across multiple iterations. That is a signal the *research* may need a targeted re-extraction, not just more code fixes.');
+  lines.push('');
+  lines.push('## Why this prompt exists');
+  lines.push('Each REQ-ID listed below has stayed uncovered or partially-covered through repeated build attempts. The builder has been told to fix the code already; if the builds keep failing on the same REQs, the most likely root cause is one of:');
+  lines.push('1. The workflow step the researcher recorded is not doable as written by the actor named.');
+  lines.push('2. The actor that owns the step is not authorized for it under any plausible permission model.');
+  lines.push('3. The entity the requirement references lacks fields the UI needs to execute the step.');
+  lines.push('4. The acceptance criterion conflates two state changes that the UI cannot serialize.');
+  lines.push('');
+  lines.push(`## Counter-evidence file: \`${args.counterEvidencePath}\``);
+  lines.push('Structured record of every UI-counter-evidence event the runner has observed. Treat this file as a research-input on your next pass; do not delete it before re-running the recipe.');
+  lines.push('');
+  lines.push('## Records (one per failing REQ-ID)');
+  for (const record of args.records) {
+    lines.push(`### ${record.reqId} (${record.status})`);
+    lines.push(`- Entity referenced: ${record.entityName || '(unknown)'}`);
+    lines.push(`- Iterations observed: ${record.iterationsObserved} (first @ iter-${record.firstSeenIteration}, last @ iter-${record.lastSeenIteration})`);
+    lines.push('- Runner notes:');
+    for (const note of record.notes) lines.push(`  - ${note}`);
+    lines.push('');
+  }
+  lines.push('## What to do');
+  lines.push('1. Open `requirements/FUNCTIONAL_REQUIREMENTS.md` and locate each failing REQ-ID. Read the User action / System response / Failure case as the researcher recorded them.');
+  lines.push('2. Open the matching workflow step in `research/extracted/workflows.json`. Cross-check that the step is an action the named actor can plausibly take.');
+  lines.push('3. Open the matching entity in `research/extracted/entities.json`. Check that the fields the requirement references actually exist on the entity, with the right type.');
+  lines.push('4. If any of the four root-cause patterns (above) apply, run a *targeted* re-extraction pass through the recipe on the affected workflow / actor / entity — not the full 9 passes. Save the revised extractions back into `research/extracted/`.');
+  lines.push('5. Regenerate the workspace with `npm run create-project --research-from=research/extracted`. Re-run `npm run audit --enforce-depth`. Then hand back to the builder.');
+  lines.push('');
+  lines.push('## What NOT to do');
+  lines.push('- Do not weaken the acceptance criterion to make the existing builds pass. The point of this prompt is that the original criterion may be researched incorrectly, not that we should lower the bar.');
+  lines.push('- Do not delete `_uiCounterEvidence.json` before re-extracting. The researcher needs to see the counter-evidence to know which workflow step actually breaks in the UI.');
+  lines.push('- Do not run the full recipe from scratch unless the counter-evidence touches three or more workflows. Targeted re-extraction is the cheaper signal-preserving path.');
+  return `${lines.join('\n')}\n`;
+}
+
 function buildIterationFixPrompt(args: {
   iteration: number;
   combinedScore: number;
@@ -488,6 +625,46 @@ export async function runAutoRegression(): Promise<AutoRegressionState> {
         'utf8'
       );
       fixPromptPath = path.relative(packageRoot, promptFile).replace(/\\/g, '/');
+
+      // Phase G E3 — emit research-side counter-evidence whenever browser-loop
+      // shows uncovered/partially-covered REQs. This closes the missing edge
+      // between built-app UI failures and research re-extraction (criteria 4
+      // ↔ 11 in MVP_BUILDER_11_CRITERIA_EVALUATION.md).
+      const reasonForEmit: UiCounterEvidence['reasonForEmit'] = stalled
+        ? 'stalled'
+        : iteration >= maxIterations
+          ? 'max-iterations'
+          : 'iteration-failure';
+      const priorRecords = readPriorUiCounterEvidence(packageRoot);
+      const counterEvidence = writeUiCounterEvidence({
+        packageRoot,
+        iteration,
+        reasonForEmit,
+        browserReqResults,
+        priorRecords
+      });
+      if (counterEvidence) {
+        const gapPromptFile = path.join(
+          packageRoot,
+          'research',
+          `RESEARCH_GAP_PROMPT_iteration-${String(iteration).padStart(2, '0')}.md`
+        );
+        fs.mkdirSync(path.dirname(gapPromptFile), { recursive: true });
+        const updatedRecords = readPriorUiCounterEvidence(packageRoot);
+        fs.writeFileSync(
+          gapPromptFile,
+          buildResearchGapPrompt({
+            iteration,
+            reasonForEmit,
+            records: Array.from(updatedRecords.values()).sort((a, b) => a.reqId.localeCompare(b.reqId)),
+            counterEvidencePath: counterEvidence.path
+          }),
+          'utf8'
+        );
+        console.log(
+          `Research-gap signal: ${counterEvidence.recordCount} REQ${counterEvidence.recordCount === 1 ? '' : 's'} flagged → ${counterEvidence.path}; prompt: ${path.relative(packageRoot, gapPromptFile).replace(/\\/g, '/')}`
+        );
+      }
     }
 
     state.iterations.push({

@@ -459,7 +459,15 @@ export function resolveSampleValue(reference: string, fixtures: EntityFixture[])
   const entityName = parts[0];
   const sampleId = parts[1];
   const field = parts.slice(2).join('.');
-  const fixture = fixtures.find((f) => f.entityName === entityName);
+  // Phase G E2 — SAMPLE_DATA.md headers are emitted as `## EntityName (\`entity-id\`)`,
+  // so the parsed `f.entityName` carries the parenthesized id suffix while the
+  // PLAYWRIGHT_FLOWS reference uses the bare entity name. Match on either the
+  // exact header OR the bare name before the ` (` to bridge the two formats.
+  const fixture = fixtures.find((f) => {
+    if (f.entityName === entityName) return true;
+    const bare = f.entityName.split(' (')[0].trim();
+    return bare === entityName;
+  });
   if (!fixture) return null;
   const candidates: Array<Record<string, unknown> | null> = [];
   for (const sample of fixture.samples.happy) {

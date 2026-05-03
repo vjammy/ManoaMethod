@@ -137,11 +137,20 @@ function deriveActors(input: ProjectInput): Actor[] {
   const usedIds = new Set<string>();
   const out: Actor[] = [];
   for (const phrase of candidates.slice(0, 4)) {
-    const name = titleCase(phrase.replace(/^(a|an|the)\s+/i, '').replace(/optional\s+/i, '').trim()) || 'Primary User';
+    const name = titleCase(
+      phrase
+        .replace(/^(a|an|the)\s+/i, '')
+        .replace(/optional\s+/i, '')
+        .replace(/[.,;:!?]+$/g, '')
+        .trim()
+    ) || 'Primary User';
     let id = `actor-${slug(name)}`;
     if (usedIds.has(id)) id = `${id}-${out.length + 1}`;
     usedIds.add(id);
-    const isReviewer = /\b(review|approve|manager|coordinator|owner|admin)\b/i.test(name);
+    // Phase G E4 follow-up — broaden the reviewer detector to match plurals
+    // ("Managers", "Reviewers", "Coordinators") so actor-type classification
+    // doesn't hinge on whether the brief uses singular or plural.
+    const isReviewer = /\b(review|approve|manager|coordinator|owner|admin|supervisor|lead)/i.test(name);
     const isExternal = /caregiver|guardian|guest|public/i.test(name);
     const isChildUser = /\b(kid|child|student|patient|requester|customer|member|user)\b/i.test(name);
     // E1: Don't auto-promote the FIRST audience term to reviewer just because
@@ -191,6 +200,98 @@ function deriveActors(input: ProjectInput): Actor[] {
 }
 
 // ---------- entities ----------
+
+/**
+ * Phase G E6 — heuristic domain-field generator for synth's entity skeleton.
+ *
+ * Synth used to emit `(id, title, status, createdAt)` for every entity, which
+ * dragged the audit's `entity-field-richness` dim to the floor and made every
+ * synth-generated DDL read like a generic stub. This function pattern-matches
+ * the entity name against common domain templates and appends 1-3 fields that
+ * belong to that domain (a `scheduledFor` for appointments, `totalCents` for
+ * orders, `email` for leads, etc.). The fields carry the right hints (`pii`,
+ * `enumValues`, `references`) so `applyDbMetadata` flags them as enum / fk /
+ * indexed / pii / sensitive — which is what the audit dim actually credits.
+ *
+ * Returns extra fields beyond the templated 4. The seed entity always also
+ * gets an `ownerMemberId` reference field so the entity has at least one fk.
+ */
+function deriveDomainFieldsForEntity(entityName: string, productSlug: string, includeOwnerRef: boolean): EntityField[] {
+  const lower = entityName.toLowerCase();
+  const out: EntityField[] = [];
+  const t = (date: Date) => date.toISOString();
+  const future = new Date(Date.now() + 24 * 3600 * 1000);
+  const futureEnd = new Date(Date.now() + 25 * 3600 * 1000);
+
+  // Time-shaped: appointments, schedules, bookings, reservations.
+  if (/schedul|appointment|booking|reservation/.test(lower)) {
+    out.push({ name: 'scheduledFor', type: 'date', description: `Wall-clock time the ${entityName} is scheduled for.`, required: true, example: t(future), indexed: true });
+    out.push({ name: 'durationMinutes', type: 'number', description: `Duration in minutes.`, required: false, example: '30' });
+  }
+  // Availability-shaped windows.
+  if (/availability|slot|window|opening/.test(lower)) {
+    out.push({ name: 'startsAt', type: 'date', description: `Window start.`, required: true, example: t(future), indexed: true });
+    out.push({ name: 'endsAt', type: 'date', description: `Window end.`, required: true, example: t(futureEnd) });
+  }
+  // Lead / contact / customer shape — PII fields.
+  if (/lead|contact|customer|patient|client|guest/.test(lower)) {
+    out.push({ name: 'email', type: 'string', description: `Primary email address.`, required: false, example: 'lead@example.com', pii: true });
+    out.push({ name: 'phone', type: 'string', description: `Primary phone number.`, required: false, example: '+1-555-0100', pii: true, sensitive: true });
+  }
+  // Order / cart / ticket / invoice — money and timing.
+  if (/^order|order$|cart|ticket|invoice|payment|checkout/.test(lower)) {
+    out.push({ name: 'totalCents', type: 'number', description: `Total in cents.`, required: true, example: '1995', indexed: true });
+    out.push({ name: 'placedAt', type: 'date', description: `When the ${entityName} was placed.`, required: true, example: t(new Date()) });
+  }
+  // Sequence / pipeline / workflow — current step.
+  if (/sequence|pipeline|stage|cadence|funnel/.test(lower)) {
+    out.push({ name: 'currentStep', type: 'number', description: `Index of the current step.`, required: true, example: '1', indexed: true });
+    out.push({ name: 'totalSteps', type: 'number', description: `Total steps in the sequence.`, required: true, example: '5' });
+  }
+  // Outreach / activity / message / note — actor + timestamp.
+  if (/outreach|activity|message|note|interaction|touch/.test(lower)) {
+    out.push({ name: 'channel', type: 'enum', description: `Channel used.`, required: true, enumValues: ['email', 'phone', 'in-person', 'sms', 'chat'], example: 'email' });
+    out.push({ name: 'occurredAt', type: 'date', description: `When the ${entityName} occurred.`, required: true, example: t(new Date()), indexed: true });
+  }
+  // Qualification / criteria / score — score number.
+  if (/qualif|criteri|score|rubric|rating/.test(lower)) {
+    out.push({ name: 'score', type: 'number', description: `Numeric score.`, required: false, example: '0' });
+    out.push({ name: 'evaluatedAt', type: 'date', description: `When the score was last computed.`, required: false, example: t(new Date()) });
+  }
+  // Handoff / assignment / transfer / dispatch — from/to actors.
+  if (/handoff|hand-off|assign|transfer|dispatch|route/.test(lower)) {
+    out.push({ name: 'fromActorId', type: 'string', description: `Member handing off the record.`, required: true, example: `${productSlug}-mem-001`, references: 'entity-member-profile' });
+    out.push({ name: 'toActorId', type: 'string', description: `Member receiving the record.`, required: true, example: `${productSlug}-mem-002`, references: 'entity-member-profile' });
+  }
+  // Reminder / notification — time + recipient.
+  if (/reminder|notification|alert/.test(lower)) {
+    out.push({ name: 'sendAt', type: 'date', description: `When to send the ${entityName}.`, required: true, example: t(future), indexed: true });
+    out.push({ name: 'recipientMemberId', type: 'string', description: `Member who should receive the ${entityName}.`, required: true, example: `${productSlug}-mem-001`, references: 'entity-member-profile' });
+  }
+  // Menu item / product / inventory — price + availability.
+  if (/menu|product|item|inventory|sku|catalog/.test(lower)) {
+    out.push({ name: 'priceCents', type: 'number', description: `Price in cents.`, required: true, example: '1099', indexed: true });
+    out.push({ name: 'isAvailable', type: 'boolean', description: `Whether the item is currently available.`, required: true, example: 'true' });
+  }
+  // Conflict / dispute — resolution status.
+  if (/conflict|dispute|exception|escalation/.test(lower)) {
+    out.push({ name: 'resolutionState', type: 'enum', description: `Current resolution state.`, required: true, enumValues: ['open', 'investigating', 'resolved', 'escalated'], example: 'open' });
+    out.push({ name: 'detectedAt', type: 'date', description: `When the ${entityName} was detected.`, required: true, example: t(new Date()), indexed: true });
+  }
+  // Privacy / boundary / policy — explicit policy fields.
+  if (/privacy|boundar|policy|consent|disclosure/.test(lower)) {
+    out.push({ name: 'policyVersion', type: 'string', description: `Version of the ${entityName} policy.`, required: true, example: 'v1.0' });
+    out.push({ name: 'lastReviewedAt', type: 'date', description: `Last policy review.`, required: false, example: t(new Date()) });
+  }
+  // Always include a member-ownership reference for the seed entity so the
+  // entity carries at least one FK and the audit's entity-field-richness
+  // dim recognizes it as more than a templated stub.
+  if (includeOwnerRef && !out.some((f) => f.name === 'ownerMemberId')) {
+    out.push({ name: 'ownerMemberId', type: 'string', description: `Member who owns this ${entityName} record.`, required: true, example: `${productSlug}-mem-001`, references: 'entity-member-profile' });
+  }
+  return out;
+}
+
 function deriveEntities(input: ProjectInput, actors: Actor[]): Entity[] {
   const features = splitList(input.mustHaveFeatures).slice(0, 6);
   const dataPhrases = splitList(input.dataAndIntegrations).slice(0, 6);
@@ -279,6 +380,12 @@ function deriveEntities(input: ProjectInput, actors: Actor[]): Entity[] {
       { name: 'status', type: 'enum', description: `Current ${name} state.`, required: true, enumValues: ['draft', 'active', 'archived'], example: 'active' },
       { name: 'createdAt', type: 'date', description: `When the ${name} record was created.`, required: true, example: new Date().toISOString() }
     ];
+    // Phase G E6 — append domain-shaped fields derived from the entity name.
+    // Without these, every entity is the templated 4-field skeleton and the
+    // audit's `entity-field-richness` dim caps synth at the floor. With these,
+    // each entity carries at least one domain-meaningful field so the DDL is
+    // recognizably a clinic / SDR / restaurant schema, not a generic stub.
+    fields.push(...deriveDomainFieldsForEntity(name, productSlug, isCore));
     const ownerIds = actors.length ? [actors[0].id] : [];
     const sample: Record<string, unknown> = {};
     for (const f of fields) sample[f.name] = f.example;
@@ -893,7 +1000,7 @@ function deriveDiscovery(input: ProjectInput): DiscoveryArtifacts {
   };
 }
 
-function deriveJtbd(input: ProjectInput, actors: Actor[]): JobToBeDone[] {
+function deriveJtbd(input: ProjectInput, actors: Actor[], workflows: Workflow[] = []): JobToBeDone[] {
   // Phase H M12 — derive motivation / expected outcome / pains from the
   // brief itself rather than emit "I want to complete the ${productName}
   // workflow I'm responsible for…" boilerplate. If the brief is too thin
@@ -945,26 +1052,100 @@ function deriveJtbd(input: ProjectInput, actors: Actor[]): JobToBeDone[] {
         `Capture at least 3 must-have features so workflow scope is unambiguous.`
       ];
     } else {
-      // Brief-derived motivation: ground each sentence in a specific brief field.
+      // Phase G E4 — differentiate motivation / outcome / workaround / hireFor
+      // per actor by combining (a) brief-derived signals with (b) the workflows
+      // the actor appears in and (c) the actor's structural role-type. Without
+      // this, every JTBD picked the same firstSentence(problem) and read like
+      // a find-and-replace duplicate across personas.
       const painLead = firstSentence(problem) || `${input.productName} is not yet doing what its audience needs.`;
       const desiredLead = firstSentence(desired) || `the team needs ${input.productName} working end-to-end`;
       const successLead = firstSentence(success);
-      motivation = `${a.name} is the actor who ${respClause}. The brief states the problem this way: "${painLead}" — and ${a.name} is the role most directly bearing that cost.`;
-      expectedOutcome = successLead
-        ? `Per the brief's success metrics: "${successLead}" The successful demo gives ${role} that observable result.`
-        : `Per the brief's desired output: "${desiredLead}". When the demo runs end-to-end, ${role} sees that result.`;
-      currentWorkaround = constraints
-        ? `Today, given the constraints noted in the brief ("${firstSentence(constraints)}"), ${role} works around the gap with manual / out-of-band tools (spreadsheets, chat threads, paper). The build replaces those workarounds.`
-        : `Today, ${role} has no first-class tool for this; the build replaces ad-hoc workarounds (spreadsheets, chat threads).`;
-      hireForCriteria = [
-        success
-          ? `The success metric "${firstSentence(success)}" is measurably improved.`
-          : `The workflow completes in fewer steps than the current ad-hoc workaround.`,
-        `The role boundary is enforced; ${a.name} never sees data outside their visibility scope unintentionally.`,
-        mustHaves.length
-          ? `The must-have feature "${mustHaves[0].replace(/\.$/, '')}" works end-to-end without falling back to manual tools.`
+      const wfsAsPrimary = workflows.filter((w) => w.primaryActor === a.id);
+      const wfsAsSecondary = workflows.filter((w) => w.secondaryActors.includes(a.id));
+      const ownedWorkflowName = wfsAsPrimary[0]?.name;
+      const participatesIn = wfsAsSecondary[0]?.name;
+      // Failure modes whose trigger or effect names the actor's role.
+      const actorRoleRegex = new RegExp(`\\b${a.name.toLowerCase()}\\b`, 'i');
+      const failuresMentioningActor = workflows
+        .flatMap((w) => w.failureModes.map((f) => ({ workflow: w.name, ...f })))
+        .filter((f) => actorRoleRegex.test(`${f.trigger} ${f.effect}`));
+      const idx = actors.indexOf(a);
+      const mustHaveForActor = mustHaves.length ? mustHaves[idx % mustHaves.length].replace(/\.$/, '') : null;
+
+      // Motivation — vary by actor type so reviewer / primary / secondary read distinctly.
+      if (a.type === 'reviewer' && ownedWorkflowName) {
+        motivation = `${a.name} reviews and approves work other actors produce in ${input.productName}. The brief frames the problem as "${painLead}" — without a structured review path, ${role}'s approvals become the bottleneck (or the rubber stamp), and the cost lands on whoever is downstream.`;
+      } else if (a.type === 'reviewer') {
+        motivation = `${a.name} reviews and approves the workflow's outputs. The brief states the problem as "${painLead}" — ${role} is the role that catches errors before they reach customers, so the cost of weak review tooling lands on ${role} first.`;
+      } else if (a.type === 'primary-user' && ownedWorkflowName) {
+        motivation = `${a.name} drives the ${ownedWorkflowName} workflow end-to-end. The brief frames the problem as "${painLead}" — ${role} is the actor whose day-to-day completion rate is the headline metric, so improvements show up in their workflow first.`;
+      } else if (a.type === 'primary-user') {
+        motivation = `${a.name} drives the core path of ${input.productName}. The brief frames the problem as "${painLead}" — ${role} is the actor whose throughput defines whether the build is working at all.`;
+      } else if (a.type === 'external') {
+        motivation = `${a.name} is the external counterparty in ${input.productName}; they don't operate the system but feel its outputs. The brief states the problem as "${painLead}" — when the workflow misfires, ${role} bears the consequence (the wrong reminder, the missed handoff, the silent failure).`;
+      } else if (ownedWorkflowName) {
+        // Phase G E4 follow-up: actor type may have been classified as
+        // secondary-user even when they primary-own a workflow (e.g. plural
+        // role names that bypass the reviewer regex). Use ownedWorkflowName
+        // as the structural signal so the motivation still differentiates.
+        motivation = `${a.name} owns the ${ownedWorkflowName} workflow on the actor side. The brief frames the problem as "${painLead}" — when ${role} can't run that workflow cleanly, the rest of ${input.productName} cannot deliver its promise to anyone downstream.`;
+      } else if (participatesIn) {
+        motivation = `${a.name} contributes to ${participatesIn} but does not own its outcomes. The brief states the problem as "${painLead}" — ${role} is on the hook for one specific step that, when it slips, breaks the rest of the workflow.`;
+      } else {
+        motivation = `${a.name} ${respClause}. The brief frames the problem as "${painLead}" — ${role} is the actor most directly bearing that cost.`;
+      }
+
+      // Expected outcome — vary by what the actor produces, not by the brief sentence.
+      if (a.type === 'reviewer') {
+        expectedOutcome = successLead
+          ? `Per the brief's success metric: "${successLead}" — for ${role}, success looks like "I can approve or send back with notes in one screen, and the audit trail captures my decision."`
+          : `For ${role}, success looks like "I can approve or send back with notes in one screen, and the audit trail captures my decision."`;
+      } else if (a.type === 'primary-user') {
+        expectedOutcome = successLead
+          ? `Per the brief's success metric: "${successLead}" — for ${role}, success looks like "I can complete the workflow without leaving the app and without losing context between steps."`
+          : `For ${role}, success looks like "I can complete the workflow without leaving the app and without losing context between steps."`;
+      } else if (a.type === 'external') {
+        expectedOutcome = `For ${role}, success looks like "I receive what the workflow promised — the right reminder, the right notification, the right hand-off — without ever needing to log in."`;
+      } else {
+        expectedOutcome = successLead
+          ? `Per the brief's success metric: "${successLead}" — for ${role}, success looks like "my one step in the workflow always completes, and downstream actors don't need to chase me."`
+          : `For ${role}, success looks like "my one step in the workflow always completes, and downstream actors don't need to chase me."`;
+      }
+
+      // Current workaround — differentiate by role-type so each persona reads distinctly.
+      const constraintHint = constraints ? firstSentence(constraints) : '';
+      const constraintFragment = constraintHint ? ` (constraint from brief: "${constraintHint}")` : '';
+      if (a.type === 'reviewer') {
+        currentWorkaround = `Today ${role} reviews work in chat threads, email forwards, or screen-shared meetings; there is no canonical "decision recorded with notes" surface${constraintFragment}.`;
+      } else if (a.type === 'primary-user') {
+        currentWorkaround = `Today ${role} runs the workflow across spreadsheets and ad-hoc notes; context lives in their head and dies with each tab close${constraintFragment}.`;
+      } else if (a.type === 'external') {
+        currentWorkaround = `Today ${role} receives copy-pasted messages from operators, often missing the context they need to act on the workflow output${constraintFragment}.`;
+      } else {
+        currentWorkaround = `Today ${role} hands off their step verbally or in a thread; there is no structured artifact downstream actors can rely on${constraintFragment}.`;
+      }
+
+      // hireForCriteria — at least one entry that's specific to this actor's
+      // workflows or failure modes, plus role-boundary, plus a must-have.
+      hireForCriteria = [];
+      if (failuresMentioningActor.length) {
+        const f = failuresMentioningActor[0];
+        hireForCriteria.push(`The failure "${f.trigger}" in ${f.workflow} is contained: ${f.mitigation}`);
+      } else if (ownedWorkflowName) {
+        hireForCriteria.push(`The ${ownedWorkflowName} workflow completes end-to-end without ${role} dropping context.`);
+      } else if (participatesIn) {
+        hireForCriteria.push(`${a.name}'s step in ${participatesIn} always completes; downstream actors don't have to chase ${role}.`);
+      } else if (success) {
+        hireForCriteria.push(`The success metric "${firstSentence(success)}" is measurably improved.`);
+      } else {
+        hireForCriteria.push(`The workflow completes in fewer steps than the current ad-hoc workaround.`);
+      }
+      hireForCriteria.push(`The role boundary is enforced; ${a.name} never sees data outside their visibility scope unintentionally.`);
+      hireForCriteria.push(
+        mustHaveForActor
+          ? `The must-have feature "${mustHaveForActor}" works end-to-end without falling back to manual tools.`
           : `Every action that mutates state writes an audit entry that survives session boundaries.`
-      ];
+      );
     }
 
     const jtbd = withProvenance(
@@ -1001,9 +1182,13 @@ function inferDbType(field: EntityField): DbType {
   if (/(^id$|Id$|_id$|ref$|Ref$)/.test(field.name)) return 'UUID';
   if (/(^|_)at$|At$/.test(field.name)) return 'TIMESTAMPTZ';
   if (/^date|Date$/.test(field.name)) return 'DATE';
-  if (/(amount|price|total|decimal|cost|fee|rate|balance|salary)/i.test(name)) return 'DECIMAL';
-  if (/(count|quantity|qty|rank|order|number|num|index|version)/i.test(name)) return 'INTEGER';
-  if (/(active|enabled|flag|is[A-Z]|has[A-Z]|deleted|locked|verified|published)/.test(field.name)) return 'BOOLEAN';
+  if (/(amount|price|total|decimal|cost|fee|rate|balance|salary|cents)/i.test(name)) return 'DECIMAL';
+  if (/(count|quantity|qty|rank|order|number|num|index|version|minutes|seconds|hours|days|step|score)/i.test(name)) return 'INTEGER';
+  if (/(active|enabled|flag|is[A-Z]|has[A-Z]|deleted|locked|verified|published|available)/.test(field.name)) return 'BOOLEAN';
+  // Phase G E6 — fall back to INTEGER for any remaining number-typed field so
+  // domain fields like `durationMinutes`, `score`, `currentStep` don't render
+  // as TEXT just because the keyword regex misses them.
+  if (field.type === 'number') return 'INTEGER';
   return 'TEXT';
 }
 
@@ -1172,7 +1357,7 @@ export function synthesizeExtractions(input: ProjectInput): ResearchExtractions 
   const screens = deriveScreens(input, actors, entities, workflows);
   const uxFlow = deriveUxFlow(screens);
   const testCases = deriveTestCases(input, entities, workflows);
-  const jobsToBeDone = deriveJtbd(input, actors);
+  const jobsToBeDone = deriveJtbd(input, actors, workflows);
   const discovery = deriveDiscovery(input);
 
   const briefHash = crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex');
