@@ -29,6 +29,35 @@ import type { ResearchExtractions } from '../research/schema';
 const CITATION_PATTERN =
   /\b(GDPR(?:\s+Art\.?\s*\d+)?|CAN-SPAM(?:\s+Act)?|HIPAA(?:\s+[A-Z][a-z]+\s+Rule)?(?:\s+§\d[\d.]*)?|CPRA(?:\s+§\d[\d.]*)?|CCPA|FERPA|PCI(?:\s+DSS)?|SOC\s*2|TCPA|CASL|COPPA)\b/gi;
 
+/**
+ * Phase H M9 — clamp a string at a sentence/clause boundary that does not
+ * exceed `cap` characters. Prefers `; ` (the join separator used here),
+ * then `. `, then `, `; if no suitable boundary exists in the cap window,
+ * truncates at the last whitespace; never cuts a word in half.
+ *
+ * If the input fits inside `cap`, it is returned unchanged. The returned
+ * string ends with `…` only when truncation actually shortened it.
+ *
+ * Exported for direct testing.
+ */
+export function clampAtSentenceBoundary(input: string, cap: number): string {
+  if (!input || input.length <= cap) return input;
+  const candidates = ['; ', '. ', ', '];
+  for (const sep of candidates) {
+    const idx = input.lastIndexOf(sep, cap);
+    if (idx > 0) {
+      const truncated = input.slice(0, idx + (sep === ', ' ? 0 : 1));
+      return `${truncated}…`;
+    }
+  }
+  // No clause boundary in the cap window — fall back to whitespace.
+  const wsIdx = input.lastIndexOf(' ', cap);
+  if (wsIdx > 0) return `${input.slice(0, wsIdx)}…`;
+  // No whitespace either — return full string up to cap with ellipsis. We
+  // never mid-word truncate, so cap a few chars short of the boundary.
+  return `${input.slice(0, Math.max(0, cap - 1))}…`;
+}
+
 export type RegulatoryEntry = {
   citation: string;
   appearsInGates: string[];
@@ -81,7 +110,12 @@ export function deriveRegulatoryEntries(extractions: ResearchExtractions): Regul
       const entry = ensure(citation);
       if (!entry.appearsInGates.includes(gate.name)) entry.appearsInGates.push(gate.name);
       if (!entry.enforcement) {
-        entry.enforcement = gate.evidenceRequired.join('; ').slice(0, 240);
+        // Phase H M9 — sentence-aware truncation. The pre-H code did
+        // `.slice(0, 240)` which cut mid-word ("Test that the " ←). Now we
+        // emit the full evidence list when it fits in 480 chars (the audit
+        // dim doesn't penalize length); otherwise we truncate at the last
+        // `; ` boundary before the cap so the closing sentence is intact.
+        entry.enforcement = clampAtSentenceBoundary(gate.evidenceRequired.join('; '), 480);
       }
     }
   }

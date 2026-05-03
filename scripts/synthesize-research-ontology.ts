@@ -109,13 +109,20 @@ function domainSourceRef(input: ProjectInput, claim: string): SourceRef {
 
 function withProvenance<T extends object>(
   base: T,
-  args: { id: string; origin: 'use-case' | 'domain' | 'both'; sources: SourceRef[]; pass?: number }
+  args: {
+    id: string;
+    origin: 'use-case' | 'domain' | 'both';
+    sources: SourceRef[];
+    pass?: number;
+    /** Phase H M12 — let callers downgrade synth-from-thin-brief output. */
+    evidenceStrength?: 'strong' | 'moderate' | 'weak';
+  }
 ) {
   return {
     ...base,
     id: args.id,
     origin: args.origin,
-    evidenceStrength: 'moderate' as const,
+    evidenceStrength: args.evidenceStrength ?? ('moderate' as const),
     sources: args.sources,
     firstSeenInPass: args.pass ?? 1,
     updatedInPass: args.pass ?? 1
@@ -787,25 +794,94 @@ function deriveDiscovery(input: ProjectInput): DiscoveryArtifacts {
 }
 
 function deriveJtbd(input: ProjectInput, actors: Actor[]): JobToBeDone[] {
+  // Phase H M12 — derive motivation / expected outcome / pains from the
+  // brief itself rather than emit "I want to complete the ${productName}
+  // workflow I'm responsible for…" boilerplate. If the brief is too thin
+  // to derive a non-generic JTBD, mark the JTBD as `evidenceStrength:
+  // 'weak'` and write a fallback that says so honestly. The persona
+  // renderer (`lib/generator/user-personas.ts`) detects weak JTBDs and
+  // routes the reader back to the recipe instead of pretending depth.
   const out: JobToBeDone[] = [];
+  // Brief-derived signals.
+  const problem = (input.problemStatement || '').trim();
+  const desired = (input.desiredOutput || '').trim();
+  const success = (input.successMetrics || '').trim();
+  const constraints = (input.constraints || '').trim();
+  const mustHaves = (input.mustHaveFeatures || '')
+    .split(/[\n;,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const briefIsThin =
+    problem.length < 60 || desired.length < 20 || success.length < 20 || mustHaves.length < 3;
+
+  // First sentence helper — keeps the motivation a single readable line.
+  const firstSentence = (s: string): string => {
+    const trimmed = s.trim();
+    const m = trimmed.match(/^[^.?!]+[.?!]/);
+    return (m ? m[0] : trimmed).trim();
+  };
+
   for (const a of actors) {
     const responsibility = a.responsibilities[0] || `Use ${input.productName}`;
+    const role = a.name.toLowerCase();
+    const respClause = responsibility
+      .replace(/^(Use|Operate)\s+/i, '')
+      .replace(/\.$/, '')
+      .toLowerCase();
+
+    let motivation: string;
+    let expectedOutcome: string;
+    let currentWorkaround: string;
+    let hireForCriteria: string[];
+
+    if (briefIsThin) {
+      // Honest fallback. No invented motivation. Persona renderer treats this
+      // as the no-JTBD case and tells the builder to re-run the recipe.
+      motivation = `(Motivation could not be honestly derived from the brief — \`problemStatement\`, \`desiredOutput\`, \`successMetrics\`, and \`mustHaveFeatures\` are too thin. Run docs/RESEARCH_RECIPE.md to populate this honestly.)`;
+      expectedOutcome = `(Expected outcome unknown without research; placeholder.)`;
+      currentWorkaround = `(Current workaround unknown without research; placeholder.)`;
+      hireForCriteria = [
+        `Re-run docs/RESEARCH_RECIPE.md with the brief expanded to include explicit problem, desired outcome, and success metrics.`,
+        `Capture at least 3 must-have features so workflow scope is unambiguous.`
+      ];
+    } else {
+      // Brief-derived motivation: ground each sentence in a specific brief field.
+      const painLead = firstSentence(problem) || `${input.productName} is not yet doing what its audience needs.`;
+      const desiredLead = firstSentence(desired) || `the team needs ${input.productName} working end-to-end`;
+      const successLead = firstSentence(success);
+      motivation = `${a.name} is the actor who ${respClause}. The brief states the problem this way: "${painLead}" — and ${a.name} is the role most directly bearing that cost.`;
+      expectedOutcome = successLead
+        ? `Per the brief's success metrics: "${successLead}" The successful demo gives ${role} that observable result.`
+        : `Per the brief's desired output: "${desiredLead}". When the demo runs end-to-end, ${role} sees that result.`;
+      currentWorkaround = constraints
+        ? `Today, given the constraints noted in the brief ("${firstSentence(constraints)}"), ${role} works around the gap with manual / out-of-band tools (spreadsheets, chat threads, paper). The build replaces those workarounds.`
+        : `Today, ${role} has no first-class tool for this; the build replaces ad-hoc workarounds (spreadsheets, chat threads).`;
+      hireForCriteria = [
+        success
+          ? `The success metric "${firstSentence(success)}" is measurably improved.`
+          : `The workflow completes in fewer steps than the current ad-hoc workaround.`,
+        `The role boundary is enforced; ${a.name} never sees data outside their visibility scope unintentionally.`,
+        mustHaves.length
+          ? `The must-have feature "${mustHaves[0].replace(/\.$/, '')}" works end-to-end without falling back to manual tools.`
+          : `Every action that mutates state writes an audit entry that survives session boundaries.`
+      ];
+    }
+
     const jtbd = withProvenance(
       {
         actorId: a.id,
-        situation: `When ${a.name.toLowerCase()} needs to ${responsibility.replace(/^(Use|Operate)\s+/i, '').replace(/\.$/, '').toLowerCase()}`,
-        motivation: `I want to complete the ${input.productName} workflow I'm responsible for without losing context across sessions or relying on hidden chat history.`,
-        expectedOutcome: `So that the persisted state is reviewable, my role boundary is respected, and a reviewer can trust the audit trail.`,
-        currentWorkaround: `Manual spreadsheets, ad-hoc scripts, or chat threads — none of which produce a consistent audit entry or enforce visibility scope.`,
-        hireForCriteria: [
-          `Workflow completes in fewer steps than the manual workaround.`,
-          `Visibility scope is enforced; ${a.name} never sees data from other actors' scope unintentionally.`,
-          `Every action that mutates state writes an audit entry that survives session boundaries.`
-        ]
+        situation: `When ${role} needs to ${respClause}`,
+        motivation,
+        expectedOutcome,
+        currentWorkaround,
+        hireForCriteria
       },
       {
         id: `jtbd-${slug(a.name)}`,
         origin: 'use-case' as const,
+        // Mark thin-brief-derived JTBDs as weak so the audit's jtbd-coverage
+        // dim and the persona renderer can both detect them.
+        evidenceStrength: briefIsThin ? ('weak' as const) : ('moderate' as const),
         sources: [briefSourceRef(input, `Audience: ${input.targetAudience}`)]
       }
     );

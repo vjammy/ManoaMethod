@@ -1,13 +1,9 @@
 /**
  * Phase G — Builder handoff simplification.
+ * Phase H repair pass — M6, M7, M8.
  *
  * Renders BUILDER_START_HERE.md, the canonical entry point for an implementing
- * coding agent. The pre-G workspace had ~60 top-level markdown files and
- * BUILDER_START_HERE was a thin pointer; the W5 fresh-agent run showed the
- * builder still wasted attention scanning ceremony files. Phase G makes
- * BUILDER_START_HERE the only file a build agent has to read end-to-end.
- *
- * The 9 sections are fixed by spec:
+ * coding agent. The 9 sections are fixed by spec:
  *   1. What you are building
  *   2. Who uses it
  *   3. Day-1 behaviors that must work
@@ -18,9 +14,22 @@
  *   8. How to run
  *   9. What done means
  *
+ * Phase H repair pass:
+ *   M6 — section 8 commands match the deployment-template Makefile vocabulary
+ *        (`make setup / dev / test / audit` are real aliases now). The §8
+ *        copy is sourced from a single MAKE_TARGETS map shared with the
+ *        Makefile builder.
+ *   M7 — auth-mock copy in §5 and §8 is conditional on whether an `auth`
+ *        integration is mocked. When no auth integration is mocked, the
+ *        AUTH_DEMO_MODE=true line is omitted entirely.
+ *   M8 — Tier 1 list flags `evidence/audit/QUALITY_AUDIT-*.md` as "generated
+ *        by `npm run audit`; absent until first audit run." The audit
+ *        directory is also pre-emitted with a README so a fresh agent never
+ *        sees a missing path.
+ *
  * Pure function — no fs / network. Caller writes the result into the workspace.
  */
-import type { ResearchExtractions } from '../research/schema';
+import type { Integration, ResearchExtractions } from '../research/schema';
 import type { LifecycleStatus, ProjectInput } from '../types';
 
 export type BuilderStartHereInput = {
@@ -34,27 +43,36 @@ export type BuilderStartHereInput = {
   firstPhaseSlug?: string;
 };
 
-const TIER_1_FILES = [
-  'PROJECT_BRIEF.md',
-  'requirements/PER_SCREEN_REQUIREMENTS.md',
-  'requirements/FUNCTIONAL_REQUIREMENTS.md',
-  'architecture/DATABASE_SCHEMA.md',
-  'architecture/DATABASE_SCHEMA.sql',
-  'product-strategy/USE_CASES.md',
-  'product-strategy/USER_PERSONAS.md',
-  'product-strategy/SUCCESS_METRICS.md',
-  'research/extracted/workflows.json',
-  'research/extracted/screens.json',
-  'research/extracted/testCases.json'
-] as const;
+/**
+ * Phase H M6 — single source of truth for `make` target descriptions.
+ * Both the BUILDER_START_HERE §8 renderer and the deployment-template
+ * Makefile are derived from this. Build-side aliases live above the
+ * separator; deploy-side targets below.
+ */
+export const MAKE_TARGETS = {
+  build: [
+    { name: 'setup', description: 'install deps + CLIs (alias of install)' },
+    { name: 'dev', description: 'run the app locally (npm run dev)' },
+    { name: 'test', description: 'run unit + Playwright suites' },
+    { name: 'audit', description: 'run mvp-builder quality audit with depth-gate' }
+  ],
+  deploy: [
+    { name: 'install', description: 'install npm deps + supabase + vercel CLIs' },
+    { name: 'migrate', description: 'apply Supabase migrations (0001_init.sql)' },
+    { name: 'seed', description: 'load SAMPLE_DATA.md fixtures into the dev database' },
+    { name: 'deploy', description: 'vercel --prod' },
+    { name: 'smoke', description: 'hit deployed URL health endpoint + run Playwright' },
+    { name: 'rollback', description: 'vercel rollback to previous deployment' }
+  ]
+} as const;
 
 function statusBanner(status: LifecycleStatus): string {
   switch (status) {
     case 'DemoReady':
-      return 'Status: **Demo-ready** — research-grounded, depth gate passed, all demo artifacts present. The 10-file Tier 1 reading list below is sufficient to scaffold and deploy a runnable demo.';
+      return 'Status: **Demo-ready** — research-grounded, depth gate passed, all demo artifacts present. The Tier 1 reading list below is sufficient to scaffold and deploy a runnable demo.';
     case 'BuildReady':
     case 'ApprovedForBuild':
-      return 'Status: **Build-ready** — research-grounded with full depth. The 10-file Tier 1 reading list below is sufficient to scaffold the app. Some demo artifacts may still be incomplete; see the audit report for details.';
+      return 'Status: **Build-ready** — research-grounded with full depth. The Tier 1 reading list below is sufficient to scaffold the app. Some demo artifacts may still be incomplete; see the audit report for details.';
     case 'ReleaseNotApproved':
       return 'Status: **Build-ready, release not yet approved** — the workspace is implementable but release evidence (operations runbook, rollback plan) is missing. Build the app from the Tier 1 list; collect release evidence before promoting.';
     case 'ResearchIncomplete':
@@ -83,7 +101,6 @@ function deriveDay1Behaviors(extractions?: ResearchExtractions): string[] {
 function deriveValidationBehaviors(extractions?: ResearchExtractions): string[] {
   if (!extractions) return [];
   const lines = new Set<string>();
-  // Workflow-level failure modes — these are server-side validation requirements.
   for (const wf of extractions.workflows) {
     for (const fm of wf.failureModes.slice(0, 2)) {
       const trigger = fm.trigger.replace(/\.$/, '');
@@ -91,7 +108,6 @@ function deriveValidationBehaviors(extractions?: ResearchExtractions): string[] 
       lines.add(`On **${trigger.toLowerCase()}** — ${mitigation.toLowerCase()}. Enforce server-side, not just in the form.`);
     }
   }
-  // Screen-level error states (only the negative side; the happy path is implied by the workflow).
   if (extractions.screens) {
     for (const screen of extractions.screens) {
       const err = screen.states?.error;
@@ -103,17 +119,18 @@ function deriveValidationBehaviors(extractions?: ResearchExtractions): string[] 
   return Array.from(lines).slice(0, 12);
 }
 
-function deriveMockedBehaviors(extractions?: ResearchExtractions): { mocked: string[]; required: string[] } {
-  const mocked: string[] = [];
-  const required: string[] = [];
+function deriveMockedBehaviors(extractions?: ResearchExtractions): {
+  mocked: Integration[];
+  required: Integration[];
+} {
+  const mocked: Integration[] = [];
+  const required: Integration[] = [];
   if (!extractions) return { mocked, required };
   for (const integ of extractions.integrations) {
     if (integ.mockedByDefault) {
-      mocked.push(
-        `**${integ.name}** (${integ.category}) — ${integ.purpose} See \`integrations/MOCKING_STRATEGY.md\` for the demo-safe mock contract; swap to a real provider (\`${integ.envVar}\`) before promoting.`
-      );
+      mocked.push(integ);
     } else if (integ.required) {
-      required.push(`**${integ.name}** (${integ.category}) — real credential required (\`${integ.envVar}\`).`);
+      required.push(integ);
     }
   }
   return { mocked, required };
@@ -150,7 +167,69 @@ function tier1List(input: BuilderStartHereInput, hasResearch: boolean, hasScreen
   }
   lines.push('11. **research/extracted/testCases.json** — test cases per persona × workflow × screen. Generate Playwright suites from this.');
   lines.push(`12. **phases/${phaseSuffix}/INTEGRATION_TESTS.md** + **phases/${phaseSuffix}/TEST_CASES.md** — happy-path + failure-mode integration tests for the first phase.`);
-  lines.push('13. **evidence/audit/QUALITY_AUDIT-*.md** — the audit report with depth-grade and demo-readiness verdict. Read it after `npm run audit` completes.');
+  // Phase H M8 — be explicit that the audit report doesn't exist until the
+  // builder runs the audit. Pre-G the line read like a missing-file bug.
+  lines.push('13. **evidence/audit/QUALITY_AUDIT-*.md** — *generated after `make audit` (or `npm run audit -- --enforce-depth`). The directory ships with a README placeholder; the timestamped report appears once the first audit runs.*');
+  return lines.join('\n');
+}
+
+function renderMockedSection(mocking: { mocked: Integration[]; required: Integration[] }): string {
+  if (mocking.mocked.length === 0 && mocking.required.length === 0) {
+    return `_No integrations were extracted from research, so nothing is mocked or required._\n\nIf the build introduces an integration (auth, SMS, email, payment, storage, webhook), document its mock contract in \`integrations/MOCKING_STRATEGY.md\` before wiring it up.`;
+  }
+  const lines: string[] = [];
+  if (mocking.mocked.length > 0) {
+    lines.push('These integrations are mocked by default for the demo. Do not block on real-provider setup; the workspace is designed to run end-to-end without live credentials.');
+    lines.push('');
+    for (const integ of mocking.mocked) {
+      lines.push(
+        `- **${integ.name}** (${integ.category}) — ${integ.purpose} See \`integrations/MOCKING_STRATEGY.md\` for the demo-safe mock contract; swap to a real provider (\`${integ.envVar}\`) before promoting.`
+      );
+    }
+  } else {
+    lines.push('No integrations are mocked by default — the workspace expects every required integration to use real credentials.');
+  }
+  if (mocking.required.length > 0) {
+    lines.push('');
+    lines.push('### Real credentials required for these (no demo-safe mock)');
+    lines.push('');
+    for (const integ of mocking.required) {
+      lines.push(`- **${integ.name}** (${integ.category}) — real credential required (\`${integ.envVar}\`).`);
+    }
+  }
+  if (mocking.mocked.length > 0) {
+    lines.push('');
+    lines.push('For per-category mock contracts (file paths, env-var shortcuts, expected audit-event shapes) see `integrations/MOCKING_STRATEGY.md`.');
+  }
+  return lines.join('\n');
+}
+
+function renderHowToRunSection(mocking: { mocked: Integration[]; required: Integration[] }, hasDb: boolean): string {
+  // Phase H M6 — describe the actual Makefile aliases a fresh builder will run.
+  const buildLines = MAKE_TARGETS.build
+    .map((t) => `   make ${t.name.padEnd(8)} # ${t.description}`)
+    .join('\n');
+  const lines: string[] = [];
+  lines.push(`1. From the deployment template at \`architecture/DEPLOYMENT_TEMPLATE/\` (or whichever directory the build recipe creates), the build-side targets are:
+   \`\`\`bash
+${buildLines}
+   \`\`\``);
+  // Phase H M7 — only mention AUTH_DEMO_MODE if an auth integration is actually mocked.
+  const authMocked = mocking.mocked.find((m) => m.category === 'auth');
+  if (authMocked) {
+    lines.push(`2. **Demo-safe mock auth** — set \`AUTH_DEMO_MODE=true\` in \`.env.local\` to skip the magic-link round-trip and sign in directly via the role-switcher. See \`integrations/MOCKING_STRATEGY.md\` for the full contract (\`${authMocked.envVar}\` swaps in the real provider).`);
+  } else if (mocking.mocked.length > 0) {
+    // Mocked integrations exist but none are auth — surface the relevant per-category demo shortcut.
+    const cats = Array.from(new Set(mocking.mocked.map((m) => m.category)));
+    lines.push(`2. **Demo-safe mocks** — \`integrations/MOCKING_STRATEGY.md\` describes the file-system + env-var shortcuts for each mocked integration (categories present in this workspace: ${cats.join(', ')}). No auth integration is mocked, so there is no \`AUTH_DEMO_MODE\` shortcut.`);
+  } else {
+    lines.push('2. **Demo-safe mocks** — no integrations are mocked in this workspace. If you add one during the build, document its contract in `integrations/MOCKING_STRATEGY.md` first.');
+  }
+  lines.push(`3. **Before promoting**: \`make audit\` (delegates to \`npm run audit -- --enforce-depth\` against the workspace) and confirm the depth gate passes.`);
+  if (!hasDb) {
+    lines.push('');
+    lines.push('If the deployment template does not yet exist (no `architecture/DATABASE_SCHEMA.sql`), the build recipe\'s first pass is to create it. Follow `docs/BUILD_RECIPE.md` from B1 onward.');
+  }
   return lines.join('\n');
 }
 
@@ -213,13 +292,7 @@ Cross-reference with \`requirements/PER_SCREEN_REQUIREMENTS.md\` for the per-scr
 
 ## 5. What is intentionally mocked
 
-These integrations are mocked by default for the demo. Do not block on real-provider setup; the workspace is designed to run end-to-end without live credentials.
-
-${bullet(mocking.mocked, 'No integrations are mocked by default — the workspace expects every integration to use real credentials.')}
-
-${mocking.required.length ? `### Real credentials required for these (no demo-safe mock):\n${bullet(mocking.required, '')}` : ''}
-
-For the concrete mock contract (file paths, env-var shortcuts, demo-safe magic-link behavior) see \`integrations/MOCKING_STRATEGY.md\`.
+${renderMockedSection(mocking)}
 
 ---
 
@@ -250,16 +323,7 @@ If a top-level filename matches one of these patterns it is almost certainly Tie
 
 ## 8. How to run
 
-1. From the deployment template at \`architecture/DEPLOYMENT_TEMPLATE/\` (or the directory the build recipe creates):
-   \`\`\`bash
-   make setup       # install deps, set up local Postgres, apply migrations
-   make dev         # run Next.js + worker locally on http://localhost:3000
-   make test        # run Playwright suites generated from research/extracted/testCases.json
-   \`\`\`
-2. Demo-safe mock auth: set \`AUTH_DEMO_MODE=true\` in \`.env.local\` to skip the magic-link round-trip and sign in directly via the role-switcher. See \`integrations/MOCKING_STRATEGY.md\`.
-3. Before promoting: \`make audit\` (delegates to \`npm run audit -- --enforce-depth\` against the workspace) and confirm the depth gate passes.
-
-If the deployment template does not yet exist (no \`architecture/DATABASE_SCHEMA.sql\`), the build recipe's first pass is to create it. Follow \`docs/BUILD_RECIPE.md\` from B1 onward.
+${renderHowToRunSection(mocking, hasDb)}
 
 ---
 

@@ -47,6 +47,7 @@ import { renderSuccessMetricsMarkdown } from './generator/success-metrics';
 import { renderPerScreenRequirementsMarkdown } from './generator/per-screen-requirements';
 import { renderPhaseIntegrationTestsMarkdown } from './generator/integration-tests';
 import { renderBuilderStartHere } from './generator/builder-start-here';
+import { renderMockingStrategy } from './generator/mocking-strategy';
 import { buildQuestionPrompts, CORE_AGENT_OPERATING_RULES, getProfileConfig, slugify } from './templates';
 import {
   buildDomainOntology,
@@ -2222,86 +2223,21 @@ ${listToBullets(
 }
 
 function buildMockingStrategy(input: ProjectInput, context: ProjectContext) {
-  // Phase G W6: when research declares an auth integration as mockedByDefault,
-  // emit the concrete demo-safe magic-link mock contract. The pre-G strategy
-  // file said "use mocks" without telling a builder what the mock should
-  // actually do — fresh-builder validation showed builders shortcut to
-  // "click a button to sign in" without preserving the magic-link UX.
-  const ex = context.extractions;
-  const authIntegrations = (ex?.integrations || []).filter((i) => i.category === 'auth');
-  const mockedAuth = authIntegrations.find((i) => i.mockedByDefault);
-  const realAuthRequired = authIntegrations.find((i) => !i.mockedByDefault && i.required);
-
-  const magicLinkSection = mockedAuth
-    ? `
-
-## Magic-link auth — demo-safe mock contract
-
-\`${mockedAuth.name}\` is declared \`mockedByDefault: true\` in \`research/extracted/integrations.json\`. Implement the mock with the following concrete contract so the demo runs without a real email provider while preserving the magic-link UX shape.
-
-### What the mock implements
-
-1. **Direct role-switcher** — at \`/dev/sign-in\` (only when \`AUTH_DEMO_MODE=true\`), render a list of researched actor roles and let the user pick one. Clicking a role signs in directly without a round-trip. This is the fastest path for clicking-through the demo.
-2. **Magic-link path that preserves the real UX** — at \`/auth/sign-in\`, the form accepts ANY email (no allowlist) and immediately:
-   - generates a token (\`crypto.randomBytes(32).toString('hex')\`),
-   - writes a one-line link to \`.tmp/magic-links/<sha256(email)>.txt\` containing \`http://localhost:3000/auth/verify?token=<token>&email=<email>\`,
-   - logs the same link to \`console.log\` with a \`[magic-link mock]\` prefix so the developer can copy it from the dev-server output,
-   - returns a "Check your email" success screen with a small dev-only "Open last magic link" button that reads the file the demo just wrote.
-3. **Token verify route** — \`GET /auth/verify?token=…&email=…\` validates that the token file exists and is fresh (≤ 15 min), then signs the user in and deletes the token file. After three failed attempts on the same email the route returns 429 (mirrors the rate-limit failure mode in research).
-4. **Role inference from email local-part** — for the magic-link path, the local-part prefix selects the role: \`sdr+anything@x\` → SDR, \`mgr+anything@x\` → manager, etc. This lets the demo exercise role-specific screens without requiring a real user-table seed.
-5. **Demo shortcut env var** — when \`AUTH_DEMO_MODE=true\` is set in \`.env.local\`, the magic-link send step is skipped entirely; the form submits straight to \`/auth/verify\` with a freshly-minted token. The token file is still written so the audit log shows the same shape.
-
-### What lives in the file system
-
-\`\`\`
-.tmp/magic-links/
-  <sha256-of-email>.txt    ← one line: the verify URL
-\`\`\`
-
-The directory is gitignored. \`make clean-mocks\` removes it.
-
-### Audit log
-
-Every mock send writes the same audit-event shape the real provider would (\`{type:'auth.magic-link.sent', email, sha256, ts}\`). Server-side, not client-side. The audit log is the contract that the rest of the workspace assumes; do not skip it just because the send is mocked.
-
-### How to swap to a real provider later
-
-Replace the body of \`sendMagicLink(email)\` with a Resend / Postmark / SES call. Keep the mock available behind \`AUTH_DEMO_MODE=true\` for E2E tests (Playwright / Vitest). The token-verify route, role-inference, and audit-event shape all stay the same.
-
-### Failure modes the mock must surface
-
-${(mockedAuth.failureModes || []).map((fm) => `- ${fm}`).join('\n') || '- (failureModes not extracted; default to rate-limit + expired-link + cross-device sign-in)'}
-
-Each failure mode renders a distinct user-visible error and emits a structured audit event. Do not collapse them into a single "auth failed" toast.
-`
-    : realAuthRequired
-      ? `
-
-## Magic-link auth — real provider required
-
-\`${realAuthRequired.name}\` is \`required: true\` and \`mockedByDefault: false\` in \`research/extracted/integrations.json\`. Set \`${realAuthRequired.envVar}\` in \`.env.local\` before running the demo. Without a real provider the auth flow will fail clearly (NOT silently); do not stub auth without first surfacing a blocker (see \`docs/BUILD_RECIPE.md\` blocker policy).
-`
-      : '';
-
-  return `# MOCKING_STRATEGY
-
-## What to mock before real credentials exist
-${listToBullets(
-  context.ontology.integrationTypes.length
-    ? context.ontology.integrationTypes.map((service) => `${service.name} behavior, including ${service.failureModes[0] || 'service outages'}.`)
-    : ['All external API calls', 'Webhook payloads', 'Background notifications or delivery receipts'],
-  'No live integration is approved yet.'
-)}
-
-## Mock data
-- Use project-specific sample records that match ${context.primaryFeature}, ${context.primaryAudience}, and the ontology entities: ${context.ontology.entityTypes.map((entity) => entity.name).join(', ')}.
-
-## Local test behavior
-- Local tests should pass without internet access, live credentials, or hidden setup steps.
-
-## When to replace mocks with real services
-- Only after Product Goal and Scope, What the App Must Do, and the related gate all explicitly approve the live dependency.
-${magicLinkSection}`;
+  // Phase H M10 — generalized per-category mock contracts in
+  // lib/generator/mocking-strategy.ts. Phase G W6 only had auth; M10 covers
+  // sms, email, payment, storage, observability, llm + generic fallback.
+  return renderMockingStrategy({
+    productName: input.productName,
+    primaryFeature: context.primaryFeature,
+    primaryAudience: context.primaryAudience,
+    ontologyEntityNames: context.ontology.entityTypes.map((entity) => entity.name),
+    fallbackBullets: context.ontology.integrationTypes.length
+      ? context.ontology.integrationTypes.map(
+          (service) => `${service.name} behavior, including ${service.failureModes[0] || 'service outages'}.`
+        )
+      : ['All external API calls', 'Webhook payloads', 'Background notifications or delivery receipts'],
+    extractions: context.extractions
+  });
 }
 
 function buildIntegrationTestPlan(input: ProjectInput, context: ProjectContext) {
@@ -9843,10 +9779,32 @@ function createGeneratedFiles(bundle: ProjectBundle, input: ProjectInput, contex
   };
   const assumptionsAndQuestions = buildAssumptionsAndOpenQuestions(bundle.warnings, context);
   const statusSummary = getLifecycleSummary(bundle.lifecycleStatus);
-  const blockingWarningLines = bundle.blockingWarnings.map((warning) => `[${warning.severity}] ${warning.title}: ${warning.message}`);
+  // Phase H M11 — when lifecycle is BuildReady / DemoReady / ApprovedForBuild,
+  // the package is implementable; "blocker" warnings become review notes /
+  // follow-ups rather than headline blockers. The audit's `demoReady=true`
+  // and the depth-gate pass have already cleared the structural bar; what
+  // remains is review-time critique that doesn't block a build pass.
+  const isBuildable =
+    bundle.lifecycleStatus === 'BuildReady' ||
+    bundle.lifecycleStatus === 'DemoReady' ||
+    bundle.lifecycleStatus === 'ApprovedForBuild' ||
+    bundle.lifecycleStatus === 'ReleaseNotApproved';
+  const warningSeverityLabel = (severity: WarningSeverity): string => {
+    if (!isBuildable) return severity; // Draft/Blocked/etc keep raw labels
+    if (severity === 'blocker') return 'review-note';
+    if (severity === 'warning') return 'follow-up';
+    return severity;
+  };
+  const blockingWarningLines = bundle.blockingWarnings.map(
+    (warning) => `[${warningSeverityLabel(warning.severity)}] ${warning.title}: ${warning.message}`
+  );
   const nonBlockingWarningLines = bundle.warnings
     .filter((warning) => warning.severity !== 'blocker')
-    .map((warning) => `[${warning.severity}] ${warning.title}: ${warning.message}`);
+    .map((warning) => `[${warningSeverityLabel(warning.severity)}] ${warning.title}: ${warning.message}`);
+  const blockingHeading = isBuildable ? 'Review notes (non-blocking)' : 'Blocking issues';
+  const blockingFallback = isBuildable
+    ? 'No review notes recorded.'
+    : 'No blocker warnings recorded.';
   const modeGuideIntro =
     context.profile.key === 'beginner-business'
       ? 'Simple checklist: read the brief, answer the open questions, confirm the customer problem, and only then move into phase work.'
@@ -10092,8 +10050,8 @@ ${listToBullets(assumptionsAndQuestions.assumptions, 'Inferred assumption: none 
 ${listToBullets(assumptionsAndQuestions.openQuestions, 'Please review and confirm: no open questions recorded.')}
 
 ## Warning summary
-### Blocking issues
-${listToBullets(blockingWarningLines, 'No blocker warnings recorded.')}
+### ${blockingHeading}
+${listToBullets(blockingWarningLines, blockingFallback)}
 
 ### Non-blocking warnings
 ${listToBullets(nonBlockingWarningLines, 'No non-blocking warnings recorded.')}
@@ -10138,8 +10096,8 @@ ${bundle.lifecycleStatus}
 
 ${statusSummary}
 
-## Blocking issues
-${listToBullets(blockingWarningLines, 'No blocker warnings recorded.')}
+## ${blockingHeading}
+${listToBullets(blockingWarningLines, blockingFallback)}
 
 ## Non-blocking warnings
 ${listToBullets(nonBlockingWarningLines, 'No non-blocking warnings recorded.')}
@@ -10291,6 +10249,40 @@ ${listToBullets(bundle.unresolvedWarnings.map((warning) => `[${warning.severity}
 
   add('repo/input.json', JSON.stringify(input, null, 2));
   add('repo/mvp-builder-state.json', JSON.stringify(mvpBuilderState, null, 2));
+
+  // Phase H M8 — pre-emit the audit-evidence placeholder so a fresh builder
+  // following the Tier 1 reading list never sees a dangling reference. The
+  // first run of `npm run audit` writes timestamped reports alongside this
+  // README; the README itself stays as a permanent index.
+  add(
+    'evidence/audit/README.md',
+    `# evidence/audit
+
+This directory holds quality-audit reports. It ships with this README and
+no other content.
+
+## How reports get generated
+
+Run \`npm run audit -- --package=<this-workspace>\` (or \`make audit\` from
+\`architecture/DEPLOYMENT_TEMPLATE/\`). Each run emits:
+
+- \`QUALITY_AUDIT-<timestamp>.md\` — human-readable report with depth-grade,
+  research-source verdict, and demo-readiness reason if not demo-ready.
+- \`last-audit.json\` — machine-readable last-run snapshot the loop-50
+  harness and \`mvp-builder-quality-audit\` consume.
+
+## Why this README exists
+
+\`BUILDER_START_HERE.md\` lists the audit report as the last Tier 1 file.
+Pre-Phase-H that pointer dangled until the first audit ran; the README
+fixes the dangling reference and explains how to populate the directory.
+
+## Tier classification
+
+This file is Tier 2 reference material; the audit reports themselves are
+Tier 1 once they exist.
+`
+  );
 
   add(
     'repo/manifest.json',
