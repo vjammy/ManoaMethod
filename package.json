@@ -52,7 +52,8 @@
     "swarm:score": "tsx scripts/run-10-app-swarm.ts score",
     "swarm:gates": "tsx scripts/run-10-app-swarm.ts gates",
     "swarm:report": "tsx scripts/run-10-app-swarm.ts report",
-    "finalize:release": "tsx scripts/mvp-builder-finalize-repo-release.ts"
+    "finalize:release": "tsx scripts/mvp-builder-finalize-repo-release.ts",
+    "build-demo": "tsx scripts/mvp-builder-build-demo.ts"
   },
   "dependencies": {
     "@types/node": "^20.12.12",
