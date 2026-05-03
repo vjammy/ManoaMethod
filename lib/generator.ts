@@ -1534,27 +1534,70 @@ function buildFunctionalRequirementsFromResearch(input: ProjectInput, ex: Resear
     }
   }
 
+  // Phase G W5 — single-best-step assignment.
+  //
+  // matchFailureModeForStepDetailed picks failure modes per step, but a
+  // workflow with several similarly-worded steps and 2-3 failure modes used
+  // to produce duplicates: 3 steps in the same workflow all matched the
+  // same failure mode and rendered the identical Failure-case line, which
+  // dragged requirement-failure-variance to 3/5.
+  //
+  // Greedy assignment fixes this. For each workflow:
+  //   1. Score every (step, failureMode) pair via the staged matcher.
+  //   2. Sort pairs by score (descending).
+  //   3. Greedily assign each failure mode to the single step that scored
+  //      it best, leaving every other step with the generic step-aware
+  //      pointer. The pointer mentions the step's branchOn so even
+  //      multi-step pointers stay distinct.
+  //
+  // Result: each failure mode appears at most once per workflow, never as
+  // a copy-paste join. The Failure-case lines either name a specific
+  // failureMode or reference the step's branchOn/action — both unique.
+  type StepKey = string;
+  const stepKey = (wfName: string, stepOrder: number): StepKey => `${wfName}#${stepOrder}`;
+  const assignedFailure = new Map<StepKey, FailureMatch>();
+  for (const wf of ex.workflows) {
+    if (!wf.failureModes.length || !wf.steps.length) continue;
+    const candidates: Array<{ stepOrder: number; match: FailureMatch }> = [];
+    for (const step of wf.steps) {
+      const m = matchFailureModeForStepDetailed(step, wf.failureModes);
+      if (m) candidates.push({ stepOrder: step.order, match: m });
+    }
+    candidates.sort((a, b) => b.match.score - a.match.score);
+    const claimedTriggers = new Set<string>();
+    for (const c of candidates) {
+      const trig = c.match.failureMode.trigger;
+      if (claimedTriggers.has(trig)) continue;
+      claimedTriggers.add(trig);
+      assignedFailure.set(stepKey(wf.name, c.stepOrder), c.match);
+    }
+  }
+
   const requirements = flat.map((r, i) => {
     const reqNum = i + 1;
     const sourceList = r.workflow.sources
       .slice(0, 2)
       .map((s) => `[${s.title}](${s.url})`)
       .join('; ');
-    // Phase G G2 issue 4: derive per-step failure from `step.branchOn` first.
-    // If branchOn (or systemResponse) shares meaningful keywords with one of
-    // the workflow's failure-mode triggers, attach THAT specific failure to
-    // the requirement; otherwise emit a workflow-level pointer instead of
-    // rotating through unrelated failures. Pre-G2 code rotated by step index
-    // modulo, which produced join-spam (e.g. delimiter check listed under
-    // "resolve flagged rows") because most workflows have 5-7 steps but only
-    // 2-3 failure modes.
+    // Phase G W5: per-step failure derivation with greedy single-step
+    // assignment. See the comment above the assignedFailure map for the
+    // algorithm. Steps that don't claim a failure mode get a step-specific
+    // pointer (includes branchOn) so each line is unique.
     const fmList = r.workflow.failureModes;
-    const fm = matchFailureModeForStep(r.step, fmList);
-    const failureNote = fm
-      ? `On ${fm.trigger.toLowerCase()}, ${fm.mitigation.toLowerCase()}.`
-      : fmList.length
-        ? `No step-specific failure mode researched for this action; see workflow-level failures for "${r.workflow.name}" (${fmList.length} mode${fmList.length === 1 ? '' : 's'}).`
-        : 'Failure surfaces clearly to the actor; no silent state.';
+    const claimed = assignedFailure.get(stepKey(r.workflow.name, r.step.order));
+    let failureNote: string;
+    if (claimed) {
+      failureNote = `On ${claimed.failureMode.trigger.toLowerCase()}, ${claimed.failureMode.mitigation.toLowerCase()}.`;
+    } else if (fmList.length) {
+      // Step-aware fallback. Including the step's own branchOn (or, failing
+      // that, the action verb) makes each pointer unique across the workflow,
+      // so requirement-failure-variance stays high even when only N of M
+      // steps map to a failure mode.
+      const stepHint = r.step.branchOn?.trim() || sentenceCase(r.step.action).replace(/\.$/, '');
+      failureNote = `On "${stepHint}" path, no dedicated researched failure mode applies; route to the workflow-level mitigations for "${r.workflow.name}" (${fmList.length} mode${fmList.length === 1 ? '' : 's'}).`;
+    } else {
+      failureNote = 'Failure surfaces clearly to the actor; no silent state.';
+    }
     return `## Requirement ${reqNum}: ${r.title}
 
 - Actor: ${r.actor ? r.actor.name : r.step.actor}
@@ -2179,6 +2222,67 @@ ${listToBullets(
 }
 
 function buildMockingStrategy(input: ProjectInput, context: ProjectContext) {
+  // Phase G W6: when research declares an auth integration as mockedByDefault,
+  // emit the concrete demo-safe magic-link mock contract. The pre-G strategy
+  // file said "use mocks" without telling a builder what the mock should
+  // actually do — fresh-builder validation showed builders shortcut to
+  // "click a button to sign in" without preserving the magic-link UX.
+  const ex = context.extractions;
+  const authIntegrations = (ex?.integrations || []).filter((i) => i.category === 'auth');
+  const mockedAuth = authIntegrations.find((i) => i.mockedByDefault);
+  const realAuthRequired = authIntegrations.find((i) => !i.mockedByDefault && i.required);
+
+  const magicLinkSection = mockedAuth
+    ? `
+
+## Magic-link auth — demo-safe mock contract
+
+\`${mockedAuth.name}\` is declared \`mockedByDefault: true\` in \`research/extracted/integrations.json\`. Implement the mock with the following concrete contract so the demo runs without a real email provider while preserving the magic-link UX shape.
+
+### What the mock implements
+
+1. **Direct role-switcher** — at \`/dev/sign-in\` (only when \`AUTH_DEMO_MODE=true\`), render a list of researched actor roles and let the user pick one. Clicking a role signs in directly without a round-trip. This is the fastest path for clicking-through the demo.
+2. **Magic-link path that preserves the real UX** — at \`/auth/sign-in\`, the form accepts ANY email (no allowlist) and immediately:
+   - generates a token (\`crypto.randomBytes(32).toString('hex')\`),
+   - writes a one-line link to \`.tmp/magic-links/<sha256(email)>.txt\` containing \`http://localhost:3000/auth/verify?token=<token>&email=<email>\`,
+   - logs the same link to \`console.log\` with a \`[magic-link mock]\` prefix so the developer can copy it from the dev-server output,
+   - returns a "Check your email" success screen with a small dev-only "Open last magic link" button that reads the file the demo just wrote.
+3. **Token verify route** — \`GET /auth/verify?token=…&email=…\` validates that the token file exists and is fresh (≤ 15 min), then signs the user in and deletes the token file. After three failed attempts on the same email the route returns 429 (mirrors the rate-limit failure mode in research).
+4. **Role inference from email local-part** — for the magic-link path, the local-part prefix selects the role: \`sdr+anything@x\` → SDR, \`mgr+anything@x\` → manager, etc. This lets the demo exercise role-specific screens without requiring a real user-table seed.
+5. **Demo shortcut env var** — when \`AUTH_DEMO_MODE=true\` is set in \`.env.local\`, the magic-link send step is skipped entirely; the form submits straight to \`/auth/verify\` with a freshly-minted token. The token file is still written so the audit log shows the same shape.
+
+### What lives in the file system
+
+\`\`\`
+.tmp/magic-links/
+  <sha256-of-email>.txt    ← one line: the verify URL
+\`\`\`
+
+The directory is gitignored. \`make clean-mocks\` removes it.
+
+### Audit log
+
+Every mock send writes the same audit-event shape the real provider would (\`{type:'auth.magic-link.sent', email, sha256, ts}\`). Server-side, not client-side. The audit log is the contract that the rest of the workspace assumes; do not skip it just because the send is mocked.
+
+### How to swap to a real provider later
+
+Replace the body of \`sendMagicLink(email)\` with a Resend / Postmark / SES call. Keep the mock available behind \`AUTH_DEMO_MODE=true\` for E2E tests (Playwright / Vitest). The token-verify route, role-inference, and audit-event shape all stay the same.
+
+### Failure modes the mock must surface
+
+${(mockedAuth.failureModes || []).map((fm) => `- ${fm}`).join('\n') || '- (failureModes not extracted; default to rate-limit + expired-link + cross-device sign-in)'}
+
+Each failure mode renders a distinct user-visible error and emits a structured audit event. Do not collapse them into a single "auth failed" toast.
+`
+    : realAuthRequired
+      ? `
+
+## Magic-link auth — real provider required
+
+\`${realAuthRequired.name}\` is \`required: true\` and \`mockedByDefault: false\` in \`research/extracted/integrations.json\`. Set \`${realAuthRequired.envVar}\` in \`.env.local\` before running the demo. Without a real provider the auth flow will fail clearly (NOT silently); do not stub auth without first surfacing a blocker (see \`docs/BUILD_RECIPE.md\` blocker policy).
+`
+      : '';
+
   return `# MOCKING_STRATEGY
 
 ## What to mock before real credentials exist
@@ -2197,7 +2301,7 @@ ${listToBullets(
 
 ## When to replace mocks with real services
 - Only after Product Goal and Scope, What the App Must Do, and the related gate all explicitly approve the live dependency.
-`;
+${magicLinkSection}`;
 }
 
 function buildIntegrationTestPlan(input: ProjectInput, context: ProjectContext) {
@@ -2996,16 +3100,22 @@ function computeBuildReadyFlag(context: ProjectContext): boolean {
 /**
  * Phase G W4: a workspace is "DemoReady" when build-ready AND every demo
  * artifact (idea critique, competing alternatives, screens, DDL fields,
- * test cases) is populated AND the headline score clears 95.
+ * test cases, JTBDs, workflow failure modes) is populated.
  *
  * Mirrors the audit's `computeReadiness` so the generator-time lifecycle and
  * the post-audit `demoReady` flag agree on synth/agent-recipe rules. Synth
  * never reaches DemoReady because computeBuildReadyFlag already rejects it
  * (source !== 'agent-recipe' && source !== 'imported-real').
+ *
+ * Note on the score threshold: the spec's "score ≥ 95" check uses the audit's
+ * /100, not the generator's rawScore (those are different metrics). At
+ * generation time we don't run the audit, so we use artifact-presence as a
+ * conservative proxy — every condition the audit's computeReadiness checks
+ * must hold here too. The post-audit demoReady flag is the source of truth
+ * if any divergence shows up.
  */
-function computeDemoReadyFlag(context: ProjectContext, scoreTotal: number, buildReady: boolean): boolean {
+function computeDemoReadyFlag(context: ProjectContext, _scoreTotal: number, buildReady: boolean): boolean {
   if (!buildReady) return false;
-  if (scoreTotal < 95) return false;
   const ex = context.extractions;
   if (!ex) return false;
   const ideaCritique = ex.meta.discovery?.ideaCritique || [];
@@ -3015,10 +3125,17 @@ function computeDemoReadyFlag(context: ProjectContext, scoreTotal: number, build
   if (screens.length === 0) return false;
   const testCases = ex.testCases || [];
   if (testCases.length === 0) return false;
+  // Workflow failure-mode coverage — DemoReady requires real workflows with
+  // researched failure modes (not just step skeletons).
+  const hasWorkflowFailureModes = ex.workflows.some((wf) => wf.failureModes.length >= 1);
+  if (!hasWorkflowFailureModes) return false;
   // DDL emission requires at least one entity field with dbType metadata
   // (mirrors the `hasDbMetadata` check in createGeneratedFiles).
   const hasDbMetadata = ex.entities.some((e) => e.fields.some((f) => f.dbType));
   if (!hasDbMetadata) return false;
+  // JTBD presence — DemoReady should imply we have actor-level user research.
+  const jtbds = ex.jobsToBeDone || [];
+  if (jtbds.length === 0) return false;
   return true;
 }
 

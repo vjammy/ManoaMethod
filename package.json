@@ -31,6 +31,7 @@
     "test:audit-exit-e2e": "tsx scripts/test-audit-exit-end-to-end.ts",
     "test:research-source-readiness": "tsx scripts/test-research-source-readiness.ts",
     "test:depth-enforcement": "tsx scripts/test-depth-enforcement.ts",
+    "test:functional-requirements-failures": "tsx scripts/test-functional-requirements-failures.ts",
     "test:rc2-real-recipe-sdr": "tsx scripts/rc2-real-recipe-sdr-calibration.ts --input=examples/sdr-sales-module.json --out=.tmp/rc2-real-sdr --report=.tmp/rc2-real-sdr/CALIBRATION.json",
     "autoresearch": "tsx scripts/mvp-builder-autoresearch.ts",
     "orchestrate": "tsx scripts/mvp-builder-orchestrate.ts",
