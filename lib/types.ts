@@ -51,6 +51,16 @@ export type Actor = {
   aliases?: string[];
 };
 
+/**
+ * Phase 6: Research provenance tier of a workspace, as set on the brief
+ * input or computed at generation time. Demo-readiness gates check this:
+ * synthesized + manual are NOT demo-eligible regardless of artifact quality.
+ *
+ * Mirrors lib/research/schema.ts:ResearchSource. Keep the two unions in
+ * sync so the brief-side tag and the research-meta tag share vocabulary.
+ */
+export type ResearchSource = 'synthesized' | 'manual' | 'agent-recipe' | 'imported-real';
+
 export type ProjectInput = {
   productName: string;
   level: ExperienceLevel;
@@ -74,6 +84,8 @@ export type ProjectInput = {
   runtimeSmokeRoutes?: string[];
   runtimeStartTimeoutMs?: number;
   actors?: Actor[];
+  /** Phase 6: provenance tier. Defaults to 'manual' when omitted. */
+  researchSource?: ResearchSource;
 };
 
 export type RuntimeTarget = {

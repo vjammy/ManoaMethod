@@ -10582,6 +10582,14 @@ Tier 1 once they exist.
         scoreAdjustments: bundle.score.adjustments,
         lifecycleStatus: bundle.lifecycleStatus,
         phaseCount: bundle.phases.length,
+        // Phase 6: Surface research provenance on the workspace manifest so
+        // downstream tools (autoresearch readiness labels, build-demo, portfolio
+        // runner) can gate demo-readiness on agent-recipe / imported-real
+        // sources without re-reading research/extracted/meta.json.
+        researchSource:
+          input.researchSource ||
+          (context.extractions ? getResearchSource({ researcher: context.extractions.meta?.researcher, researchSource: context.extractions.meta?.researchSource }) : undefined) ||
+          'manual',
         primaryAudience: context.primaryAudience,
         primaryFeature: context.primaryFeature,
         supportedAgents: ['codex', 'claude-code', 'opencode'],
