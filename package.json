@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "smoke": "tsx scripts/smoke-test.ts",
     "create-project": "tsx scripts/mvp-builder-create-project.ts",
+    "brief:enrich": "tsx scripts/mvp-builder-brief-enrich.ts",
     "research": "tsx scripts/mvp-builder-research.ts",
     "research:validate": "tsx scripts/validate-extractions.ts",
     "validate": "tsx scripts/mvp-builder-validate.ts",
