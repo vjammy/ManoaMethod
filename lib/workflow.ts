@@ -220,6 +220,11 @@ function getLifecycleNextAction(status: LifecycleStatus) {
   if (status === 'Blocked') return 'Resolve blocker warnings before asking for approval.';
   if (status === 'Draft') return 'Close the remaining planning warnings so the package can move into formal review.';
   if (status === 'ReviewReady') return 'Complete the approval checklist and record an approval decision if the package is ready for build.';
+  if (status === 'ResearchIncomplete') return 'Run docs/RESEARCH_RECIPE.md inside your coding agent and regenerate with --research-from=<dir>.';
+  if (status === 'BuildReady') return 'A coding agent can build from BUILDER_START_HERE.md. Explicit human approval (ApprovedForBuild) is still required for build-ready export.';
+  if (status === 'DemoReady') return 'Demo-ready: every demo artifact populated, audit total ≥ 95, depth gate passed. Approve for build to enable build-ready export.';
+  if (status === 'ReleaseNotApproved') return 'Build the app from BUILDER_START_HERE.md; collect release evidence (operations runbook, rollback plan, deployment template) before promoting.';
+  if (status === 'InRework') return 'Resolve the active REWORK_PROMPT and pass the gate before advancing to the next phase.';
   return 'Build-ready export is available because the package has explicit approval metadata and no blockers.';
 }
 

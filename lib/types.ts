@@ -3,12 +3,45 @@ export type UserTrack = 'business' | 'technical';
 export type ProfileKey = `${ExperienceLevel}-${UserTrack}`;
 export type CritiqueSeverity = 'critical' | 'important' | 'nice-to-have';
 export type WarningSeverity = 'info' | 'warning' | 'blocker';
+/**
+ * Lifecycle states (Phase G W4 expanded set).
+ *
+ * Pre-G the workspace either reached BuildReady/ApprovedForBuild or sat in
+ * Draft/Blocked, which conflated three different problems behind one banner:
+ * a structural research gap, a missing release sign-off, and an actual
+ * unresolved schema conflict all read as "Blocked." The fresh-builder
+ * validation flagged this as the single most confusing signal in the
+ * workspace.
+ *
+ * Post-G:
+ *   - `Blocked` is reserved for true structural blockers (schema-validation
+ *     severity > 'note', unresolved critical research conflicts).
+ *   - `ResearchIncomplete` says "the input pipeline didn't run." Run the
+ *     research recipe; do not treat the workspace as buildable yet.
+ *   - `BuildReady` says "an implementing agent can build from this; demo
+ *     artifacts may still be incomplete." Set when research is grounded
+ *     and depth thresholds pass.
+ *   - `DemoReady` is a strict superset of BuildReady — score ≥ 95, depth
+ *     gate passed, and every demo artifact (idea critique, screens, DDL,
+ *     test cases, competing alternatives) is populated. Synthesized
+ *     research never reaches DemoReady by design.
+ *   - `ReleaseNotApproved` covers the post-build readiness state where
+ *     release evidence (operations runbook, rollback plan) hasn't been
+ *     filled in yet. Prevents "build is great but Blocked because someone
+ *     skipped the release checklist" confusion.
+ *   - `Draft`, `ReviewReady`, `ApprovedForBuild`, `InRework` retained for
+ *     backward compatibility with existing manifests and the workflow
+ *     state machine.
+ */
 export type LifecycleStatus =
   | 'Draft'
   | 'Blocked'
+  | 'ResearchIncomplete'
   | 'ReviewReady'
   | 'BuildReady'
+  | 'DemoReady'
   | 'ApprovedForBuild'
+  | 'ReleaseNotApproved'
   | 'InRework';
 
 export type ProjectInput = {

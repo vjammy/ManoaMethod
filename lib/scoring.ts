@@ -479,6 +479,13 @@ export function reconcileScoreWithLifecycle(
     adjustments.push('Rating downgraded because Draft packages are not ready to claim build readiness.');
   }
 
+  // Phase G W4: ResearchIncomplete is a recoverable state, but it is not
+  // build-ready until the recipe actually runs.
+  if (lifecycleStatus === 'ResearchIncomplete' && (rating === 'Build ready' || rating === 'Strong handoff')) {
+    rating = 'Needs work';
+    adjustments.push('Rating downgraded because the workspace has no research extractions yet (run docs/RESEARCH_RECIPE.md).');
+  }
+
   if (lifecycleStatus === 'ReviewReady' && rating === 'Strong handoff' && hasBlockers) {
     rating = 'Needs work';
     adjustments.push('Rating downgraded because unresolved blockers still exist.');
