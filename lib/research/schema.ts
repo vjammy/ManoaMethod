@@ -78,6 +78,33 @@ export type EntityField = {
   fk?: ForeignKey;
 };
 
+/**
+ * E2: A single sample record under an entity. Categories are happy /
+ * negative / boundary / role-permission. Optional metadata makes each
+ * sample explainable downstream:
+ *   - `actorId` lets role-permission samples name the actor that should
+ *     fail when attempting the action.
+ *   - `reason` records why a negative sample is invalid.
+ *   - `note` records why a boundary sample is interesting (TZ shift,
+ *     overdue date, max length, etc.).
+ *   - `label` overrides the default "Sample <category>: <id>" heading.
+ */
+export type EntitySample = {
+  id: string;
+  label?: string;
+  actorId?: string;
+  reason?: string;
+  note?: string;
+  data: Record<string, unknown>;
+};
+
+export type EntitySamples = {
+  happy: EntitySample[];
+  negative: EntitySample[];
+  boundary: EntitySample[];
+  rolePermission: EntitySample[];
+};
+
 export type Entity = WithProvenance & {
   name: string;
   description: string;
@@ -86,6 +113,8 @@ export type Entity = WithProvenance & {
   ownerActors: string[];
   riskTypes: string[];
   sample: Record<string, unknown>;
+  /** E2: Multi-category sample records. Falls back to single happy+negative when absent. */
+  samples?: EntitySamples;
 };
 
 export type WorkflowStep = {

@@ -649,17 +649,18 @@ export function runValidate() {
     issues.push('Beginner-facing docs should stay plain-English and remind the user they do not need to open every folder.');
   }
 
-  // SAMPLE_DATA.md sanity checks
+  // SAMPLE_DATA.md sanity checks. E2: accept either the legacy
+  // "Happy-path sample" / "Negative-path sample" headings or the modern
+  // "### Sample happy:" / "### Sample negative:" multi-fixture form.
   const sampleDataPath = path.join(packageRoot, 'SAMPLE_DATA.md');
   if (fs.existsSync(sampleDataPath)) {
     const sampleDataContent = fs.readFileSync(sampleDataPath, 'utf8');
-    if (
-      !/Happy-path sample/i.test(sampleDataContent) ||
-      !/Negative-path sample/i.test(sampleDataContent) ||
-      !/Used by requirements/i.test(sampleDataContent)
-    ) {
+    const hasHappy = /Happy-path sample/i.test(sampleDataContent) || /### Sample happy:/i.test(sampleDataContent);
+    const hasNegative = /Negative-path sample/i.test(sampleDataContent) || /### Sample negative:/i.test(sampleDataContent);
+    const hasUsedBy = /Used by requirements/i.test(sampleDataContent);
+    if (!hasHappy || !hasNegative || !hasUsedBy) {
       issues.push(
-        'SAMPLE_DATA.md is missing required sections (Happy-path sample, Negative-path sample, Used by requirements).'
+        'SAMPLE_DATA.md is missing required sections (happy + negative samples, Used by requirements).'
       );
     }
   }

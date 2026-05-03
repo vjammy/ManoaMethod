@@ -23,7 +23,7 @@ const NEUTRAL_ARCHETYPE_DETECTION: ArchetypeDetection = {
   rationale: 'Archetype keyword router removed (A3c). All workspaces use the general archetype; research extractions drive entities, actors, workflows when present.',
   candidateScores: []
 };
-import type { ResearchExtractions } from './research/schema';
+import type { EntitySample, EntitySamples, ResearchExtractions } from './research/schema';
 import { getResearchSource } from './research/schema';
 import {
   buildResearchTokenPack,
@@ -7967,6 +7967,50 @@ ${JSON.stringify(v, null, 2)}
           .join('\n\n')
       : '';
 
+    // E2: When the entity declares multi-category samples, render
+    // "### Sample <category>: <id>" subsections with optional Actor / Reason
+    // / Note metadata. Otherwise fall back to the legacy 1 happy +
+    // (variants) + 1 mechanical negative form with a back-fill marker so
+    // probes can detect the unenriched entities.
+    if (e.samples) {
+      const categoryHeading: Record<keyof EntitySamples, string> = {
+        happy: 'happy',
+        negative: 'negative',
+        boundary: 'boundary',
+        rolePermission: 'role-permission'
+      };
+      const renderSample = (category: keyof EntitySamples, sample: EntitySample) => {
+        const heading = `### Sample ${categoryHeading[category]}: ${sample.id}${sample.label ? ` — ${sample.label}` : ''}`;
+        const meta: string[] = [];
+        if (sample.actorId) meta.push(`- Actor: ${sample.actorId}`);
+        if (sample.reason) meta.push(`- Reason: ${sample.reason}`);
+        if (sample.note) meta.push(`- Note: ${sample.note}`);
+        const metaBlock = meta.length ? `\n${meta.join('\n')}\n` : '';
+        return `${heading}\n${metaBlock}\n\`\`\`json\n${JSON.stringify(sample.data, null, 2)}\n\`\`\``;
+      };
+      const renderCategory = (category: keyof EntitySamples, list: EntitySample[]) =>
+        list.map((s) => renderSample(category, s)).join('\n\n');
+      const sampleBlocks = [
+        renderCategory('happy', e.samples.happy),
+        renderCategory('negative', e.samples.negative),
+        renderCategory('boundary', e.samples.boundary),
+        renderCategory('rolePermission', e.samples.rolePermission)
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+      return `## ${e.name} (\`${e.id}\`)
+
+- Purpose: ${e.description}
+- Owner actors: ${ownerNames}
+- Used by requirements: ${reqLine}
+- Owning phases: ${phasesLine}
+- Foreign keys: ${fks.length ? fks.join(' ') : 'none declared'}
+- Validation rules: ${e.fields.filter((f) => f.required).slice(0, 4).map((f) => `\`${f.name}\` is required`).join('; ') || 'none recorded'}.
+
+${sampleBlocks}
+`;
+    }
+
     return `## ${e.name} (\`${e.id}\`)
 
 - Purpose: ${e.description}
@@ -7976,6 +8020,7 @@ ${JSON.stringify(v, null, 2)}
 - Foreign keys: ${fks.length ? fks.join(' ') : 'none declared'}
 - Validation rules: ${e.fields.filter((f) => f.required).slice(0, 4).map((f) => `\`${f.name}\` is required`).join('; ') || 'none recorded'}.
 
+<!-- back-fill: enrich entity.samples to unlock boundary + role-permission tests -->
 ### Happy-path sample (use as the realistic input in tests)
 \`\`\`json
 ${happyJson}

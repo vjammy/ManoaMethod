@@ -32,6 +32,7 @@ import type {
   DiscoveryArtifacts,
   Entity,
   EntityField,
+  EntitySamples,
   ForeignKey,
   Gate,
   Integration,
@@ -201,6 +202,72 @@ function deriveEntities(input: ProjectInput, actors: Actor[]): Entity[] {
   const usedIds = new Set<string>();
   const productSlug = slug(input.productName, 16);
 
+  // E2: Synthesize 2 happy + 2 negative + 2 boundary + 1 role-permission samples
+  // for the core entity. Field-aware: enum status is rotated; date fields get a
+  // "two weeks past" boundary; required string fields get a blank-value negative;
+  // role-permission targets a non-owner actor when one exists.
+  function buildSeedSamples(entity: Entity, actorList: Actor[], pSlug: string): EntitySamples {
+    const idField = entity.fields.find((f) => /id$/i.test(f.name) && f.type === 'string');
+    const titleField = entity.fields.find((f) => /title|name|label/i.test(f.name) && f.type === 'string');
+    const statusField = entity.fields.find((f) => f.type === 'enum');
+    const dateField = entity.fields.find((f) => f.type === 'date');
+    const requiredField = entity.fields.find((f) => f.required && f.type === 'string');
+    const enumValues = statusField?.enumValues || ['active'];
+    const altStatus = enumValues[1] || enumValues[0];
+    const baseSample: Record<string, unknown> = { ...entity.sample };
+    const idVal = (suffix: string) => idField ? `${pSlug}-${slug(entity.name).slice(0, 8)}-${suffix}` : undefined;
+    const replaceId = (suffix: string, sample: Record<string, unknown>) => {
+      if (idField && idVal(suffix)) sample[idField.name] = idVal(suffix);
+    };
+    const happy1: Record<string, unknown> = { ...baseSample };
+    replaceId('h1', happy1);
+    const happy2: Record<string, unknown> = { ...baseSample };
+    replaceId('h2', happy2);
+    if (titleField) happy2[titleField.name] = `Sample ${entity.name} 2`;
+    if (statusField) happy2[statusField.name] = altStatus;
+    const negativeBlank: Record<string, unknown> = { ...baseSample };
+    replaceId('n1', negativeBlank);
+    if (requiredField) negativeBlank[requiredField.name] = '';
+    const negativeMissing: Record<string, unknown> = { ...baseSample };
+    replaceId('n2', negativeMissing);
+    if (idField) negativeMissing[idField.name] = null;
+    const boundaryOverdue: Record<string, unknown> = { ...baseSample };
+    replaceId('b1', boundaryOverdue);
+    if (dateField) {
+      const past = new Date();
+      past.setDate(past.getDate() - 14);
+      boundaryOverdue[dateField.name] = past.toISOString();
+    }
+    const boundaryTz: Record<string, unknown> = { ...baseSample };
+    replaceId('b2', boundaryTz);
+    if (dateField) boundaryTz[dateField.name] = '2026-01-01T07:00:00.000Z';
+    const nonOwner = actorList.find((a) => a.type !== 'primary-user') || actorList[1] || actorList[0];
+    const rolePermission: Record<string, unknown> = { ...baseSample };
+    replaceId('r1', rolePermission);
+    return {
+      happy: [
+        { id: 'happy-default', data: happy1 },
+        { id: 'happy-alt-status', label: 'Happy: alternate status', note: statusField ? `${statusField.name} = ${altStatus}` : undefined, data: happy2 }
+      ],
+      negative: [
+        { id: 'negative-blank-required', reason: requiredField ? `${requiredField.name} is required and must not be blank` : 'required string blanked', data: negativeBlank },
+        { id: 'negative-missing-id', reason: idField ? `${idField.name} is required` : 'identifier missing', data: negativeMissing }
+      ],
+      boundary: [
+        { id: 'boundary-overdue', note: dateField ? `${dateField.name} two weeks in the past` : 'overdue boundary', data: boundaryOverdue },
+        { id: 'boundary-tz-shift', note: 'midnight UTC = 7pm Pacific previous day', data: boundaryTz }
+      ],
+      rolePermission: [
+        {
+          id: 'role-non-owner-mutate',
+          actorId: nonOwner?.id || 'actor-primary-user',
+          reason: `${nonOwner?.name || 'A non-owning actor'} must not be able to mutate ${entity.name} records owned by another actor.`,
+          data: rolePermission
+        }
+      ]
+    };
+  }
+
   function makeEntity(label: string, isCore: boolean, idHint?: string): Entity {
     const name = titleCase(label.replace(/^(create|track|manage|the)\s+/i, '')) || label;
     let id = `entity-${idHint || slug(name)}`;
@@ -234,7 +301,12 @@ function deriveEntities(input: ProjectInput, actors: Actor[]): Entity[] {
     const tokens = input.productName.split(/\s+/).filter((t) => t.length > 2 && !/board|tracker|portal|app|tool|hub|planner|manager|module|coordinator|catalog|module|book/i.test(t));
     return tokens.length ? tokens[tokens.length - 1] : 'Record';
   })();
-  entities.push(makeEntity(productCore, true, 'core'));
+  const seedEntity = makeEntity(productCore, true, 'core');
+  // E2: Enrich the seed (core) entity with multi-category samples so probes
+  // and downstream tests have boundary + role-permission coverage. Other
+  // entities fall back to the legacy 1 happy + 1 mechanical negative form.
+  seedEntity.samples = buildSeedSamples(seedEntity, actors, productSlug);
+  entities.push(seedEntity);
 
   // Then up to 4 entities from feature seeds, deduped against productCore
   for (const seed of seedPhrases) {

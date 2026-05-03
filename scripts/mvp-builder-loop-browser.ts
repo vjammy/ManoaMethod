@@ -21,6 +21,21 @@ type EntityFixture = {
   reqActorIds: Record<string, string>;
   happyPath: Record<string, unknown> | null;
   negativePath: Record<string, unknown> | null;
+  /** E2: Multi-category samples parsed from "### Sample <category>: <id>" blocks. Empty arrays when the entity uses the legacy 1+1 form. */
+  samples: {
+    happy: ParsedSample[];
+    negative: ParsedSample[];
+    boundary: ParsedSample[];
+    rolePermission: ParsedSample[];
+  };
+};
+
+type ParsedSample = {
+  id: string;
+  actorId?: string;
+  reason?: string;
+  note?: string;
+  data: Record<string, unknown> | null;
 };
 
 type RequirementRecord = {
@@ -123,12 +138,57 @@ function parseEntityFixtures(packageRoot: string): EntityFixture[] {
         return null;
       }
     };
+    // E2: Walk "### Sample <category>: <id>" subsections. Each subsection
+    // captures optional Actor / Reason / Note metadata lines and the JSON
+    // payload that follows. Categories normalize to happy / negative /
+    // boundary / rolePermission.
+    const samples: EntityFixture['samples'] = { happy: [], negative: [], boundary: [], rolePermission: [] };
+    const sampleSections = Array.from(
+      section.matchAll(
+        /###\s+Sample\s+(happy|negative|boundary|role-permission)\s*:\s*([^\n—]+?)(?:\s+—\s+([^\n]+))?\n([\s\S]*?)(?=\n###\s+Sample\s+(?:happy|negative|boundary|role-permission)\s*:|\n##\s|\n#\s|$)/gi
+      )
+    );
+    for (const match of sampleSections) {
+      const categoryRaw = match[1].toLowerCase();
+      const id = match[2].trim();
+      const body = match[4] || '';
+      const actorMatch = body.match(/-\s*Actor:\s*([^\n]+)/i);
+      const reasonMatch = body.match(/-\s*Reason:\s*([^\n]+)/i);
+      const noteMatch = body.match(/-\s*Note:\s*([^\n]+)/i);
+      const jsonMatch = body.match(/```json\n([\s\S]*?)\n```/);
+      const data = safeParse(jsonMatch?.[1]);
+      const sample: ParsedSample = {
+        id,
+        actorId: actorMatch?.[1]?.trim(),
+        reason: reasonMatch?.[1]?.trim(),
+        note: noteMatch?.[1]?.trim(),
+        data
+      };
+      const key: keyof EntityFixture['samples'] =
+        categoryRaw === 'role-permission'
+          ? 'rolePermission'
+          : (categoryRaw as 'happy' | 'negative' | 'boundary');
+      samples[key].push(sample);
+    }
+    // Legacy fallback: if no "### Sample" headings exist, treat the first two
+    // ```json blocks as happy / negative for back-compat with workspaces that
+    // predate E2.
+    let happyPath: Record<string, unknown> | null = null;
+    let negativePath: Record<string, unknown> | null = null;
+    if (samples.happy.length || samples.negative.length) {
+      happyPath = samples.happy[0]?.data || null;
+      negativePath = samples.negative[0]?.data || null;
+    } else {
+      happyPath = safeParse(jsonBlocks[0]);
+      negativePath = safeParse(jsonBlocks[1]);
+    }
     fixtures.push({
       entityName,
       reqIds,
       reqActorIds,
-      happyPath: safeParse(jsonBlocks[0]),
-      negativePath: safeParse(jsonBlocks[1])
+      happyPath,
+      negativePath,
+      samples
     });
   }
   return fixtures;
