@@ -6,6 +6,13 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createArtifactPackage } from './mvp-builder-create-project';
 import { USE_CASES } from './test-quality-regression';
+import {
+  deriveReadinessLabels,
+  loadProbeRubric,
+  runProbes,
+  type ProbeReport,
+  type ReadinessLabels
+} from './autoresearch-probes';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,6 +40,8 @@ type UseCaseScore = {
   cap: number | null;
   triggeredCaps: string[];
   breakdown: Record<string, number>;
+  probeReport?: ProbeReport;
+  readiness?: ReadinessLabels;
 };
 
 function ensureDir(dirPath: string) {
@@ -310,6 +319,7 @@ async function main() {
   const useCaseScores: UseCaseScore[] = [];
   const packageValidationResults: CommandResult[] = [];
   const packageRegressionResults: CommandResult[] = [];
+  const probeRubric = loadProbeRubric(path.join(AUTORESEARCH_DIR, 'rubrics', 'probes.json'));
 
   for (const useCase of USE_CASES) {
     const outDir = path.join(runRoot, useCase.key);
@@ -335,7 +345,10 @@ async function main() {
         ROOT
       )
     );
-    useCaseScores.push(scoreUseCase(created.rootDir, useCase));
+    const score = scoreUseCase(created.rootDir, useCase);
+    score.probeReport = runProbes(created.rootDir, probeRubric);
+    score.readiness = deriveReadinessLabels(created.rootDir, score.probeReport);
+    useCaseScores.push(score);
   }
 
   const overallScore = Math.round(useCaseScores.reduce((sum, item) => sum + item.finalScore, 0) / useCaseScores.length);
@@ -363,6 +376,25 @@ async function main() {
 | --- | --- | --- | --- | --- |
 ${useCaseScores
   .map((item) => `| ${item.name} | ${item.finalScore} | ${item.rawScore} | ${item.cap ?? '-'} | ${item.triggeredCaps.join('; ') || '-'} |`)
+  .join('\n')}
+
+## Per-use-case content-quality probes
+| Use case | Artifact quality | Build approval | Demo readiness | Research source |
+| --- | --- | --- | --- | --- |
+${useCaseScores
+  .map((item) => {
+    if (!item.probeReport || !item.readiness) {
+      return `| ${item.name} | - | - | - | - |`;
+    }
+    const aq = `${item.probeReport.finalScore}/100 (${item.readiness.artifactQuality.pct}%)`;
+    const ba = item.readiness.buildApproval.approved
+      ? 'approved'
+      : `not approved (${item.readiness.buildApproval.reason})`;
+    const dr = item.readiness.demoReadiness.ready
+      ? 'ready'
+      : item.readiness.demoReadiness.reason;
+    return `| ${item.name} | ${aq} | ${ba} | ${dr} | ${item.readiness.researchSource} |`;
+  })
   .join('\n')}
 
 ## Score breakdowns

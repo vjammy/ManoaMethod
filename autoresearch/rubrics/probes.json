@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "probes": [
+    {
+      "name": "actor-uniqueness",
+      "max": 12,
+      "inspect": ["requirements/FUNCTIONAL_REQUIREMENTS.md"],
+      "extract": "actorIdLines",
+      "rule": "uniqueRatio",
+      "minUnique": 2
+    },
+    {
+      "name": "verb-diversity",
+      "max": 10,
+      "inspect": ["requirements/FUNCTIONAL_REQUIREMENTS.md"],
+      "extract": "userActionFirstVerbs",
+      "rule": "uniqueRatio",
+      "min": 0.6
+    },
+    {
+      "name": "failure-case-uniqueness",
+      "max": 10,
+      "inspect": ["requirements/FUNCTIONAL_REQUIREMENTS.md", "requirements/ACCEPTANCE_CRITERIA.md"],
+      "extract": "failureCaseLines",
+      "rule": "uniqueRatio",
+      "min": 0.7
+    },
+    {
+      "name": "screen-purpose-uniqueness",
+      "max": 10,
+      "inspect": ["ui-ux/SCREEN_INVENTORY.md"],
+      "extract": "screenPurposes",
+      "rule": "uniqueRatio",
+      "min": 0.8
+    },
+    {
+      "name": "workflow-actor-screen-consistency",
+      "max": 12,
+      "inspect": ["ui-ux/USER_WORKFLOWS.md", "ui-ux/SCREEN_INVENTORY.md"],
+      "extract": "workflowScreenActorMap",
+      "rule": "consistencyCheck"
+    },
+    {
+      "name": "sample-data-coverage-per-actor",
+      "max": 12,
+      "inspect": ["SAMPLE_DATA.md"],
+      "extract": "samplesByActor",
+      "rule": "perActorMin",
+      "min": { "happy": 1, "negative": 1 }
+    },
+    {
+      "name": "REQ-implementation-phase-balance",
+      "max": 8,
+      "inspect": ["PHASE_PLAN.md"],
+      "extract": "reqIdsPerPhase",
+      "rule": "stddevBelow",
+      "maxStddev": 4
+    },
+    {
+      "name": "use-case-specificity",
+      "max": 16,
+      "inspect": ["PROJECT_BRIEF.md", "PHASE_PLAN.md", "HANDOFF.md", "requirements/ACCEPTANCE_CRITERIA.md"],
+      "extract": "domainKeywordHits",
+      "rule": "thresholdHits",
+      "min": 4
+    },
+    {
+      "name": "boundary-and-role-test-presence",
+      "max": 10,
+      "inspect": ["SAMPLE_DATA.md"],
+      "extract": "sampleCategoryCounts",
+      "rule": "perCategoryMin",
+      "min": { "boundary": 1, "rolePermission": 1 }
+    }
+  ],
+  "caps": [
+    { "when": "actor-uniqueness == 0", "max": 70, "label": "Single-actor REQs" },
+    { "when": "boundary-and-role-test-presence == 0", "max": 80, "label": "No boundary or role-permission samples" }
+  ]
+}
